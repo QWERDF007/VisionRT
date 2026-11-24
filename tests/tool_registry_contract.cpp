@@ -27,7 +27,7 @@ void rejects(Action action)
 class PassTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }

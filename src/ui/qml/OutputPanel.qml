@@ -78,7 +78,7 @@ Rectangle {
                 anchors.rightMargin: 5
                 spacing: 5
                 QuiText {
-                    text: "输出参数"
+                    text: app.outputTitle
                     font: QuiFont.Body
                     color: QuiColor.FontPrimary
                 }

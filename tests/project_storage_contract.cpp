@@ -996,78 +996,18 @@ void rejectsHostExecutionGuard(const QString &directory)
 
 void trainingAssets(const QString &directory)
 {
-    const auto   declaration = R"json({
-  "schema_version": 2,
-  "name_en": "ProbeAssets",
-  "name_zh": "资产探针",
-  "version": "1.0.0",
-  "implementation": {
-    "kind": "cpp"
-  },
-  "init_params": [
-    {
-      "id": 0,
-      "name_zh": "训练数据",
-      "type": "string"
-    },
-    {
-      "id": 7,
-      "name_zh": "模型",
-      "type": "string"
-    }
-  ],
-  "inputs": [
-    {
-      "id": 1,
-      "name_zh": "图像",
-      "type": "image"
-    }
-  ],
-  "outputs": [
-    {
-      "id": 2,
-      "name_zh": "模型",
-      "type": {
-        "type": "array",
-        "dtype": "uint8",
-        "rank": 1
-      }
-    }
-  ],
-  "training": {
-    "image": {
-      "stage": "inputs",
-      "id": 1
-    },
-    "records": {
-      "max": 1,
-      "fields": [
-        {
-          "id": 1,
-          "name_zh": "名称",
-          "type": "string"
-        }
-      ]
-    },
-    "call": {
-      "tool": "ProbeTrainer",
-      "inputs": []
-    },
-    "writes": [],
-    "artifacts": [
-      {
-        "id": "model",
-        "source_port": 2,
-        "format": "probe.model",
-        "version": 1,
-        "target": {
-          "stage": "init",
-          "id": 7
-        }
-      }
-    ]
-  }
-})json";
+    const auto declaration = R"json({
+      "schema_version":2,"name_en":"ProbeAssets","name_zh":"资产探针","version":"1.0.0",
+      "implementation":{"kind":"cpp"},
+      "train_params":[
+        {"id":7,"name_zh":"模型路径","type":"string","scope":"tool"},
+        {"id":1,"name_zh":"采样区","type":"roi","scope":"record","canvas":{"min":1,"max":2}}
+      ],
+      "inputs":[{"id":1,"name_zh":"图像","type":"image"}],
+      "outputs":[{"id":2,"name_zh":"模型路径","type":"string"}],
+      "training":{"image":{"stage":"inputs","id":1},"max_records":1,
+        "artifacts":[{"id":"model","source_port":2,"format":"probe.model","version":1,"target":{"stage":"train_params","id":7}}]}
+    })json";
     ToolRegistry registry;
     auto         tool   = parseToolDefinitionJson(declaration);
     tool.definitionPath = path(directory + "/ProbeAssets.json");
@@ -1083,7 +1023,8 @@ void trainingAssets(const QString &directory)
     put(QString::fromStdWString((revision / L"models" / L"model.bin").wstring()), "MODEL");
     put(QString::fromStdWString((revision / L"manifest.json").wstring()),
         R"({"schema_version":4,"artifacts":[{"id":"model","file":"models/model.bin"}]})");
-    require(editor.setLiteralWrites("flow_1", nodeId, {}, [&] { return revision; }),
+    const std::vector<LiteralWrite> writes{{PortStage::Train, 7, utf8Path((revision / L"models" / L"model.bin").lexically_relative(path(directory)))}};
+    require(editor.setLiteralWrites("flow_1", nodeId, writes, [&] { return revision; }),
             "the revision reference was not stored");
 
     const auto file    = directory + "/assets.vrt.json";
@@ -1098,23 +1039,13 @@ void trainingAssets(const QString &directory)
     const auto  loaded = ProjectStorage(registry).load(path(file));
     const auto &node   = loaded.project.flows[0].nodes[0];
     require(node.trainingAsset == revision.lexically_normal(), "loading did not resolve the stored reference");
-    const auto parameters = nodeParameters(node, tool);
-    require(std::get<std::string>(parameters.at(7)) == utf8Path(revision / L"models" / L"model.bin"),
-            "the artifact target did not receive the published model path");
-    const auto *assetParameter = std::get_if<std::string>(&parameters.at(0));
-    require(assetParameter && assetParameter->empty(), "a published node must not keep a copied training path");
-
+    require(nodeParameters(node, tool).empty(), "models must not be copied into hidden initialization parameters");
+    const auto models = nodeModelReferences(node, tool, path(directory));
+    require(models.at("model") == revision / L"models" / L"model.bin",
+            "the editable model path did not resolve against the project directory");
     std::filesystem::remove(revision / L"manifest.json");
-    bool missing = false;
-    try
-    {
-        nodeParameters(node, tool);
-    }
-    catch (const ContractError &error)
-    {
-        missing = std::string(error.what()).find("训练资产缺失") != std::string::npos;
-    }
-    require(missing, "a missing published revision must fail with its own diagnosis");
+    require(nodeModelReferences(node, tool, path(directory)) == models,
+            "loading an existing model must not depend on training records");
 }
 
 int main()

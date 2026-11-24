@@ -75,6 +75,7 @@ std::vector<PortDefinition> *ToolPortListModel::portVector() noexcept
     case PortStage::Inputs:  return &draft_->inputs;
     case PortStage::Outputs: return &draft_->outputs;
     case PortStage::Init:    return &draft_->initParams;
+    case PortStage::Train:   return &draft_->trainParams;
     }
     return nullptr;
 }
@@ -88,6 +89,7 @@ const std::vector<PortDefinition> *ToolPortListModel::portVector() const noexcep
     case PortStage::Inputs:  return &draft_->inputs;
     case PortStage::Outputs: return &draft_->outputs;
     case PortStage::Init:    return &draft_->initParams;
+    case PortStage::Train:   return &draft_->trainParams;
     }
     return nullptr;
 }
@@ -563,7 +565,8 @@ const PortDefinition *ToolPortListModel::findPort(PortStage stage, PortId id) co
 {
     if (!draft_)
         return nullptr;
-    const auto &ports = stage == PortStage::Init    ? draft_->initParams
+    const auto &ports = stage == PortStage::Train ? draft_->trainParams
+                         : stage == PortStage::Init    ? draft_->initParams
                         : stage == PortStage::Inputs ? draft_->inputs
                                                      : draft_->outputs;
     const auto  found

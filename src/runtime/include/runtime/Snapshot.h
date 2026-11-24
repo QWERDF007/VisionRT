@@ -66,6 +66,7 @@ struct NodeSnapshot
     NodeDisposition       disposition = NodeDisposition::Succeeded;
     NodePhase             phase = NodePhase::Execute;
     TypeMap               outputTypes;
+    ProducedBy    invocation = ProducedBy::Execute;
     Values        outputs;
     Timing        timing;
     // The measured execution window on the steady clock, in nanoseconds. The runtime derives a

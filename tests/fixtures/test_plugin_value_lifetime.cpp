@@ -27,8 +27,9 @@ constexpr PortId kOutputRoi      = 5;
 class ValueTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &parameters) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
+    const auto &parameters = configuration.parameters;
         marker_ = std::filesystem::u8path(std::get<std::string>(parameters.at(kInitMarker)));
         return {};
     }

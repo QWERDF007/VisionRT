@@ -82,7 +82,7 @@ bool AppController::setParameterPath(int port, bool initialization, const QUrl &
         });
 }
 
-bool AppController::stepIntegerParameter(int port, bool initialization, int direction, const QString &literal)
+bool AppController::stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage)
 {
     if (direction != 1 && direction != -1)
         return false;
@@ -92,19 +92,20 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
             const auto *node = impl_->currentNode();
             if (!node)
                 throw ContractError("未选择节点");
-            const auto &signatures = initialization ? node->signatures.initParams : node->signatures.inputs;
+            const bool training = stage == static_cast<int>(PortStage::Train);
+            const auto &signatures = training ? node->signatures.trainParams : initialization ? node->signatures.initParams : node->signatures.inputs;
             const auto  id         = static_cast<PortId>(port);
             const auto  signature  = signatures.find(id);
             if (signature == signatures.end() || signature->second.type != Type::Int)
                 throw ContractError("参数不是整数：" + impl_->parameterLabel(id, initialization));
-            if (!initialization && node->inputs.at(id).mode != BindingMode::Literal)
+            if (!training && !initialization && node->inputs.at(id).mode != BindingMode::Literal)
                 throw ContractError("上游绑定的整数参数不能步进：" + impl_->parameterLabel(id, initialization));
             const auto value = ValueJson::parse(literal, signature->second);
             if (isMissing(value))
                 throw ContractError("步进前请输入有效整数");
             std::int64_t current     = std::get<std::int64_t>(value);
             std::int64_t step        = 1;
-            const auto  *declaration = impl_->parameter(static_cast<PortId>(port), initialization);
+            const auto *declaration = training ? workbench::port(impl_->effectiveTool()->trainParams, id) : impl_->parameter(id, initialization);
             if (declaration)
             {
                 current = std::get<std::int64_t>(normalizeInput(*declaration, value).value);
@@ -121,7 +122,7 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
                 throw ContractError("参数步进超出 int64 范围：" + impl_->parameterLabel(id, initialization));
             const std::int64_t target = current + direction * step;
             // The stepped value is clamped by the same declaration rule instead of being rejected.
-            return impl_->applyParameter(id, initialization, target);
+            return training ? setTrainingParameter(port, QString::number(target)) : impl_->applyParameter(id, initialization, target);
         });
 }
 

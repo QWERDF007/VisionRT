@@ -24,7 +24,6 @@ QuiSplitView {
     readonly property var tabs: app.parameterTabs
     property var collapsedGroups: ({})
     property var parameterGroups: []
-    property string roiNodeId: ""
     property real inputsRatio: 0.52
     function resetSplit() {
         inputsRatio = 0.52;
@@ -45,6 +44,8 @@ QuiSplitView {
     onCurrentTabChanged: refreshGroups()
     Connections {
         target: app
+        function onSelectionChanged() { root.refreshGroups(); }
+        function onTrainingChanged() { root.refreshGroups(); }
         function onParametersChanged() {
             root.refreshGroups();
         }
@@ -56,52 +57,21 @@ QuiSplitView {
             return false;
         for (let i = 0; i < a.length; ++i) {
             let ga = a[i], gb = b[i];
-            if (ga.nodeId !== gb.nodeId || ga.name !== gb.name || ga.init !== gb.init)
+            if (ga.nodeId !== gb.nodeId || ga.name !== gb.name || ga.tab !== gb.tab)
                 return false;
             if (!ga.parameters || !gb.parameters || ga.parameters.length !== gb.parameters.length)
                 return false;
             for (let j = 0; j < ga.parameters.length; ++j) {
-                if (ga.parameters[j].id !== gb.parameters[j].id || ga.parameters[j].init !== gb.parameters[j].init)
+                if (ga.parameters[j].id !== gb.parameters[j].id || ga.parameters[j].stage !== gb.parameters[j].stage || ga.parameters[j].recordId !== gb.parameters[j].recordId)
                     return false;
             }
         }
         return true;
     }
     function refreshGroups() {
-        let result = [], byName = ({});
-        for (let p of app.parameters) {
-            if (p.tab !== currentTab)
-                continue;
-            let name = p.init ? "初始化配置" + (p.group ? "：" + p.group : "") : p.group || "输入参数";
-            if (byName[name] === undefined) {
-                byName[name] = result.length;
-                result.push({
-                    nodeId: app.selectedNode,
-                    name: name,
-                    init: p.init,
-                    parameters: []
-                });
-            }
-            result[byName[name]].parameters.push({
-                id: p.id,
-                init: p.init
-            });
-        }
-        if (!isSameGroups(result, parameterGroups))
-            parameterGroups = result;
-    }
-    function focusRoi() {
-        if (!root.enabled || app.runtimeBusy)
-            return;
-        roiNodeId = app.selectedNode;
-        for (let p of app.parameters) {
-            if (p.type === PortType.ROI && !p.init) {
-                currentTab = p.tab;
-                app.startRoiDraw(p.id, 2);
-                return;
-            }
-        }
-        roiNotice.open();
+        if (currentTab === ParameterTab.Training && !app.trainingAvailable) currentTab = ParameterTab.BasicInput;
+        let result = app.parameterGroups.filter(function (group) { return group.tab === currentTab; });
+        if (!isSameGroups(result, parameterGroups)) parameterGroups = result;
     }
     Rectangle {
         id: inputs
@@ -137,12 +107,12 @@ QuiSplitView {
                         WorkbenchTabButton {
                             id: parameterTab
                             clip: true
-                            required property string modelData
+                            required property var modelData
                             required property int index
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            text: modelData
-                            checked: root.currentTab === index
+                            text: modelData.name
+                            checked: root.currentTab === modelData.id
                             contentItem: QuiText {
                                 text: parameterTab.text
                                 font: parameterTab.font
@@ -151,7 +121,7 @@ QuiSplitView {
                                 verticalAlignment: Text.AlignVCenter
                                 opacity: parameterTab.enabled ? 1.0 : 0.4
                             }
-                            onClicked: root.currentTab = index
+                            onClicked: root.currentTab = modelData.id
                         }
                     }
                     WorkbenchActionButton {
@@ -188,38 +158,6 @@ QuiSplitView {
                         id: groupColumn
                         width: scroller.width - parameterScrollBar.width
                         spacing: 5
-                        QuiExpander {
-                            width: groupColumn.width
-                            visible: app.trainingMode && app.trainingParameters.length > 0 && root.currentTab === ParameterTab.BasicInput
-                            headerText: "训练参数"
-                            headerHeight: VisionRTSize.BarSize
-                            expand: true
-                            contentHeight: trainingValues.implicitHeight + VisionRTSize.Spacing * 2
-                            ColumnLayout {
-                                id: trainingValues
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: VisionRTSize.Spacing
-                                spacing: VisionRTSize.Spacing
-                                Repeater {
-                                    model: app.trainingParameters
-                                    delegate: ToolFormRow {
-                                        required property var modelData
-                                        labelWidth: VisionRTSize.ParamLabelWidth
-                                        label: modelData.name
-                                        TrainingValueEditor {
-                                            Layout.fillWidth: true
-                                            field: modelData
-                                            onCommitRequested: function(value) {
-                                                app.setTrainingParameter(field.id, value);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        RoiGeometryEditor { width: groupColumn.width }
                         Repeater {
                             model: root.parameterGroups
                             QuiExpander {
@@ -266,7 +204,7 @@ QuiSplitView {
                                             id: parameterRow
                                             required property var modelData
                                             readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
-                                                return parameter.id === parameterRow.modelData.id && parameter.init === parameterRow.modelData.init;
+                                                return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId;
                                             }) : undefined
                                             Layout.fillWidth: true
                                             active: currentParameter !== undefined
@@ -296,14 +234,6 @@ QuiSplitView {
         SplitView.minimumWidth: 280
         SplitView.preferredWidth: 480
     }
-    WorkbenchDialog {
-        id: roiNotice
-        title: "输入 ROI 编辑"
-        message: "请选择具有区域输入的节点，然后选择要编辑的参数。"
-        useNegativeButton: false
-        positiveText: "关闭"
-    }
-
     Loader {
         id: expressionEditorLoader
         active: false

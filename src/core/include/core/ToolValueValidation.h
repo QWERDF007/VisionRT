@@ -13,9 +13,9 @@ VISIONRT_CORE_API void validateToolValue(const PortDefinition &port, const PortV
 VISIONRT_CORE_API void validateToolOutput(const PortDefinition &port, const PortValue &value, const ToolStatus &status);
 VISIONRT_CORE_API void validateToolValues(const std::vector<PortDefinition> &ports, const Values &values);
 
-// Materialises every omitted business output with its declared default, validates the written
-// values and the detail, and derives the execution ToolStatus without rewriting messages.
+// Requires every business output for the invocation phase on success and keeps other outputs Missing.
+// Validates values and detail, and derives ToolStatus without rewriting messages.
 VISIONRT_CORE_API ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Values &outputs,
-                                 const std::string &detail);
+                                 const std::string &detail, ProducedBy phase = ProducedBy::Execute);
 
 } // namespace visionrt

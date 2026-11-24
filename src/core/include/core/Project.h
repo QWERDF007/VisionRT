@@ -76,6 +76,7 @@ struct TypeSnapshot
     TypeMap initParams;
     TypeMap inputs;
     TypeMap outputs;
+    TypeMap trainParams;
 };
 
 struct NodeDefinition
@@ -89,6 +90,7 @@ struct NodeDefinition
     std::string                                      alias;
     GridPoint                                        position;
     Values                                           initParams;
+    Values                                           trainParams;
     std::map<PortId, InputBinding>                   inputs;
     TypeSnapshot                                     signatures;
     std::map<PortId, PortTypeReference>              outputTypeSources;

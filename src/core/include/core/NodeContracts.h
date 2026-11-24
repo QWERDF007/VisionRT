@@ -50,4 +50,6 @@ VISIONRT_CORE_API void setOutputDeclarations(NodeDefinition &node, const ToolDef
 VISIONRT_CORE_API void resolveOutputTypes(ProjectDefinition &project);
 VISIONRT_CORE_API TypeMap resolvedOutputTypes(const ToolDefinition &contract);
 
+VISIONRT_CORE_API std::map<std::string, std::filesystem::path> nodeModelReferences(
+    const NodeDefinition&, const ToolDefinition&, const std::filesystem::path&);
 } // namespace visionrt

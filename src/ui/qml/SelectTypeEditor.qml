@@ -64,36 +64,9 @@ Dialog {
             label: "区域 (ROI)"
         }
     ]
-    readonly property var dtypeList: [
-        {
-            name: DType.UInt8,
-            label: "8位无符号整数"
-        },
-        {
-            name: DType.Int32,
-            label: "32位整数"
-        },
-        {
-            name: DType.Int64,
-            label: "64位整数"
-        },
-        {
-            name: DType.Float32,
-            label: "32位浮点"
-        },
-        {
-            name: DType.Float64,
-            label: "64位浮点"
-        },
-        {
-            name: DType.Bool,
-            label: "布尔"
-        },
-        {
-            name: DType.String,
-            label: "字符串"
-        }
-    ]
+    readonly property var dtypeList: [DType.UInt8, DType.Int32, DType.Int64, DType.Float32, DType.Float64, DType.Bool, DType.String].map(function (dtype) {
+        return { name: dtype, label: app.dtypeDescription(dtype) };
+    })
 
     function openFor(id) {
         nodeId = id;

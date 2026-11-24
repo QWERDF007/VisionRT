@@ -48,8 +48,9 @@ public:
         request_.type = type;
     }
 
-    ToolStatus initialize(const Values &parameters) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
+        const auto &parameters = configuration.parameters;
         if (!reader_)
             return {1, "结果读取通道不可用"};
         const auto flow = parameters.find(ReceiveInitPorts::SourceFlow);

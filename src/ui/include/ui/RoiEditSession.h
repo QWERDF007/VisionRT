@@ -5,8 +5,6 @@
 #include "ui/ImageViewport.h"
 
 #include <QString>
-#include <QVariantMap>
-#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -65,8 +63,6 @@ public:
     }
 
     PortId          input() const noexcept;
-    const QString  &flow() const noexcept;
-    const TypeSpec &type() const noexcept;
 
     bool singleRectangle() const noexcept
     {
@@ -92,22 +88,11 @@ public:
 
     const ImageViewport::ViewState &view() const noexcept;
 
-    bool fieldsValid() const noexcept
-    {
-        return draft_ && draft_->fieldsValid;
-    }
-
-    void setFieldsValid(bool value);
-
-    // Applies one geometry edit (create, move, resize or delete) or a numeric rectangle and writes
+    // Applies one geometry edit (create, move, resize or delete) and writes
     // the literal binding. Throws ContractError when the session or the value is no longer valid.
     Commit commitGeometry(const RoiEditTarget &target, const EncodedRegion *value);
     bool   previewGeometry(const RoiEditTarget &target, const EncodedRegion &value);
     void   cancelPreview();
-    Commit commitRectangle(const std::array<double, 5> &values);
-
-    // Projects the selected geometry and field names for the QML coordinate editor.
-    QVariantMap editor(int selected = -1) const;
 
 private:
     struct Draft
@@ -125,10 +110,8 @@ private:
         int                      displayIndex = 0;
         int                      resultIndex  = 0;
         ImageViewport::ViewState view{ImageViewport::Contain, 1.0, {}};
-        bool                     fieldsValid = true;
     };
 
-    Commit                   writeLiteral(InputBinding committed);
     bool                     stageGeometry(const RoiEditTarget &target, const EncodedRegion *value);
     std::optional<PortValue> previewBase_;
 

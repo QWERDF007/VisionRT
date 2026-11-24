@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QTemporaryDir>
+#include <QFile>
 #include <QString>
 #include <filesystem>
 #include <stdexcept>
@@ -22,6 +23,24 @@ inline void copyToolsPackage(const std::filesystem::path &source, const std::fil
         else if (name.rfind("nvinfer", 0) != 0)
             std::filesystem::copy_file(entry.path(), dest, std::filesystem::copy_options::overwrite_existing);
     }
+}
+
+inline QString copyCableExample(const std::filesystem::path &source, const QString &installation)
+{
+    const auto sample = std::filesystem::path(u8"examples/03_综合示例/02_识别线缆颜色");
+    const auto root = std::filesystem::path(installation.toStdWString());
+    std::filesystem::create_directories((root / sample).parent_path());
+    std::filesystem::copy(source / sample, root / sample, std::filesystem::copy_options::recursive);
+    const auto fileName = root / sample / std::filesystem::path(u8"识别线缆颜色.vrt.json");
+    QFile file(QString::fromStdWString(fileName.wstring()));
+    if (!file.open(QIODevice::ReadOnly)) throw std::runtime_error("example could not be read");
+    auto content = file.readAll();
+    file.close();
+    content.replace(QByteArray("examples/03_综合示例/02_识别线缆颜色"),
+                    installation.toUtf8() + QByteArray("/examples/03_综合示例/02_识别线缆颜色"));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(content) != content.size())
+        throw std::runtime_error("example could not be relocated");
+    return file.fileName();
 }
 
 class WorkbenchInstallation

@@ -4,7 +4,7 @@
 
 ## ⏳ 待你裁决
 
-（暂无待裁决事项）
+- 2026-11-23：`build/training` 清理被自动审批审查拒绝。需要在本机完成删除，或提供允许此操作的工具通道；重建不依赖此目录。证据见“恢复默认构建目录”日志。
 
 ---
 
@@ -29,6 +29,148 @@
 **下一步**
 - ...
 -->
+
+### 2026-11-23 — 汇总提交现有改动
+
+**目标**
+- 按用户要求提交全部现有改动，并同步共享 SDK 与工具仓。
+
+**当前状态**
+- Contracts 提交为 df519c35c33008852ef35278124eaf85e9f28d56，两份检出的暂存树完全一致且工作树干净；VisionTools 提交为 f37b770281691ae34af4a223b0ca3a07042a41f4。
+- 宿主本次纳入业务实例训练、工程与示例、ROI 交互、节点和像素提示、输入输出数值展示及类型命名的全部现有改动，包括 ValueDisplay 新文件、测试、文档与 AOCI 资产。
+- 代码及运行行为未在本次整理中改变；提交身份以 Git 历史为准，尚未推送。build/training 清理受阻事项仍见顶部记录。
+
+**验证证据**
+- 已核对现有运行记录：build/output-display-final-tests.log 六项、build/roi-style-final-tests.log 十一项、build/default-build-tests.log 十九项全部通过；真实窗口证据及构建命令见下方对应日志。
+- 工具包接受 30 个声明并实际执行 13 个 CPU 工具，见 build/default-tools-package.log；工具侧两项契约通过，见 build/training-tools-final-tests.log。
+- SDK 和工具仓提交前暂存差异检查通过；主仓提交前核对全部暂存文件、共享 SDK 引用及差异检查，认知对齐以本轮 terminal_proof 为准。
+
+**下一步**
+- 验收使用 build/bin/VisionRT.exe；提交与引用核对完成后，无待续接的代码改动。
+
+### 2026-11-23 — 输出数值显示与类型命名
+
+**目标**
+- 输出区也最多显示六位小数并去尾零，清理类型提示、预览及类型选择器中的位数标注。
+
+**当前状态**
+- 输入、输出及矩形文本共用 ValueDisplay，原有参数格式化实现已移出控制器；格式化保留数组结构和 ROI 种类编号，整数及字符串内容保持正确。原始值与完整复制文本保留原精度，非有限值沿用既有类型化表示。
+- DisplayTypes 统一元素类型和完整类型的中文名称；合流类型选择器通过控制器复用同一映射，使用无符号整数、整数、长整数、单精度浮点数、浮点数等有区分度的名称，类型标签及选择器不再显示位数。
+- 已重建 build/bin/VisionRT.exe，更新文档索引，本轮未提交或推送。
+
+**验证证据**
+- 输出测试先报“output floats must display at most six decimals”，类型测试先报“float32 arrays must use a semantic description without a bit width”，见 build/output-decimals-red.log、output-type-labels-red.log。
+- 定向构建通过，见 build/output-display-final-build.log、output-display-selector-build.log；`tools/build.cmd ctest --test-dir build -C Release --tests-from-file F:/Projects/VisionRT/build/output-display-final-selection.txt --output-on-failure --output-junit F:/Projects/VisionRT/build/evidence/output-display-final.xml` 全部六项通过，无失败或跳过，见 build/output-display-final-tests.log。
+- 验证覆盖标量、两种浮点数组、ROI、负零、非有限值、字符串和大整数、原始值及复制精度；实际 QML 选择器的七个选项名称均无位数且互不重复。工作台输入编辑、表达式、ROI 和训练发布回归通过。
+- 默认程序打开线缆工程并执行截图后以 0 退出，见 build/output-display-smoke.log；已检查 build/evidence/output-display-workbench.png，输出矩阵与几何数值已按统一规则显示。
+- UI 源码检索未发现带括号或前缀形式的位数类型标签；`git -c safe.directory=F:/Projects/VisionRT -c core.whitespace=cr-at-eol diff --check --ignore-submodules=all` 通过。已审查数值格式化与类型命名，均由共享组件统一供给。
+
+**下一步**
+- 运行 build/bin/VisionRT.exe 验收；实现和验证入口见 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准。
+
+### 2026-11-23 — ROI 装饰与参数小数显示
+
+**目标**
+- 按参考图调整矩形和圆的装饰、标签位置及中心悬浮行为；参数区小数最多显示六位并去掉尾零，保留未编辑值的原始精度。
+
+**当前状态**
+- 矩形四角使用定向短弧箭头，绘制与命中共用视口坐标布局；旋转采用向量夹角，跨越角度边界不会把四分之一圈显示成负三圈。外层浅蓝框及其尺寸属性已删除。
+- 中心、边缘和圆周调整框统一蓝色描边、透明填充。尺寸与角度贴对应边或外侧角落，文字随边旋转并翻正；所有数值只在中心十字的固定 16px 范围内显示，移开立即隐藏。
+- 选中的圆保留半径线和空心圆周手柄；圆周悬浮或调整后保留方向。坐标在中心右侧，半径标签在手柄外侧，文字沿用参考图的 px 单位。
+- 参数区统一最多六位小数并去掉尾零，整数保持原样；格式化不改工程字面量。普通 ROI、矩形文本和浮点输入均已验证回车与离焦不写回舍入值。已重建 build/bin/VisionRT.exe，本轮未提交或推送。
+
+**验证证据**
+- 新测试先复现常驻标签、白色中心底、旧角标命中、外层框及固定补零，见 build/roi-style-hover-red.log、roi-style-transparent-red.log、roi-style-rotation-red.log、roi-style-frame-red.log、parameter-decimals-trim-red.log；圆形半径线样式由 build/roi-circle-style-red.log 先复现。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT viewport_contract viewport_pixel_contract roi_interaction_contract ui_value_contract workbench_contract workbench_roi_persistence_contract workbench_training_contract workbench_training_publish_contract assist_viewport_contract ui_notifications_contract viewport_lifetime_contract` 通过，见 build/roi-style-final-build.log。
+- `tools/build.cmd ctest --test-dir build -C Release --tests-from-file F:/Projects/VisionRT/build/roi-style-final-selection.txt --output-on-failure --output-junit F:/Projects/VisionRT/build/evidence/roi-style-final.xml` 全部 11 项通过，无失败或跳过，见 build/roi-style-final-tests.log。覆盖五类 ROI 中心悬浮、不同缩放、四角旋转、圆周手柄与标签、参数精度、真实工作台及训练发布。
+- 默认程序打开线缆工程并执行截图后以 0 退出，见 build/roi-style-smoke.log；已检查 build/evidence/roi-style-workbench.png、roi-style-selected.png、roi-style-angle--6.png、roi-style-angle-89.png、roi-style-angle-160.png、roi-style-circle-reference.png、roi-style-circle-edge.png 和 parameter-six-decimals.png。
+- `git -c safe.directory=F:/Projects/VisionRT -c core.whitespace=cr-at-eol diff --check --ignore-submodules=all` 通过；旧外框尺寸和临时诊断检索无残留。已审查绘制、命中与参数展示职责，交互布局及小数策略分别保持单一来源。
+
+**下一步**
+- 运行 build/bin/VisionRT.exe 验收；实现及测试入口见 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准。
+
+### 2026-11-23 — 恢复默认构建目录
+
+**目标**
+- 重新构建到 build/bin，验证当前工具包与工作台，并删除 build/training 临时目录。
+
+**当前状态**
+- 已按 release 预设重新配置，并完整重建默认 build；VisionRT.exe 与模块位于 build/bin。新工具包安装到 build/bin/tools-package，同目录保留 ZIP 和外置索引。
+- 临时目录的训练数据、设置与旧验证证据已存为 build/evidence/training-data-and-evidence.zip；55 个数据及证据文件逐个哈希一致，设置文件存在且长度一致。
+- 默认目录的 19 项定向回归全部通过；实际程序打开线缆工程、执行并截图后以 0 退出。临时目录尚未删除：带绝对路径校验的清理命令被自动审查拒绝，随后使用明确路径仅解除两个目录联接也被拒绝，返回理由均只有“blocked by policy”，两次均未执行写入。
+
+**验证证据**
+- `tools/build.cmd cmake --preset release` 完成；`tools/build.cmd cmake --build build --config Release --clean-first` 已生成全部产物及 Qt 运行资源，见 build/default-configure.log、build/default-rebuild.log。
+- VisionTools 的 package_tools.py --install-dir F:/Projects/VisionRT/build/bin/tools-package --profile rtx40-build --allow-dirty --verify-runtime 使用默认目录校验器接受 30 个声明，实际执行全部 13 个 CPU 工具，见 build/default-tools-package.log。
+- 定向构建成功，见 build/default-validation-build.log；`tools/build.cmd ctest --test-dir build -C Release --tests-from-file F:/Projects/VisionRT/build/default-build-test-selection.txt --output-on-failure --output-junit F:/Projects/VisionRT/build/evidence/default-build-validation.xml` 全部 19 项通过，无失败或跳过，覆盖 SDK 隔离安装、工具契约、训练发布、ROI、提示交互、线缆流程与 GPU 推理，见 build/default-build-tests.log。
+- 使用 build/bin/VisionRT.exe 的 --project、--run-once 和 --screenshot 入口运行线缆示例，以 0 退出，见 build/default-smoke.log；已检查 build/evidence/default-build-smoke.png，流程运行成功，三个工具版本均为 1.0.0，训练参数页存在，独立 ROI 坐标条及全局编辑按钮已移除。
+- 清理前已核对 build/training 为工作区内真实目录，且无该目录运行进程；其 bin/tools 与 bin/qml/quickui 为目录联接。删除及单独解除联接均被自动审查拒绝，临时目录仍存在。
+
+**下一步**
+- 运行 build/bin/VisionRT.exe 验收；构建入口见 CMakePresets.json 与 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准。删除受阻需用户在本机处理，不要改换删除接口绕过自动审查。
+
+### 2026-11-23 — 节点悬浮提示与 Alt 像素提示
+
+**目标**
+- 节点提示跟随鼠标并自动避边，文字统一 FontPrimary；像素提示仅按住 Alt 显示，坐标不带标签，RGB 或 Gray 分行。
+
+**当前状态**
+- 节点提示使用视口内鼠标位置，默认位于右下方，靠边时翻转并约束在画布内；阶段标签与其他文字统一主题主字色。
+- ImageViewport 从所属窗口接收 Alt 按下与释放，鼠标静止、焦点在其他控件时也响应；进入视口时取得修饰键状态，移动不再覆盖按键状态。失活与松键隐藏提示，坐标和各通道按要求独立成行。
+- 已重建 build/training/bin/VisionRT.exe，文档索引已更新。临时诊断输出已清理，本轮未提交或推送。
+
+**验证证据**
+- 像素格式测试首先因旧的同行 RGB 输出失败，节点提示测试首先因不跟随鼠标失败，见 build/tooltip-pixel-red.log、build/tooltip-node-red.log。
+- 实际渲染检查曾捕获悬停事件覆盖 Alt 状态导致提示关闭，见 build/tooltip-composition.log；修正后真实窗口验证文字已绘制，搜索框保持焦点，松键立即隐藏。
+- 定向构建通过，见 build/tooltip-final-build.log；`ctest --test-dir build/training -C Release -R '^(workbench_status_contract|workbench_canvas_contract|workbench_roi_contract|workbench_roi_persistence_contract|viewport_pixel_contract|viewport_contract|viewport_lifetime_contract|ui_notifications_contract|workbench_training_contract|workbench_training_publish_contract)$' --output-on-failure` 十项全部通过，见 build/tooltip-final-tests.log、build/training/evidence/tooltip-final.xml。
+- 已检查真实窗口截图 build/training/evidence/node-tooltip-pointer.png、node-status-card.png、pixel-alt-tooltip.png，覆盖普通位置、边缘翻转和四行 RGB。灰度、BGR/RGB、缩放、无图与非 8 位来源由 viewport_pixel_contract 验证；差异检查通过，源码中无临时诊断残留。
+
+**下一步**
+- 运行 build/training/bin/VisionRT.exe 验收；实现与验证入口见 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准。
+
+### 2026-11-23 — 删除独立 ROI 坐标编辑与全局入口
+
+**目标**
+- 删除参数列表上方的 ROI 坐标条和图像工具栏“编辑输入 ROI”按钮，包括对应功能和无效代码。
+
+**当前状态**
+- 已删除 RoiGeometryEditor.qml、坐标投影和修改 API、旧矩形数值确认接口、字段验证状态，以及全局按钮的信号、参数查找和提示弹窗。
+- RoiEditSession 只维护画布手势所需草稿、预览和提交，单一调用的写入 helper 已合并。参数行编辑、画布绘制与选择、上游显式复制及训练记录继续复用原有实现。
+- 工作台测试改用真实参数值、视口目标和手势结果验证；文档索引已清理。已重建 build/training/bin/VisionRT.exe，本轮未提交或推送。
+
+**验证证据**
+- 新工作台断言修复前报“the standalone ROI coordinate editor is still exposed”，见 build/roi-entry-removal-red.log。
+- `tools/build.cmd cmake --build build/training --config Release --target VisionRT workbench_contract ui_value_contract workbench_roi_persistence_contract roi_interaction_contract workbench_training_contract workbench_training_publish_contract presentation_visibility_contract viewport_contract` 通过，见 build/roi-entry-removal-final-build.log。
+- `ctest --test-dir build/training -C Release -R '^(workbench_roi_contract|ui_value_contract|workbench_roi_persistence_contract|roi_interaction_contract|workbench_training_contract|workbench_training_publish_contract|presentation_visibility_contract|viewport_contract)$' --output-on-failure` 八项全部通过，见 build/roi-entry-removal-tests.log、build/training/evidence/roi-entry-removal.xml。
+- 已检查真实窗口截图 build/training/evidence/roi-entry-removal.png，两处入口消失，原参数和蓝色画布 ROI 正常。源码与文档检索未发现已删功能残留，`git diff --check --ignore-submodules=all` 通过。
+
+**下一步**
+- 运行 build/training/bin/VisionRT.exe 验收；实现入口见 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准。
+
+### 2026-11-23 — 训练实例接口与参数分组
+
+**目标**
+- 实施已确认方案：业务工具可选 train、统一 train_params 与 outputs、独立参数训练页、全工具分组和模型路径保存。业务版本统一 1.0.0，工具 JSON schema_version 保持 2。
+
+**当前状态**
+- 已完成方案实现与定向验收。Contracts 新增 ToolConfiguration、临时模型载荷、train 默认行为、训练作用域与 produced_by，模块 ABI 为 13；两份 SDK 的 13 个改动文件哈希一致。
+- F:/Projects/VisionTools 的直边与颜色业务实例实现 train，独立训练器头文件、注册和声明已删除。全部 30 个工具均为业务版本 1.0.0、JSON schema_version 2，两个工具声明训练能力；YOLO 保留原模型加载与引擎流程。
+- 宿主采用统一参数和 C++ 分组投影，训练参数页与图像训练模式独立。训练与运行替换同一份展示结果，阶段外端口保持 Missing；实测边从共享输出绘制。训练结果不写运行供值快照。
+- 模型通过原有 Revision/SaveAssets 及原子写入保存；工程使用独立模型引用和训练参数持久化。训练编辑保存在草稿，成功发布才提交；运行前应用草稿模型路径。真实保存失败保留旧模型与引用。
+- 已修复工程协调丢失训练类型签名、发布后契约缓存引用失效、系统文件错误编码与契约 UTF-8 不符，以及零变量表达式分组访问空输入的问题。动态端口统一在创建时取得分组。旧训练探针、重复参数投影和无意义 helper 已清理；大文件按现有控制器、展示、会话与资产职责审查。
+- 可执行文件为 build/training/bin/VisionRT.exe，完整工具包及同名 ZIP 位于 build/training/bin。独立构建保留了用户原 build/bin 应用窗口；本轮未提交或推送。
+
+**验证证据**
+- 声明 TDD 首先报未知 train_params，迁移后 test_declaration_contract 通过；真实直边测试首先报“不支持训练”，接入后 test_recognition_contract 通过。
+- 宿主、四个真实工具模块及消费者定向构建通过，见 build/training-delivery-build.log、training-tools-delivery-build.log。
+- `ctest --test-dir build/training -C Release -R <相关十六项> --output-on-failure` 全部通过，包含声明、工程存储、真实训练、默认及指定路径、保存失败、共享结果、ROI 持久显示、随包示例、表达式与已有 YOLO 引擎推理，见 build/training-delivery-tests.log、build/training/evidence/training-delivery.xml。
+- `logic_node_execution_test` 修复前因零变量表达式崩溃，见 build/training-expression-red.log；修复后与真实工作台 workbench_expression_contract 一起通过，见 build/training-expression-fix-tests.log，定向重建见 build/training-expression-fix-build.log。
+- `tools/build.cmd ctest --test-dir build/training -C Release -R ^test_isolated_installation$ --output-on-failure` 通过，见 build/training-sdk-install-test.log；SDK 消费者已去掉过期 ABI 字面量断言，使用实际共享库消费验证。
+- VisionTools 的 test_recognition_contract、test_module_contract 通过，见 build/training-tools-final-tests.log。最终 package_tools.py --profile rtx40-build --allow-dirty --verify-runtime 使用真实宿主验收 30 个声明，安装消费者实际执行全部 13 个 CPU 工具，见 build/training-package-final.log。
+- 已检查真实工作台截图 build/training/evidence/training-shared-output.png：五个页签、独立选择、训练输出标题、蓝色训练输入与紫色实测边正确。主仓及 SDK、工具仓差异检查无内容错误，保留仓库既有换行规则。
+
+**下一步**
+- 运行 build/training/bin/VisionRT.exe 验收；实现和验证入口见 docs/README.md。AOCI 对齐以本轮机器 terminal_proof 为准。需要提交时先处理共享 SDK，再同步两个父仓引用；不要重复执行 build/training-*.cjs 一次性迁移脚本。
 
 ### 2026-11-23 — 输入 ROI 持久显示与交互归属
 

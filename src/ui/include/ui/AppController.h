@@ -48,9 +48,10 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(QString currentFlow READ currentFlow WRITE selectFlow NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList parameters READ parameters NOTIFY parametersChanged)
-    Q_PROPERTY(QVariantList parameterTabs READ parameterTabs CONSTANT)
+    Q_PROPERTY(QVariantList parameterGroups READ parameterGroups NOTIFY parametersChanged)
+    Q_PROPERTY(QString outputTitle READ outputTitle NOTIFY resultsChanged)
+    Q_PROPERTY(QVariantList parameterTabs READ parameterTabs NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
-    Q_PROPERTY(QVariantMap roiEditor READ roiEditor NOTIFY resultsChanged)
     // Training is an optional tool capability. When the selected tool declares none, every one of
     // these stays empty and the image panel keeps its ordinary processing layout.
     // Shape palette of the image toolbar: it only acts while regions are editable, either in the
@@ -60,7 +61,6 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(bool trainingAvailable READ trainingAvailable NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
     Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
-    Q_PROPERTY(QVariantList trainingParameters READ trainingParameters NOTIFY trainingChanged)
     Q_PROPERTY(QString selectedTrainingDraftRecord READ selectedTrainingDraftRecord NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
     Q_PROPERTY(bool canAddTrainingImage READ canAddTrainingImage NOTIFY resultsChanged)
@@ -129,8 +129,11 @@ public:
     QString             selectedNode() const;
     QVariantList        parameters() const;
     QVariantList        parameterTabs() const;
+    Q_INVOKABLE bool startTrainingRoi(int parameter, int shape);
+    Q_INVOKABLE bool setTrainingParameterPath(int parameter, const QUrl &url);
+    QVariantList        parameterGroups() const;
+    QString             outputTitle() const;
     QVariantList        imageOutputs() const;
-    QVariantMap         roiEditor() const;
     bool                trainingAvailable() const;
     bool                trainingMode() const;
     void                setTrainingMode(bool value);
@@ -146,13 +149,10 @@ public:
     // The typed value of one declared field. QML binds a control to the field number the
     // declaration publishes, so a renamed field keeps the same value.
     Q_INVOKABLE bool    setTrainingField(const QString &id, int field, const QVariant &value);
-    // Typed values the declaration offers beside the records. They belong to the draft and are
-    // published only through the trainer's declared writes.
-    QVariantList        trainingParameters() const;
+    // Tool-scoped training values belong to the draft until publication.
     Q_INVOKABLE bool    setTrainingParameter(int id, const QVariant &value);
-    // Runs the declared trainer over the draft. A successful result is published as one asset
-    // revision plus one transaction of node parameters and model references; a failure keeps the
-    // draft and every previous result untouched.
+    // Calls the business instance's train method and publishes a revision and model references.
+    // Failure preserves the draft and previous model while replacing the displayed result.
     Q_INVOKABLE void    applyTraining();
     int                 activeRoiParameter() const;
     bool                shapeToolsAvailable() const;
@@ -215,7 +215,7 @@ public:
     Q_INVOKABLE bool         setParameter(int port, bool initialization, const QString &text, bool jsonInput = false);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
-    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal);
+    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage = -1);
     Q_INVOKABLE bool         setParameterMode(int port, bool upstream);
     Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false) const;
     Q_INVOKABLE QVariantMap  portResultContext(PortId port) const;
@@ -256,11 +256,6 @@ public:
     Q_INVOKABLE bool         editRoi(int parameter, bool copyUpstream);
     Q_INVOKABLE bool         startRoiDraw(int parameter, int shape = 2);
     Q_INVOKABLE bool         clearRoi(int parameter);
-    Q_INVOKABLE bool         applyRoi();
-    Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
-    Q_INVOKABLE bool         setRoiCoordinate(const QString &session, int coordinate, const QString &text, bool commit);
-    Q_INVOKABLE void         cancelRoiCoordinates();
-    Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
     Q_INVOKABLE void         requestOutputText(const QVariantMap &context);
     Q_INVOKABLE QVariantMap  expressionConfig(const QString &node) const;
@@ -273,6 +268,7 @@ public:
     Q_INVOKABLE bool         applySelectType(const QString &node, int type, int dtype, int rank);
     // Chinese description of a type row, reusing the parameter panel's display mapping.
     Q_INVOKABLE QString      typeDescription(int type, int dtype, int rank) const;
+    Q_INVOKABLE QString      dtypeDescription(int dtype) const;
     QAbstractListModel      *nodeListModel() const;
     // Single-row lookups by id: canvas helpers use these instead of scanning a list of maps.
     Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
@@ -324,7 +320,6 @@ signals:
     void selectionChanged();
     void parametersChanged();
     void resultsChanged();
-    void roiApplyRequested();
     void runtimeChanged();
     void timingChanged();
     void diagnosticChanged();

@@ -248,4 +248,9 @@ QString AppController::typeDescription(int type, int dtype, int rank) const
     }
     return displayTypeName(spec);
 }
+
+QString AppController::dtypeDescription(int dtype) const
+{
+    return displayDtypeName(static_cast<DType>(dtype));
+}
 } // namespace visionrt

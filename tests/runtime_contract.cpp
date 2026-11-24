@@ -37,7 +37,7 @@ public:
         return ToolStatus{};
     };
 
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return init();
     }
@@ -664,7 +664,7 @@ void executionMetricsAndTimingSeparation()
         : public IToolInstance
         , public IPythonExecutionMetrics
     {
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -736,7 +736,7 @@ void timingRecordedOnFailure()
         : public IToolInstance
         , public IPythonExecutionMetrics
     {
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -800,7 +800,7 @@ void crossRoundPythonMetricIsolation()
         {
         }
 
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }

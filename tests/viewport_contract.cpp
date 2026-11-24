@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QHoverEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QQuickWindow>
@@ -63,6 +64,25 @@ void drag(ImageViewport &view, QPointF start, QPointF end)
     mouse(view, QEvent::MouseButtonPress, view.imageToItem(start), Qt::LeftButton, Qt::LeftButton);
     mouse(view, QEvent::MouseMove, view.imageToItem(end), Qt::NoButton, Qt::LeftButton);
     mouse(view, QEvent::MouseButtonRelease, view.imageToItem(end), Qt::LeftButton, Qt::NoButton);
+}
+
+void hover(ImageViewport &view, QEvent::Type type, QPointF position)
+{
+    QHoverEvent event(type, position, view.mapToGlobal(position), position, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &event);
+}
+
+int inputBluePixels(const QImage &image, QRectF area, double dpr)
+{
+    const auto pixels = QRectF(area.topLeft() * dpr, area.size() * dpr).toAlignedRect().intersected(image.rect());
+    int count = 0;
+    for (int y = pixels.top(); y <= pixels.bottom(); ++y)
+        for (int x = pixels.left(); x <= pixels.right(); ++x)
+        {
+            const auto color = image.pixelColor(x, y);
+            if (color.red() < 30 && color.green() > 80 && color.green() < 160 && color.blue() > 220) ++count;
+        }
+    return count;
 }
 } // namespace
 
@@ -232,13 +252,84 @@ int main(int argc, char **argv)
         rendered          = renderedFrame(window);
         const auto stable = renderedFrame(window);
         assert(rendered == stable);
-        const auto center      = viewport.imageToItem({40, 30}) * dpr;
-        const auto whiteHandle = rendered.pixelColor(qRound(center.x() + 4 * dpr), qRound(center.y() - 6 * dpr));
-        assert(whiteHandle.red() > 240 && whiteHandle.green() > 240 && whiteHandle.blue() > 240);
+        if (scale >= 1)
+        {
+            const auto cross = viewport.imageToItem({40, 30}) * dpr;
+            const auto interior = rendered.pixelColor(qRound(cross.x() + 4 * dpr), qRound(cross.y() - 6 * dpr));
+            assert(interior.red() < 240 && "The center cross handle must have a transparent background");
+        }
     }
     viewport.setHostFrame(DisplayConverter::convert(cv::Mat(700, 900, CV_8UC1, cv::Scalar(45))));
     window.resize(900, 700);
     viewport.setSize({900, 700});
+    const std::array<cv::Point2d, 4> polygon{cv::Point2d(350, 270), cv::Point2d(550, 270),
+                                           cv::Point2d(550, 430), cv::Point2d(350, 430)};
+    for (const auto &region : {makeRectangle(300, 270, 300, 160), makeCircle({450, 350}, 100),
+                              makeSegment({350, 300}, {550, 400}), makePoint(450, 350), makePolygon(polygon)})
+    for (double scale : {0.5, 1.0, 2.0})
+    {
+        viewport.beginRoiEdit({4, 6, 0, 0}, {region});
+        viewport.restoreViewState({ImageViewport::Manual, scale, {450, 350}});
+        const auto cross = viewport.imageToItem({450, 350});
+        hover(viewport, QEvent::HoverEnter, cross + QPointF(30, 30));
+        const auto hidden = renderedFrame(window);
+        hover(viewport, QEvent::HoverMove, cross);
+        const auto shown = renderedFrame(window);
+        assert(shown != hidden && "ROI measurements must appear when hovering the center cross");
+        hover(viewport, QEvent::HoverMove, cross + QPointF(7, 7));
+        assert(renderedFrame(window) == shown && "ROI labels must stay anchored inside the center hover area");
+        hover(viewport, QEvent::HoverMove, cross + QPointF(8.5, 0));
+        assert(renderedFrame(window) == hidden && "ROI measurements must hide outside the 16px center handle");
+        hover(viewport, QEvent::HoverMove, cross);
+        assert(renderedFrame(window) == shown);
+        hover(viewport, QEvent::HoverLeave, cross);
+        assert(renderedFrame(window) == hidden && "ROI measurements must hide immediately on hover leave");
+    }
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeRectangle(300, 270, 300, 160)});
+    viewport.restoreViewState({ImageViewport::Manual, 1, {450, 350}});
+    hover(viewport, QEvent::HoverEnter, viewport.imageToItem({480, 380}));
+    rendered = renderedFrame(window);
+    assert(at(rendered, {310, 260}) == QColor(45, 45, 45) && "Selected ROIs must not draw an outer frame");
+    hover(viewport, QEvent::HoverEnter, viewport.imageToItem({450, 350}));
+    rendered = renderedFrame(window);
+    assert(inputBluePixels(rendered, {420, 235, 60, 25}, dpr) > 30
+           && "Width labels must sit outside their corresponding edge");
+    assert(inputBluePixels(rendered, {615, 320, 25, 60}, dpr) > 30
+           && "Height labels must sit outside their corresponding edge");
+    assert(at(rendered, {598, 348}).red() < 240 && at(rendered, {452, 348}).red() < 240
+           && "Edge handles must use the same transparent fill as the center handle");
+    rendered.save(evidence + "/roi-style-measurements.png");
+    hover(viewport, QEvent::HoverMove, viewport.imageToItem({480, 380}));
+    renderedFrame(window).save(evidence + "/roi-style-selected.png");
+    for (double angle : {-6.0, 89.0, 160.0})
+    {
+        viewport.beginRoiEdit({4, 6, 0, 0}, {makeRectangle(300, 270, 300, 160, angle)});
+        hover(viewport, QEvent::HoverMove, viewport.imageToItem({450, 350}));
+        renderedFrame(window).save(evidence + QStringLiteral("/roi-style-angle-%1.png").arg(angle));
+    }
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeCircle({450, 350}, 100)});
+    hover(viewport, QEvent::HoverMove, viewport.imageToItem({450, 350}));
+    rendered = renderedFrame(window);
+    assert(at(rendered, {500, 350}).red() < 30 && at(rendered, {500, 350}).blue() > 220
+           && "A selected circle must draw its radius line in the input ROI color");
+    assert(inputBluePixels(rendered, {565, 337, 75, 26}, dpr) > 30
+           && "Circle radius labels must sit outside the circumference handle");
+    assert(inputBluePixels(rendered, {480, 331, 65, 15}, dpr) > 30
+           && "Circle coordinates must sit to the right of the center");
+    rendered.save(evidence + "/roi-style-circle-center.png");
+    hover(viewport, QEvent::HoverMove, viewport.imageToItem({550, 350}));
+    rendered = renderedFrame(window);
+    assert(inputBluePixels(rendered, {565, 337, 75, 26}, dpr) == 0 && "Circle edge hover must hide the radius text");
+    assert(inputBluePixels(rendered, {480, 331, 65, 15}, dpr) == 0 && "Circle edge hover must hide the coordinates");
+    assert(at(rendered, {552, 348}).red() < 240 && "Circle radius handles must have a transparent background");
+    rendered.save(evidence + "/roi-style-circle-edge.png");
+    hover(viewport, QEvent::HoverMove, viewport.imageToItem({370, 410}));
+    hover(viewport, QEvent::HoverMove, viewport.imageToItem({450, 350}));
+    rendered = renderedFrame(window);
+    assert(at(rendered, {410, 380}).red() < 30 && at(rendered, {410, 380}).blue() > 220
+           && "The radius handle direction must persist when returning to the center");
+    rendered.save(evidence + "/roi-style-circle-reference.png");
+    hover(viewport, QEvent::HoverLeave, viewport.imageToItem({550, 350}));
     viewport.restoreViewState({
         ImageViewport::Manual,
         0.75,

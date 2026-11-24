@@ -44,7 +44,7 @@ ParameterLocator readLocator(const QJsonValue &value)
         for (const auto &mapping : json::array(item.value("parameters"), "locator.parameters"))
         {
             const auto  row    = json::object(mapping, "locator.parameters");
-            const char *target = row.contains("init") ? "init" : "input";
+            const char *target = row.contains("train") ? "train" : row.contains("init") ? "init" : "input";
             json::fields(row, {"output", target, "limit"}, "locator.parameters");
             SuggestedLimit limit = SuggestedLimit::Exact;
             if (row.contains("limit"))
@@ -59,7 +59,7 @@ ParameterLocator readLocator(const QJsonValue &value)
             }
             result.parameters.push_back({
                 id(row, "output"),
-                {row.contains("init") ? PortStage::Init : PortStage::Inputs, id(row, target)},
+                {row.contains("train") ? PortStage::Train : row.contains("init") ? PortStage::Init : PortStage::Inputs, id(row, target)},
                 limit
             });
         }
@@ -88,7 +88,7 @@ QJsonObject writeLocator(const ParameterLocator &locator)
     QJsonArray parameters;
     for (const auto &parameter : locator.parameters)
     {
-        const char *target = parameter.target.stage == PortStage::Init ? "init" : "input";
+        const char *target = parameter.target.stage == PortStage::Train ? "train" : parameter.target.stage == PortStage::Init ? "init" : "input";
         QJsonObject row{
             {"output", static_cast<qint64>(parameter.sourcePort)},
             {  target,  static_cast<qint64>(parameter.target.id)}

@@ -1,9 +1,6 @@
 #include "AppController_p.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <fstream>
+#include <utility>
 
 namespace visionrt {
 void AppController::Impl::finishRoi()
@@ -107,159 +104,6 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
     }
 }
 
-QVariantMap AppController::roiEditor() const
-{
-    auto *viewport = impl_->presentation.viewport();
-    auto  editor   = impl_->roiSession.editor(viewport ? viewport->selectedRoi() : -1);
-    if (!editor.isEmpty())
-        editor["readOnly"] = !viewport || viewport->readOnly();
-    return editor;
-}
-
-bool AppController::setRoiCoordinate(const QString &session, int coordinate, const QString &text, bool commit)
-{
-    if (!impl_->idle() || !impl_->roiSession.active() || session != QString::number(impl_->roiSession.id()))
-        return false;
-    auto *viewport = impl_->presentation.viewport();
-    if (!viewport || viewport->readOnly())
-        return false;
-    const int   index  = viewport ? viewport->selectedRoi() : -1;
-    const auto &groups = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
-    const int   group  = impl_->roiSession.singleRectangle() ? 0 : impl_->roiSession.displayIndex();
-    if (group >= static_cast<int>(groups.size()) || index < 0 || index >= static_cast<int>(groups[group].size()))
-        return false;
-    auto value = groups[group][index];
-    if (coordinate < 0 || coordinate + 1 >= static_cast<int>(value.size()))
-        return false;
-    bool       valid  = false;
-    const auto number = text.toDouble(&valid);
-    if (!valid || !std::isfinite(number))
-        return false;
-    value[coordinate + 1] = number;
-    const auto key        = impl_->roiSession.target(index);
-    try
-    {
-        validateRoi(value);
-        if (commit && key.kind == RoiTargetKind::Training)
-            impl_->commitTrainingRoi(key, &value);
-        else if (commit)
-            impl_->commitRoi(key, &value);
-        else
-            impl_->roiSession.previewGeometry(key, value);
-        const auto &updated = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
-        viewport->previewGeometry(updated[group]);
-        emit parametersChanged();
-        emit resultsChanged();
-        return true;
-    }
-    catch (const ContractError &)
-    {
-        return false;
-    }
-}
-
-void AppController::cancelRoiCoordinates()
-{
-    impl_->roiSession.cancelPreview();
-    if (auto *viewport = impl_->presentation.viewport(); viewport && impl_->roiSession.active())
-    {
-        const auto &groups = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
-        const int   group  = impl_->roiSession.singleRectangle() ? 0 : impl_->roiSession.displayIndex();
-        if (group < static_cast<int>(groups.size()))
-            viewport->previewGeometry(groups[group]);
-    }
-    emit parametersChanged();
-    emit resultsChanged();
-}
-
-bool AppController::setRoiRectangle(const QString &session, const QVariantList &coordinates)
-{
-    if (!impl_->idle() || !impl_->roiSession.active() || !impl_->roiSession.singleRectangle()
-        || session != QString::number(impl_->roiSession.id()))
-        return false;
-    try
-    {
-        if (coordinates.size() != 5)
-            throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input())
-                                + " 需要 x、y、width、height、angle 五个坐标，实际 "
-                                + std::to_string(coordinates.size()) + " 项");
-        std::array<double, 5> values;
-        for (std::size_t index = 0; index < values.size(); ++index)
-        {
-            bool valid    = false;
-            values[index] = coordinates[qsizetype(index)].toDouble(&valid);
-            if (!valid || !std::isfinite(values[index]))
-                throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input()) + " 的坐标["
-                                    + std::to_string(index) + "] 必须为有限数值");
-        }
-        const auto outcome = impl_->roiSession.commitRectangle(values);
-        if (!outcome.accepted)
-            return false;
-        if (auto *viewport = impl_->presentation.viewport())
-            viewport->setDrawShape(0);
-        if (outcome.changedBinding)
-        {
-            emit projectChanged();
-            emit parametersChanged();
-        }
-        impl_->updateDisplay();
-        emit resultsChanged();
-        return true;
-    }
-    catch (const std::exception &error)
-    {
-        impl_->report(error, QStringLiteral("ROI 坐标更新失败"));
-        return false;
-    }
-}
-
-void AppController::setRoiFieldsValid(const QString &session, bool valid)
-{
-    if (impl_->roiSession.active() && session == QString::number(impl_->roiSession.id()))
-        impl_->roiSession.setFieldsValid(valid);
-}
-
-bool AppController::applyRoi()
-{
-    if (!impl_->idle() || !impl_->roiSession.active())
-        return false;
-    emit roiApplyRequested();
-    if (!impl_->roiSession.active() || !impl_->roiSession.fieldsValid())
-        return false;
-    try
-    {
-        const auto  input       = impl_->roiSession.input();
-        const auto  nodeValue   = impl_->roiSession.node();
-        const auto  flow        = impl_->roiSession.flow();
-        const auto *node        = impl_->currentNode();
-        const auto *declaration = impl_->parameter(input, false);
-        if (impl_->flow != flow || !node || node->id != nodeValue || !declaration
-            || declaration->type != impl_->roiSession.type())
-            throw ContractError("ROI 编辑目标已失效：" + portLabel(input));
-        const auto binding = node->inputs.find(input);
-        if (binding == node->inputs.end() || binding->second.mode != impl_->roiSession.original().mode
-            || binding->second.source != impl_->roiSession.original().source
-            || !equalValues(binding->second.literal, impl_->roiSession.original().literal))
-            throw ContractError("ROI 输入绑定已在编辑期间改变：" + portLabel(input));
-        if (!equalValues(impl_->roiSession.background(), impl_->resolvedInput(*node, declaration->image->id)))
-            throw ContractError("ROI 背景图像已在编辑期间改变：" + portLabel(input));
-        validateValue(impl_->roiSession.type(), impl_->roiSession.draft());
-        InputBinding committed{BindingMode::Literal, impl_->roiSession.draft(), std::nullopt};
-        const bool   changed = impl_->editor.setBinding(flow.toStdString(), nodeValue, input, std::move(committed));
-        impl_->finishRoi();
-        if (changed)
-            impl_->changed();
-        else
-            impl_->updateResults();
-        return true;
-    }
-    catch (const std::exception &error)
-    {
-        impl_->report(error, QStringLiteral("ROI 应用失败"));
-        return false;
-    }
-}
-
 void AppController::endRoiPreview()
 {
     impl_->finishRoi();
@@ -304,6 +148,15 @@ int AppController::activeRoiShape() const
 {
     auto *viewport = impl_->presentation.viewport();
     return (impl_->roiSession.active() && viewport) ? viewport->drawShape() : 0;
+}
+
+bool AppController::startTrainingRoi(int parameter, int shape)
+{
+    if (!impl_->idle() || !impl_->ensureTrainingSession() || impl_->training->roiParameter() != static_cast<PortId>(parameter)) return false;
+    if (!impl_->trainingMode) setTrainingMode(true);
+    impl_->seatTrainingRegions();
+    setDrawShape(shape);
+    return shapeToolsAvailable();
 }
 
 bool AppController::startRoiDraw(int parameter, int shape)

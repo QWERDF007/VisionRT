@@ -156,10 +156,11 @@ void TrainingSession::begin(Begin start)
     end();
     start_  = std::move(start);
     active_ = true;
-    for (const auto &declared : start_.spec.parameters)
+    for (const auto &declared : toolParameters())
         if (!isMissing(declared.defaultValue))
             parameters_[declared.id] = trainingFieldValueOf(declared.defaultValue);
     load();
+    for (const auto &[id, value] : start_.parameters) parameters_[id] = trainingFieldValueOf(value);
 }
 
 void TrainingSession::end()
@@ -203,7 +204,7 @@ void TrainingSession::setAsset(std::filesystem::path asset)
     images_.clear();
     records_.clear();
     parameters_.clear();
-    for (const auto &declared : start_.spec.parameters)
+    for (const auto &declared : toolParameters())
         if (!isMissing(declared.defaultValue))
             parameters_[declared.id] = trainingFieldValueOf(declared.defaultValue);
     selected_ = -1;
@@ -214,9 +215,9 @@ void TrainingSession::setAsset(std::filesystem::path asset)
     load();
 }
 
-const TrainingParameterSpec *TrainingSession::parameterSpec(PortId id) const
+const PortDefinition *TrainingSession::parameterSpec(PortId id) const
 {
-    for (const auto &entry : start_.spec.parameters)
+    for (const auto &entry : toolParameters())
         if (entry.id == id)
             return &entry;
     return nullptr;
@@ -233,16 +234,9 @@ bool TrainingSession::setParameter(PortId id, TrainingFieldValue value)
     const auto *declared = parameterSpec(id);
     if (!declared)
         return false;
-    PortDefinition port;
-    port.id      = declared->id;
-    port.nameZh  = declared->nameZh;
-    port.type    = declared->type;
-    port.minimum = declared->minimum;
-    port.maximum = declared->maximum;
-    port.options = declared->options;
     try
     {
-        validateToolValue(port, portValueOf(value));
+        validateToolValue(*declared, portValueOf(value));
     }
     catch (const ContractError &)
     {
@@ -261,42 +255,26 @@ std::map<PortId, TrainingFieldValue> TrainingSession::parameters() const
     return parameters_;
 }
 
-QVariantList TrainingSession::parameterRows() const
+const PortDefinition *TrainingSession::field(PortId id) const
 {
-    QVariantList result;
-    for (const auto &declared : start_.spec.parameters)
-    {
-        const auto found = parameters_.find(declared.id);
-        result.append(QVariantMap{
-            {    "id",                                                static_cast<uint>(declared.id)},
-            {  "name",                                       QString::fromStdString(declared.nameZh)},
-            {  "type",                                          static_cast<int>(declared.type.type)},
-            {"editor",                                             static_cast<int>(declared.editor)},
-            { "value", found == parameters_.end() ? QVariant{} : trainingFieldVariant(found->second)}
-        });
-    }
-    return result;
-}
-
-const TrainingFieldSpec *TrainingSession::field(PortId id) const
-{
-    for (const auto &entry : start_.spec.records.fields)
+    for (const auto &entry : recordParameters())
         if (entry.id == id)
             return &entry;
     return nullptr;
 }
 
-PortId TrainingSession::roiField() const
+PortId TrainingSession::roiParameter() const
 {
-    return start_.spec.records.roiField();
+    for (const auto &port : recordParameters()) if (port.roi) return port.id;
+    return 0;
 }
 
 int TrainingSession::regionBudget() const noexcept
 {
-    const auto id = start_.spec.records.roiField();
+    const auto id = roiParameter();
     if (id == 0)
         return 0;
-    for (const auto &entry : start_.spec.records.fields)
+    for (const auto &entry : recordParameters())
         if (entry.id == id)
             return entry.maxRegions;
     return 0;
@@ -312,7 +290,7 @@ bool TrainingSession::select(int index)
 
 void TrainingSession::assignDefaults(TrainingDraftRecord &record) const
 {
-    for (const auto &entry : start_.spec.records.fields) record.fields.emplace(entry.id, emptyFieldValue(entry.type));
+    for (const auto &entry : recordParameters()) record.fields.emplace(entry.id, isMissing(entry.defaultValue) ? emptyFieldValue(entry.type) : trainingFieldValueOf(entry.defaultValue));
 }
 
 void TrainingSession::materialiseThumbnail(TrainingDraftImage &image) const
@@ -441,7 +419,7 @@ void TrainingSession::load()
             record.image  = image;
             assignDefaults(record);
             const auto fields = item.value("fields").toObject();
-            for (const auto &declared : start_.spec.records.fields)
+            for (const auto &declared : recordParameters())
             {
                 const auto encoded = fields.value(QString::number(declared.id));
                 if (encoded.isUndefined())
@@ -462,23 +440,6 @@ void TrainingSession::load()
             }
             records_.push_back(std::move(record));
         }
-        const auto parameters = root.value("parameters").toObject();
-        for (const auto &declared : start_.spec.parameters)
-        {
-            const auto encoded = parameters.value(QString::number(declared.id));
-            if (encoded.isUndefined())
-                continue;
-            try
-            {
-                parameters_[declared.id] = trainingFieldValueOf(ValueJson::decode(encoded, declared.type));
-            }
-            catch (const ContractError &error)
-            {
-                fail(QStringLiteral("训练参数 %1：%2")
-                         .arg(QString::fromStdString(declared.nameZh), QString::fromUtf8(error.what())));
-                return;
-            }
-        }
         selected_ = records_.empty() ? -1 : 0;
         dirty_    = false;
         return;
@@ -494,7 +455,7 @@ std::optional<int> TrainingSession::addImage(const cv::Mat &pixels, ColorOrder c
         error_ = QStringLiteral("当前没有可加入训练的图像");
         return std::nullopt;
     }
-    const int maxCount = start_.spec.records.maxCount;
+    const int maxCount = start_.spec.maxRecords;
     if (maxCount > 1 && static_cast<int>(records_.size()) >= maxCount)
     {
         error_ = QStringLiteral("训练记录已达到声明的上限");
@@ -539,7 +500,7 @@ std::optional<int> TrainingSession::addImage(const cv::Mat &pixels, ColorOrder c
     record.number = nextRecord_++;
     record.image  = imageId;
     assignDefaults(record);
-    if (const auto roi = roiField(); roi != 0)
+    if (const auto roi = roiParameter(); roi != 0)
         record.fields[roi] = DataRef<ROI>(ROI{carried});
     records_.push_back(std::move(record));
     pruneImages();
@@ -577,8 +538,20 @@ bool TrainingSession::setField(int index, PortId fieldId, TrainingFieldValue val
     const auto *declared = field(fieldId);
     if (!declared)
         return false;
+    try
+    {
+        validateToolValue(*declared, portValueOf(value));
+    }
+    catch (const ContractError &)
+    {
+        return false;
+    }
     if (declared->roi)
-        return false; // the canvas field is replaced as a group, never one value at a time
+    {
+        const auto &groups = std::get<DataRef<ROI>>(value).get();
+        if (groups.size() != 1 || (declared->maxRegions && groups.front().size() > static_cast<std::size_t>(declared->maxRegions)))
+            return false;
+    }
     const auto current = records_[index].fields.find(fieldId);
     if (current != records_[index].fields.end() && sameFieldValue(current->second, value))
         return false;
@@ -597,7 +570,7 @@ std::optional<TrainingFieldValue> TrainingSession::value(int index, PortId field
 
 std::vector<EncodedRegion> TrainingSession::regions(int index) const
 {
-    const auto roi = roiField();
+    const auto roi = roiParameter();
     if (roi == 0 || index < 0 || index >= static_cast<int>(records_.size()))
         return {};
     const auto found = records_[index].fields.find(roi);
@@ -611,12 +584,7 @@ std::vector<EncodedRegion> TrainingSession::regions(int index) const
 
 bool TrainingSession::setRegions(int index, std::vector<EncodedRegion> regions)
 {
-    const auto roi = roiField();
-    if (roi == 0 || index < 0 || index >= static_cast<int>(records_.size()))
-        return false;
-    records_[index].fields[roi] = DataRef<ROI>(ROI{std::move(regions)});
-    dirty_                      = true;
-    return true;
+    return setField(index, roiParameter(), DataRef<ROI>(ROI{std::move(regions)}));
 }
 
 QVariantList TrainingSession::fields(int index) const
@@ -625,7 +593,7 @@ QVariantList TrainingSession::fields(int index) const
     if (index < 0 || index >= static_cast<int>(records_.size()))
         return result;
     const auto &record = records_[index];
-    for (const auto &declared : start_.spec.records.fields)
+    for (const auto &declared : recordParameters())
     {
         const auto found = record.fields.find(declared.id);
         result.append(QVariantMap{
@@ -642,7 +610,7 @@ QVariantList TrainingSession::fields(int index) const
 
 QVariantList TrainingSession::rows() const
 {
-    const auto   roi = roiField();
+    const auto   roi = roiParameter();
     QVariantList result;
     for (std::size_t index = 0; index < records_.size(); ++index)
     {
@@ -706,7 +674,7 @@ QJsonObject TrainingSession::manifest(const std::map<TrainingImageId, QString> &
     for (const auto &record : records_)
     {
         QJsonObject fields;
-        for (const auto &declared : start_.spec.records.fields)
+        for (const auto &declared : recordParameters())
         {
             const auto found = record.fields.find(declared.id);
             if (found == record.fields.end())
@@ -721,17 +689,6 @@ QJsonObject TrainingSession::manifest(const std::map<TrainingImageId, QString> &
         });
     }
     root.insert("records", records);
-
-    QJsonObject parameters;
-    for (const auto &declared : start_.spec.parameters)
-    {
-        const auto found = parameters_.find(declared.id);
-        if (found == parameters_.end())
-            continue;
-        parameters.insert(QString::number(declared.id),
-                          ValueJson::encode(portValueOf(found->second), declared.type, ValueJson::Purpose::Stored));
-    }
-    root.insert("parameters", parameters);
 
     QJsonArray artifacts;
     for (const auto &declared : start_.spec.artifacts)
@@ -754,32 +711,25 @@ bool TrainingSession::savable() const
 {
     if (records_.empty())
         return false;
-    if (start_.spec.records.maxCount > 0 && static_cast<int>(records_.size()) > start_.spec.records.maxCount)
+    if (start_.spec.maxRecords > 0 && static_cast<int>(records_.size()) > start_.spec.maxRecords)
         return false;
-    for (const auto &declared : start_.spec.parameters)
+    for (const auto &declared : toolParameters())
     {
         const auto found = parameters_.find(declared.id);
         if (found == parameters_.end())
             return false;
-        PortDefinition port;
-        port.id      = declared.id;
-        port.nameZh  = declared.nameZh;
-        port.type    = declared.type;
-        port.minimum = declared.minimum;
-        port.maximum = declared.maximum;
-        port.options = declared.options;
         try
         {
-            validateToolValue(port, portValueOf(found->second));
+            validateToolValue(declared, portValueOf(found->second));
         }
         catch (const ContractError &)
         {
             return false;
         }
     }
-    const auto roi = roiField();
+    const auto roi = roiParameter();
     for (const auto &record : records_)
-        for (const auto &declared : start_.spec.records.fields)
+        for (const auto &declared : recordParameters())
         {
             const auto found = record.fields.find(declared.id);
             if (found == record.fields.end())

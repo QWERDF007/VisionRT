@@ -361,7 +361,7 @@ DomainToolAdapter::~DomainToolAdapter()
     release();
 }
 
-ToolStatus DomainToolAdapter::initialize(const Values &initParams)
+ToolStatus DomainToolAdapter::initialize(const ToolConfiguration &initParams)
 {
     if (!failureStatus_)
         return failureStatus_;
@@ -409,6 +409,15 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     // A plugin that throws never produced a complete output set, so the exception is the honest
     // report and the host turns it into a framework diagnostic.
     auto        result     = raw_->execute(inputs);
+    const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
+    for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
+    return result;
+}
+
+ToolResult DomainToolAdapter::train(const TrainingSet &set, const Values &parameters)
+{
+    if (!raw_) throw ContractError("工具实例已释放");
+    auto result = raw_->train(set, parameters);
     const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
     for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
     return result;

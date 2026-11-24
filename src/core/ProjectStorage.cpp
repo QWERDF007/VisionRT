@@ -1,3 +1,4 @@
+#include "core/ToolValueValidation.h"
 #include "core/ProjectStorage.h"
 
 #include "core/InputNormalizer.h"
@@ -258,6 +259,18 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     changes.declarationChanged = !changedStages.empty()
                               || (!node.toolVersionSnapshot.empty() && node.toolVersionSnapshot != definition.version);
 
+    Values trainingParameters;
+    node.signatures.trainParams.clear();
+    for (const auto &port : contract.trainParams)
+        if (port.scope == ParameterScope::Tool)
+        {
+            const auto found = node.trainParams.find(port.id);
+            auto value = found == node.trainParams.end() ? defaultValue(port) : found->second;
+            validateToolValue(port, value);
+            trainingParameters.emplace(port.id, std::move(value));
+            node.signatures.trainParams.emplace(port.id, port.type);
+        }
+    node.trainParams = std::move(trainingParameters);
     Values parameters;
     for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
     {
@@ -339,7 +352,9 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     }
     node.initParams = std::move(parameters);
     node.inputs     = std::move(inputs);
-    node.signatures = {std::move(initTypes), std::move(inputTypes), std::move(outputTypes)};
+    node.signatures.initParams = std::move(initTypes);
+    node.signatures.inputs = std::move(inputTypes);
+    node.signatures.outputs = std::move(outputTypes);
     if (node.toolNameSnapshot != definition.nameZh)
     {
         node.toolNameSnapshot = definition.nameZh;
@@ -552,6 +567,18 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             node.signatures        = {decodeTypes(signatures.value("init_params"), "init signature"),
                                       decodeTypes(signatures.value("inputs"), "input signature"),
                                       decodeTypes(signatures.value("outputs"), "output signature")};
+            node.signatures.trainParams = decodeTypes(signatures.value("train_params"), "training signature");
+            const auto trainingItems = raw.value("train_params");
+            if (!trainingItems.isUndefined() && !trainingItems.isArray()) invalid("node.train_params 必须是数组");
+            for (qsizetype index = 0; index < trainingItems.toArray().size(); ++index)
+            {
+                const auto entry = map(trainingItems.toArray()[index], "training parameter");
+                const auto id = portId(entry.value("port_id"), "training parameter");
+                const auto found = node.signatures.trainParams.find(id);
+                if (found == node.signatures.trainParams.end()) invalid("训练参数缺少类型");
+                if (!node.trainParams.emplace(id, literal({"train_params", QString::number(index), "value"}, found->second)).second)
+                    invalid("训练参数编号重复");
+            }
             const auto *definition = registry.find(node.toolId);
             const auto  parameters = raw.value("init_params");
             if (!parameters.isUndefined() && !parameters.isArray())
@@ -809,6 +836,11 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 raw.insert("training_asset", QString::fromStdString(storedTrainingAsset(project, node)));
             if (!unresolved)
             {
+                QJsonArray trainingParameters;
+                for (const auto &[id, value] : node.trainParams)
+                    trainingParameters.append(QJsonObject{{"port_id", static_cast<double>(id)},
+                        {"value", ValueJson::encode(value, node.signatures.trainParams.at(id), ValueJson::Purpose::Stored)}});
+                raw.insert("train_params", trainingParameters);
                 QJsonArray parameters;
                 auto       parameterTypes = encodeTypes(node.signatures.initParams);
                 for (const auto &[id, value] : node.initParams)
@@ -862,6 +894,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     raw.insert("select_type", ValueJson::encodeType(*node.selectType));
                 raw.insert("init_params", parameters);
                 raw.insert("type_snapshot", QJsonObject{
+                                                {"train_params", encodeTypes(node.signatures.trainParams)},
                                                 {"init_params",                       parameterTypes},
                                                 {     "inputs",  encodeTypes(node.signatures.inputs)},
                                                 {    "outputs", encodeTypes(node.signatures.outputs)}

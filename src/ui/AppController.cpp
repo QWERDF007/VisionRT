@@ -759,6 +759,18 @@ void AppController::Impl::start(RunMode mode)
         return;
     finishRoi();
     q->parameters();
+    const auto configuredProject = editor.project();
+    for (const auto &sourceFlow : configuredProject.flows)
+        for (const auto &node : sourceFlow.nodes)
+        {
+            const auto view = trainingViews.find(node.id);
+            if (view == trainingViews.end() || !view->second.session.active()) continue;
+            std::vector<LiteralWrite> paths;
+            for (const auto &artifact : view->second.session.spec().artifacts)
+                if (const auto value = view->second.session.parameter(artifact.target.id))
+                    paths.push_back({PortStage::Train, artifact.target.id, portValueOf(*value)});
+            if (!paths.empty()) editor.setLiteralWrites(sourceFlow.id, node.id, paths);
+        }
     beginDrain([this, mode] { beginRun(mode); });
 }
 
@@ -1718,7 +1730,12 @@ QVariantList AppController::flows() const
 QVariantList AppController::parameterTabs() const
 {
     QVariantList result;
-    for (const auto tab : toolTabs()) result.push_back(QString::fromUtf8(tab.data(), static_cast<qsizetype>(tab.size())));
+    for (std::size_t index = 0; index < toolTabs().size(); ++index)
+    {
+        if (index == static_cast<std::size_t>(ParameterTab::Training) && !trainingAvailable()) continue;
+        const auto tab = toolTabs()[index];
+        result.append(QVariantMap{{"id", static_cast<int>(index)}, {"name", QString::fromUtf8(tab.data(), static_cast<qsizetype>(tab.size()))}});
+    }
     return result;
 }
 
@@ -2247,7 +2264,7 @@ bool AppController::save(const QString &path)
         auto                 candidate = impl_->editor.project();
         // Assets first, project JSON last: a copy that cannot carry a published revision leaves the
         // existing project and its own files exactly as they were.
-        training::SaveAssets assets(candidate, target);
+        training::SaveAssets assets(candidate, target, impl_->registry);
         ProjectStorage(impl_->registry).save(candidate, target);
         assets.accept();
         impl_->editor.replaceProject(std::move(candidate));

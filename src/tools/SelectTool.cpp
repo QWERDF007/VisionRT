@@ -18,8 +18,9 @@ public:
     {
     }
 
-    ToolStatus initialize(const Values &parameters) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
+        const auto &parameters = configuration.parameters;
         return parameters.empty() ? ToolStatus{} : ToolStatus{1, "合流工具不接受初始化参数"};
     }
 

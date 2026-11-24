@@ -89,7 +89,7 @@ private:
 
 struct InstanceConfiguration
 {
-    InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry);
+    InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry, const std::filesystem::path &base);
     bool operator==(const InstanceConfiguration &other) const;
 
     std::string           toolId;
@@ -97,6 +97,7 @@ struct InstanceConfiguration
     ToolKind              kind = ToolKind::Cpp;
     ToolAvailability      availability;
     Values                parameters;
+    std::map<std::string, std::filesystem::path> models;
     TypeMap               outputs;
 };
 

@@ -11,6 +11,7 @@
 
 namespace visionrt {
 class TrainingSession;
+class ToolRegistry;
 }
 
 namespace visionrt::training {
@@ -24,7 +25,8 @@ class VISIONRT_UI_API Revision final
 {
 public:
     Revision(const std::filesystem::path &base, const TrainingSession &draft,
-             const std::map<std::string, Array> &models);
+             const std::map<std::string, ModelArtifact> &models,
+             const std::map<std::string, std::filesystem::path> &destinations = {});
     Revision(const std::filesystem::path &base, const std::filesystem::path &source);
     ~Revision();
     Revision(const Revision &)            = delete;
@@ -59,7 +61,7 @@ VISIONRT_UI_API std::filesystem::path projectBase(const std::filesystem::path &p
 class VISIONRT_UI_API SaveAssets final
 {
 public:
-    SaveAssets(ProjectDefinition &project, const std::filesystem::path &destination);
+    SaveAssets(ProjectDefinition &project, const std::filesystem::path &destination, const ToolRegistry &registry);
     SaveAssets(const SaveAssets &)            = delete;
     SaveAssets &operator=(const SaveAssets &) = delete;
     void        accept() noexcept;

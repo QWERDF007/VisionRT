@@ -3,7 +3,6 @@
 #include "visionrt/contracts/Value.h"
 
 #include <algorithm>
-#include <span>
 #include <utility>
 
 namespace visionrt {
@@ -28,8 +27,7 @@ std::uint64_t RoiEditSession::begin(Start start)
                 std::move(start.draft),
                 start.displayIndex,
                 start.resultIndex,
-                std::move(start.view),
-                true};
+                std::move(start.view)};
     draft_ = std::move(draft);
     return draft_->id;
 }
@@ -54,18 +52,6 @@ RoiEditTarget RoiEditSession::target(int index) const
 {
     return draft_ ? RoiEditTarget{draft_->node, draft_->input, draft_->displayIndex, index, draft_->id, draft_->kind}
                   : RoiEditTarget{};
-}
-
-const QString &RoiEditSession::flow() const noexcept
-{
-    static const QString empty;
-    return draft_ ? draft_->flow : empty;
-}
-
-const TypeSpec &RoiEditSession::type() const noexcept
-{
-    static const TypeSpec empty;
-    return draft_ ? draft_->type : empty;
 }
 
 const InputBinding &RoiEditSession::original() const noexcept
@@ -96,22 +82,6 @@ void RoiEditSession::setDisplayIndex(int value)
 {
     if (draft_)
         draft_->displayIndex = value;
-}
-
-void RoiEditSession::setFieldsValid(bool value)
-{
-    if (draft_)
-        draft_->fieldsValid = value;
-}
-
-RoiEditSession::Commit RoiEditSession::writeLiteral(InputBinding committed)
-{
-    Commit     result;
-    const bool changed
-        = editor_.setBinding(draft_->flow.toStdString(), draft_->node, draft_->input, std::move(committed));
-    result.accepted       = true;
-    result.changedBinding = changed;
-    return result;
 }
 
 bool RoiEditSession::stageGeometry(const RoiEditTarget &target, const EncodedRegion *value)
@@ -172,69 +142,7 @@ RoiEditSession::Commit RoiEditSession::commitGeometry(const RoiEditTarget &targe
         return {};
     InputBinding committed{BindingMode::Literal, draft_->draft, std::nullopt};
     draft_->original = committed;
-    return writeLiteral(std::move(committed));
+    return {true, editor_.setBinding(draft_->flow.toStdString(), draft_->node, draft_->input, std::move(committed))};
 }
 
-RoiEditSession::Commit RoiEditSession::commitRectangle(const std::array<double, 5> &values)
-{
-    if (!draft_ || !draft_->singleRectangle)
-        return {};
-    DataRef<ROI> rectangle(ROI{{makeRectangle(values[0], values[1], values[2], values[3], values[4])}});
-    validateValue(draft_->type, rectangle);
-    draft_->draft = std::move(rectangle);
-    if (draft_->original.mode == BindingMode::Upstream)
-        return {true, false};
-    InputBinding committed{BindingMode::Literal, draft_->draft, draft_->original.source};
-    draft_->original = committed;
-    return writeLiteral(std::move(committed));
-}
-
-QVariantMap RoiEditSession::editor(int selected) const
-{
-    if (!draft_)
-        return {};
-    const auto *images = std::get_if<DataRef<Image>>(&draft_->background);
-    const auto *image  = images && draft_->displayIndex < static_cast<int>(images->get().size())
-                           ? &images->get()[draft_->displayIndex]
-                           : nullptr;
-    QVariantMap result{
-        {         "id",   QString::number(draft_->id)},
-        {       "node", QString::number(draft_->node)},
-        {      "input",                 draft_->input},
-        {  "rectangle",                QVariantList{}},
-        { "imageWidth",       image ? image->cols : 0},
-        {"imageHeight",       image ? image->rows : 0}
-    };
-    const auto &groups = std::get<DataRef<ROI>>(draft_->draft).get();
-    const int   group  = draft_->singleRectangle ? 0 : draft_->displayIndex;
-    const int   index  = draft_->singleRectangle ? 0 : selected;
-    if (group >= static_cast<int>(groups.size()) || index < 0 || index >= static_cast<int>(groups[group].size()))
-        return result;
-    const auto &record = groups[group][index];
-    const auto  kind   = RegionView(record).kind();
-    QStringList labels;
-    switch (kind)
-    {
-    case RoiKind::Rectangle:
-        labels = {"x", "y", "w", "h", "angle"};
-        break;
-    case RoiKind::Circle:
-        labels = {"cx", "cy", "r"};
-        break;
-    case RoiKind::Segment:
-        labels = {"x1", "y1", "x2", "y2"};
-        break;
-    default:
-        for (std::size_t i = 1; i < record.size(); ++i)
-            labels.push_back(QString(i % 2 ? "x%1" : "y%1").arg((i + 1) / 2));
-    }
-    QVariantList values;
-    for (std::size_t i = 1; i < record.size(); ++i) values.push_back(record[i]);
-    result["region"]      = index;
-    result["labels"]      = labels;
-    result["coordinates"] = values;
-    if (draft_->singleRectangle)
-        result["rectangle"] = values;
-    return result;
-}
 } // namespace visionrt

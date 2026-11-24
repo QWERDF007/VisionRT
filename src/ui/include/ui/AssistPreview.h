@@ -42,6 +42,7 @@ struct AssistRequest
     AssistContext context;
     // Algorithm inputs resolved by the coordinator into ordinary business values.
     Values inputs;
+    std::optional<DataRef<TrainingSet>> training;
     bool   learn  = false;
     bool   append = false;
 };
@@ -56,6 +57,7 @@ struct AssistOutcome
     QString       quality;
     ROI           preview;  // current image coordinates, preview only
     ROI           proposal; // reference coordinates, ready for a literal commit
+    std::map<std::string, ModelArtifact> artifacts;
     Values        outputs;  // helper outputs, used for the mapped suggestions
 };
 

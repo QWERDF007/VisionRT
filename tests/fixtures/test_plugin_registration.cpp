@@ -18,7 +18,7 @@ public:
     {
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         ++initializeCalls;
         return {};

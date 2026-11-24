@@ -5,6 +5,21 @@
 
 namespace visionrt {
 
+QString displayDtypeName(DType dtype)
+{
+    switch (dtype)
+    {
+    case DType::UInt8: return QStringLiteral("无符号整数");
+    case DType::Int32: return QStringLiteral("整数");
+    case DType::Int64: return QStringLiteral("长整数");
+    case DType::Float32: return QStringLiteral("单精度浮点数");
+    case DType::Float64: return QStringLiteral("浮点数");
+    case DType::Bool: return QStringLiteral("布尔值");
+    case DType::String: return QStringLiteral("字符串");
+    }
+    return {};
+}
+
 QString displayTypeName(const TypeSpec &type)
 {
     switch (type.type)
@@ -33,20 +48,7 @@ QString displayTypeName(const TypeSpec &type)
         default: rankStr = (type.rank > 0) ? QStringLiteral("%1维").arg(type.rank) : QString(); break;
         }
 
-        QString dtypeStr;
-        if (type.dtype)
-        {
-            switch (*type.dtype)
-            {
-            case DType::String:  dtypeStr = QStringLiteral("字符串"); break;
-            case DType::UInt8:   dtypeStr = QStringLiteral("无符号整数（8位）"); break;
-            case DType::Int32:   dtypeStr = QStringLiteral("整数（32位）"); break;
-            case DType::Int64:   dtypeStr = QStringLiteral("整数（64位）"); break;
-            case DType::Float32: dtypeStr = QStringLiteral("浮点数（32位）"); break;
-            case DType::Float64: dtypeStr = QStringLiteral("浮点数（64位）"); break;
-            case DType::Bool:    dtypeStr = QStringLiteral("布尔值"); break;
-            }
-        }
+        const auto dtypeStr = type.dtype ? displayDtypeName(*type.dtype) : QString{};
         return rankStr + dtypeStr + QStringLiteral("数组");
     }
     }

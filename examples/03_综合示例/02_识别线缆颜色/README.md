@@ -8,11 +8,9 @@
 
 ## 训练
 
-在对应节点的训练页编辑记录，然后点击“应用训练数据”。直边和颜色都调用声明的训练器，成功后发布新修订；编辑、预览和未应用草稿不改变运行模型。
+训练配置与搜索区域见 [工程](识别线缆颜色.vrt.json)，参考图与模型见 [资产目录](识别线缆颜色.assets/training)。交互入口见 [参数页](../../../src/ui/qml/ParameterPanel.qml)、[训练记录](../../../src/ui/qml/ResultsTrainingRecords.qml)、[EasyTouch](../../../src/ui/AppControllerAssist.cpp)。
 
-直边可手绘两个搜索矩形，也可开启 EasyTouch，在参考边附近单击替换、Ctrl 单击追加。搜索矩形提供搜索条件，训练器拟合实际边缘。最低边完整度由用户填写。颜色使用带标签的采样区域，同名记录归入同一类别。
-
-搜索区域输入见 [工程](识别线缆颜色.vrt.json)，参考图与已发布模型见 [资产目录](识别线缆颜色.assets/training)。保存和发布入口见 [工程编辑](../../../src/core/ProjectEditor.cpp)、[训练发布](../../../src/ui/AppControllerTraining.cpp)。
+训练、模型保存和发布见 [工作台接线](../../../src/ui/AppControllerTraining.cpp)、[资产准备](../../../src/ui/TrainingAssets.cpp)；真实操作验收见 [训练发布测试](../../../tests/workbench_training_publish_contract.cpp)。
 
 ## 预期结果
 

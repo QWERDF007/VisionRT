@@ -69,67 +69,10 @@ cv::Mat patchFrame()
     return frame;
 }
 
-// The declaration and the trainer have to agree before any draft exists: the host hands the trainer
-// exactly the ports this declaration names, so a mismatch is a tool-package defect, not a user error.
-void checkDeclaration(const ToolDefinition &color, const ToolDefinition &trainer)
-{
-    require(color.training.has_value(), "识别颜色 no longer declares a training capability");
-    const auto &spec = *color.training;
-    require(spec.call.tool == trainer.nameEn,
-            "识别颜色 trains with '" + spec.call.tool + "', but the package ships '" + trainer.nameEn + "'");
-    require(port(trainer.inputs, 1) != nullptr && port(trainer.inputs, 1)->type.type == Type::TrainingSet,
-            "the trainer no longer takes the training set on input 1");
-
-    bool sawSet = false;
-    for (const auto &input : spec.call.inputs)
-    {
-        const auto *declared = port(trainer.inputs, input.port);
-        require(declared != nullptr,
-                "the trainer has no input " + std::to_string(input.port) + " as the declaration claims");
-        if (const auto *role = std::get_if<TrainingSetSource>(&input.source))
-        {
-            require(declared->type.type == Type::TrainingSet, "the training set port changed type");
-            sawSet = true;
-        }
-        else if (const auto *field = std::get_if<TrainingFieldRef>(&input.source))
-        {
-            const auto declaredField
-                = std::find_if(spec.records.fields.begin(), spec.records.fields.end(),
-                               [&](const TrainingFieldSpec &entry) { return entry.id == field->id; });
-            require(declaredField != spec.records.fields.end(),
-                    "the call names record field " + std::to_string(field->id) + " that the records never carry");
-            require(declared->type.type == Type::Int, "a field reference reaches the trainer as a number");
-        }
-        else
-        {
-            throw std::runtime_error("a colour trainer takes the set and its field numbers, nothing else");
-        }
-    }
-    require(sawSet, "the training call never hands the trainer the draft");
-    require(spec.records.roiField() != 0, "the colour tool must name the field a user draws on");
-
-    bool wroteModel = false;
-    for (const auto &artifact : spec.artifacts)
-    {
-        const auto *source = port(trainer.outputs, artifact.sourcePort);
-        require(source != nullptr, "the trainer no longer returns the model on the declared port");
-        require(source->type.type == Type::Array && source->type.dtype == DType::UInt8 && source->type.rank == 1,
-                "a published model is one-dimensional uint8 bytes");
-        require(artifact.target.stage == PortStage::Init, "a model file path lands on an initialization parameter");
-        const auto *target = port(color.initParams, artifact.target.id);
-        require(target != nullptr && target->type.type == Type::String,
-                "the model target is no longer a string initialization parameter");
-        wroteModel = true;
-    }
-    require(wroteModel, "the colour tool publishes no model, so the node would keep training at runtime");
-}
-
 std::unique_ptr<IToolInstance> createTrainer(ToolRegistry &registry)
 {
-    auto trainer = registry.create("TrainColorModel");
-    require(trainer != nullptr, "the package registers TrainColorModel but creates no instance");
-    const ToolStatus status = trainer->initialize({});
-    require(status.code == 0, "the trainer refused to initialize: " + status.message);
+    auto trainer = registry.create("RecognizeColor");
+    require(trainer != nullptr, "the color business instance must support training before initialization");
     return trainer;
 }
 
@@ -165,8 +108,6 @@ int main(int argc, char **argv)
         require(std::filesystem::is_regular_file(module), "the recognition module is missing from the package");
 
         const auto color   = parseToolDefinitionFile(package / u8"tools/builtin/处理/识别/识别颜色.json");
-        const auto trainer = parseToolDefinitionFile(package / u8"tools/builtin/处理/识别/颜色模型训练.json");
-        checkDeclaration(color, trainer);
 
         // Only the recognition module is installed here: the workbench half of this contract never
         // runs a pipeline, and loading the inference runtime would need the GPU package to exist.
@@ -179,13 +120,12 @@ int main(int argc, char **argv)
         ToolsPackage packaged;
         packaged.root = std::filesystem::path(installation.path().toStdU16String());
         packaged.tools.push_back({color, libraryDirectory / module.filename()});
-        packaged.tools.push_back({trainer, libraryDirectory / module.filename()});
 
         ToolRegistry registry;
         registry.setNativeProvider(std::make_shared<PluginLoader>());
         registry.registerPackage(packaged);
         registry.loadNativeImplementations();
-        const auto status = registry.availability("TrainColorModel");
+        const auto status = registry.availability("RecognizeColor");
         require(status.state == ToolAvailability::Available,
                 "the trainer factory did not register: " + status.status.message);
 
@@ -193,6 +133,7 @@ int main(int argc, char **argv)
         TrainingSession::Begin begin;
         begin.node  = 1;
         begin.spec  = *color.training;
+        begin.trainParams = color.trainParams;
         begin.asset = std::filesystem::path(installation.path().toStdU16String()) / "colors.json";
         session.begin(begin);
         fillDraft(session);
@@ -205,10 +146,8 @@ int main(int argc, char **argv)
             empty.begin(blank);
             auto   trainerTool = createTrainer(registry);
             Values inputs;
-            inputs.emplace(1, empty.trainingSet());
-            inputs.emplace(2, static_cast<std::int64_t>(1));
-            inputs.emplace(3, static_cast<std::int64_t>(2));
-            const auto result = trainerTool->execute(inputs);
+            inputs.emplace(3, std::string{});
+            const auto result = trainerTool->train(empty.trainingSet().get(), inputs);
             require(!testview::status(result), "the trainer must refuse a draft without records");
             require(!testview::status(result).message.empty(), "a refused draft needs a reason");
             require(trainerTool->release().code == 0, "the trainer must release after a refusal");
@@ -218,20 +157,13 @@ int main(int argc, char **argv)
         // loads. Both field numbers travel as declared values, never as assumptions about order.
         auto   trainerTool = createTrainer(registry);
         Values inputs;
-        inputs.emplace(1, session.trainingSet());
-        inputs.emplace(2, static_cast<std::int64_t>(1));
-        inputs.emplace(3, static_cast<std::int64_t>(2));
-        const auto trained = trainerTool->execute(inputs);
+        inputs.emplace(3, std::string{});
+        const auto trained = trainerTool->train(session.trainingSet().get(), inputs);
         require(testview::status(trained).code == 0,
                 "the real trainer refused the draft: " + testview::status(trained).message);
         require(trainerTool->release().code == 0, "the trainer must release after training");
 
-        const auto found = trained.outputs.find(2);
-        require(found != trained.outputs.end(), "the trainer returned no model");
-        const auto *bytes = std::get_if<Array>(&found->second);
-        require(bytes != nullptr && bytes->type() == TypeSpec{Type::Array, DType::UInt8, 1},
-                "the model must be the declared byte array");
-        const auto model     = bytes->elements<std::uint8_t>();
+        const auto &model = trained.artifacts.at("color-model").bytes;
         const auto modelFile = packaged.root / "trained-color.bin";
         QFile      file(QString::fromStdWString(modelFile.wstring()));
         require(file.open(QIODevice::WriteOnly), "model file must be writable");
@@ -241,10 +173,7 @@ int main(int argc, char **argv)
         file.close();
         auto consumer = registry.create(color);
         require(consumer != nullptr, "color consumer is available");
-        const auto modelPort = color.training->artifacts.front().target.id;
-        require(consumer->initialize({
-                                         {modelPort, modelFile.string()}
-        })
+        require(consumer->initialize(ToolConfiguration{{}, {{"color-model", modelFile}}})
                         .code
                     == 0,
                 "recognition loads the trained model");
@@ -265,9 +194,7 @@ int main(int argc, char **argv)
             require(labels.front()[index] == kPatches[index].label, "trained class is recognized at its station");
         require(consumer->release().code == 0, "recognition releases");
         consumer = registry.create(color);
-        require(consumer->initialize({
-                                         {modelPort, modelFile.string()}
-        })
+        require(consumer->initialize(ToolConfiguration{{}, {{"color-model", modelFile}}})
                         .code
                     == 0,
                 "recognition reopens the same published model");

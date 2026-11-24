@@ -25,7 +25,7 @@ public:
     {
     }
 
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }

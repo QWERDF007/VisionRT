@@ -35,7 +35,7 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         return {};
     }
@@ -67,8 +67,9 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &params) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
+    const auto &params = configuration.parameters;
         const auto it = params.find(kInitInitial);
         if (it != params.end() && std::holds_alternative<std::int64_t>(it->second))
         {
@@ -112,7 +113,7 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         return {7, "Simulated plugin initialization failure"};
     }
@@ -141,7 +142,7 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         ++g_functionInitializeCalls;
         return {};
@@ -179,7 +180,7 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         throw std::runtime_error("Simulated init exception in plugin");
     }
@@ -208,7 +209,7 @@ public:
         --g_instanceCount;
     }
 
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         return {};
     }
@@ -227,8 +228,9 @@ public:
 class PublicationTool final : public visionrt::IToolInstance
 {
 public:
-    visionrt::ToolStatus initialize(const visionrt::Values &parameters) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
+    const auto &parameters = configuration.parameters;
         code = std::get<std::int64_t>(parameters.at(kInitCode));
         return {};
     }

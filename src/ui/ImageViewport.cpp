@@ -3,6 +3,7 @@
 #include "RoiOverlay.h"
 
 #include <QEvent>
+#include <QKeyEvent>
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
@@ -24,6 +25,13 @@ ImageViewport::ImageViewport(QQuickItem *parent)
     setActiveFocusOnTab(true);
     const auto observeWindow = [this](QQuickWindow *window)
     {
+        if (observedWindow_)
+            observedWindow_->removeEventFilter(this);
+        observedWindow_ = window;
+        if (window)
+            window->installEventFilter(this);
+        altHeld_ = false;
+        updatePixelProbe();
         QObject::disconnect(windowActiveConnection_);
         if (editing())
             emit roiEditCanceled();
@@ -46,6 +54,8 @@ ImageViewport::ImageViewport(QQuickItem *parent)
 
 ImageViewport::~ImageViewport()
 {
+    if (observedWindow_)
+        observedWindow_->removeEventFilter(this);
     QObject::disconnect(this, &QQuickItem::windowChanged, this, nullptr);
     QObject::disconnect(this, &QQuickItem::enabledChanged, this, nullptr);
     QObject::disconnect(windowActiveConnection_);
@@ -294,21 +304,44 @@ QString ImageViewport::pixelTextAt(QPointF itemPoint) const
         return {};
     const int x    = static_cast<int>(std::floor(point.x()));
     const int y    = static_cast<int>(std::floor(point.y()));
-    auto      text = QStringLiteral("X: %1  Y: %2").arg(x).arg(y);
+    auto      text = QStringLiteral("%1,%2").arg(x).arg(y);
     if (sourceType_ == CV_8UC1)
         text += QStringLiteral("\nGray: %1").arg(display_.constScanLine(y)[x]);
     else if (sourceType_ == CV_8UC3)
     {
         const auto color = display_.pixelColor(x, y);
-        text += QStringLiteral("\nR: %1  G: %2  B: %3").arg(color.red()).arg(color.green()).arg(color.blue());
+        text += QStringLiteral("\nR: %1\nG: %2\nB: %3").arg(color.red()).arg(color.green()).arg(color.blue());
     }
     return text;
 }
 
 void ImageViewport::updatePixelProbe()
 {
-    pixelText_ = pointerInside_ ? pixelTextAt(pointerPosition_) : QString{};
+    pixelText_ = pointerInside_ && altHeld_ ? pixelTextAt(pointerPosition_) : QString{};
     emit pixelProbeChanged();
+}
+
+bool ImageViewport::eventFilter(QObject *watched, QEvent *event)
+{
+    // Window keys remain authoritative while the pointer is inside, regardless of keyboard focus.
+    if (watched == observedWindow_)
+    {
+        bool held = altHeld_;
+        if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
+        {
+            const auto *key = static_cast<QKeyEvent *>(event);
+            held = key->key() == Qt::Key_Alt ? event->type() == QEvent::KeyPress
+                                            : key->modifiers().testFlag(Qt::AltModifier);
+        }
+        else if (event->type() == QEvent::WindowDeactivate)
+            held = false;
+        if (held != altHeld_)
+        {
+            altHeld_ = held;
+            updatePixelProbe();
+        }
+    }
+    return QQuickItem::eventFilter(watched, event);
 }
 
 QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)

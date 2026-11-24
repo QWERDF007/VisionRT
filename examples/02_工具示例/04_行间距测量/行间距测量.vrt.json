@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "MeasureRowSpacing",
           "tool_name_snapshot": "测量行间距",
-          "tool_version_snapshot": "2.0.0",
+          "tool_version_snapshot": "1.0.0",
           "alias": "测量宽度与节距",
           "pos": [
             0,
@@ -367,11 +367,11 @@
                 [
                   [
                     2,
-                    50.0,
-                    90.0,
-                    200.0,
-                    40.0,
-                    0.0
+                    50,
+                    90,
+                    200,
+                    40,
+                    0
                   ]
                 ]
               ]
@@ -384,12 +384,12 @@
             {
               "port_id": 4,
               "mode": 0,
-              "literal": 1.0
+              "literal": 1
             },
             {
               "port_id": 5,
               "mode": 0,
-              "literal": 8.0
+              "literal": 8
             },
             {
               "port_id": 6,
@@ -399,17 +399,17 @@
             {
               "port_id": 7,
               "mode": 0,
-              "literal": 15.0
+              "literal": 15
             },
             {
               "port_id": 8,
               "mode": 0,
-              "literal": 25.0
+              "literal": 25
             },
             {
               "port_id": 9,
               "mode": 0,
-              "literal": 1.0
+              "literal": 1
             },
             {
               "port_id": 10,

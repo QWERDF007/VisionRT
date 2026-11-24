@@ -54,7 +54,7 @@ ToolDefinition makeTool(std::string id)
 class PassTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override { return {}; }
+    ToolStatus initialize(const ToolConfiguration &configuration) override { return {}; }
     ToolResult execute(const Values &inputs) override { return toolResult(inputs, {}); }
     ToolStatus release() override { return {}; }
 };

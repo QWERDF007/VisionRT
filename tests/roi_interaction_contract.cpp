@@ -6,6 +6,7 @@
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <array>
 #include <cassert>
 #include <cmath>
 using namespace visionrt;
@@ -77,10 +78,38 @@ int main(int argc, char **argv)
     mouse(view, QEvent::MouseButtonRelease, view.imageToItem({220, 110}));
     assert(result == makeSegment({220, 110}, {200, 100}));
     view.beginRoiEdit({7, 6, 0, 0, 12}, {makeRectangle(100, 100, 100, 40)});
-    mouse(view, QEvent::MouseButtonPress, view.imageToItem({210, 90}));
-    mouse(view, QEvent::MouseButtonRelease, view.imageToItem({180, 180}));
+    mouse(view, QEvent::MouseButtonPress, view.imageToItem({193, 107}));
+    mouse(view, QEvent::MouseButtonRelease, view.imageToItem({163, 163}));
     assert(std::abs(result[5] - 90) < 1e-9 && result[3] == 100 && result[4] == 40);
     mouse(view, QEvent::MouseButtonPress, view.imageToItem({170, 120}));
     mouse(view, QEvent::MouseButtonRelease, view.imageToItem({190, 120}));
     assert(std::abs(result[1] - 110) < 1e-9 && std::abs(result[2] - 90) < 1e-9 && result[3] == 100 && result[4] == 60);
+    const std::array<QPointF, 4> inward{QPointF(7, 7), QPointF(-7, 7), QPointF(-7, -7), QPointF(7, -7)};
+    for (double zoom : {0.5, 1.0, 2.0})
+        for (double angle : {0.0, 35.0, 89.0})
+        {
+            view.restoreViewState({ImageViewport::Manual, zoom, {200, 200}});
+            const auto rectangle = makeRectangle(100, 120, 200, 160, angle);
+            const auto corners = RegionView(rectangle).rectangle().corners();
+            QTransform orientation;
+            orientation.rotate(angle);
+            for (std::size_t i = 0; i < corners.size(); ++i)
+            {
+                view.beginRoiEdit({7, 6, 0, 0, 13}, {rectangle});
+                const auto cross = view.imageToItem({200, 200});
+                const auto start = view.imageToItem({corners[i].x, corners[i].y}) + orientation.map(inward[i]);
+                const auto delta = start - cross;
+                const int previous = commits;
+                mouse(view, QEvent::MouseButtonPress, start);
+                mouse(view, QEvent::MouseButtonRelease, cross + QPointF(-delta.y(), delta.x()));
+                assert(commits == previous + 1);
+                assert(std::abs(result[5] - angle - 90) < 1e-9 && result[1] == 100 && result[2] == 120
+                       && result[3] == 200 && result[4] == 160);
+            }
+            view.beginRoiEdit({7, 6, 0, 0, 14}, {rectangle});
+            const auto outside = view.imageToItem({corners[0].x, corners[0].y}) + orientation.map(QPointF(15, 7));
+            mouse(view, QEvent::MouseButtonPress, outside);
+            mouse(view, QEvent::MouseButtonRelease, outside + QPointF(10, 10));
+            assert(result[5] == angle && "Pressing outside a rotation icon must not rotate the ROI");
+        }
 }

@@ -26,6 +26,8 @@ void ImageViewport::beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, b
     }
     cancelDraft();
     inspectedInput_.reset();
+    if (!target_ || *target_ != target)
+        circleHandleDirection_ = {1, 0};
     singleRectangle_     = singleRectangle;
     target_              = std::move(target);
     editable_            = std::move(targetRois);
@@ -85,6 +87,7 @@ void ImageViewport::selectRoi(int index)
     if (selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
         static_cast<RoiOverlay *>(overlay_)->fade(editable_[selected_]);
     selected_ = index;
+    circleHandleDirection_ = {1, 0};
     emit selectedRoiChanged();
     overlaysUpdated();
 }
@@ -108,6 +111,29 @@ void ImageViewport::inspectInputRegion(const EncodedRegion &region)
     overlaysUpdated();
 }
 
+const EncodedRegion *ImageViewport::activeRegion() const
+{
+    if (inspectedInput_) return &*inspectedInput_;
+    if (draft_) return &*draft_;
+    return selected_ >= 0 && selected_ < static_cast<int>(editable_.size()) ? &editable_[selected_] : nullptr;
+}
+
+void ImageViewport::updateCircleHandle(QPointF itemPoint)
+{
+    const auto *active = activeRegion();
+    if (!active || !hasImage()) return;
+    const auto region = roiui::view(*active);
+    if (region.kind() != RoiKind::Circle) return;
+    const auto circle = region.circle();
+    const auto center = roiui::point(circle.center());
+    const auto &style = *VisionRTSize::getInstance();
+    if (roiui::centerHandleBounds(imageToItem(center), style.ROICenterHandleSize()).contains(itemPoint)) return;
+    const auto delta = itemToImage(itemPoint) - center;
+    const auto distance = roiui::length(delta);
+    if (distance > 0 && std::abs(distance - circle.radius()) * scale_ <= style.ROIEdgeHitTolerance())
+        circleHandleDirection_ = delta / distance;
+}
+
 std::vector<QPointF> ImageViewport::handles(const EncodedRegion &encoded) const
 {
     const auto region = roiui::view(encoded);
@@ -118,13 +144,6 @@ std::vector<QPointF> ImageViewport::handles(const EncodedRegion &encoded) const
     {
         const auto points = roiui::contour(region);
         for (std::size_t i = 0; i < 4; ++i) result.push_back((points[i] + points[(i + 1) % 4]) / 2);
-        const auto rect   = region.rectangle();
-        const auto offset = VisionRTSize::getInstance()->ROIGuideOffset() / scale_;
-        for (auto value : {QPointF(-1, -1), QPointF(1, -1), QPointF(1, 1), QPointF(-1, 1)})
-            result.push_back(
-                result[0]
-                + roiui::rotate({value.x() * (rect.width() / 2 + offset), value.y() * (rect.height() / 2 + offset)},
-                                rect.angle()));
     }
     else if (region.kind() != RoiKind::Circle)
     {
@@ -269,6 +288,22 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
             }
         }
         const auto region = roiui::view(editable_[selected_]);
+        if (region.kind() == RoiKind::Rectangle)
+        {
+            const auto &style = *VisionRTSize::getInstance();
+            const auto rotations = roiui::rectangleRotationHandles(region.rectangle(), imageTransform(),
+                                                                   style.ROIRotationArrowSize());
+            for (std::size_t i = 0; i < rotations.size(); ++i)
+            {
+                const auto &control = rotations[i];
+                const double distance = roiui::length(event->position() - control.center);
+                if (control.bounds.containsPoint(event->position(), Qt::OddEvenFill) && distance < nearest)
+                {
+                    handle_ = static_cast<int>(i) + 5;
+                    nearest = distance;
+                }
+            }
+        }
         if (region.kind() == RoiKind::Circle
             && std::abs(roiui::length(point - roiui::point(region.circle().center())) - region.circle().radius())
                        * scale_
@@ -298,6 +333,7 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
             draftChanged_ = true;
         }
     }
+    updateCircleHandle(event->position());
     overlaysUpdated();
     event->accept();
 }
@@ -316,7 +352,10 @@ void ImageViewport::changeDraft(QPointF point)
                 draft_ = makeRectangle(std::min(anchor_.x(), point.x()), std::min(anchor_.y(), point.y()),
                                        std::abs(delta.x()), std::abs(delta.y()));
             else if (drawShape_ == DrawCircle && roiui::length(delta) > epsilon)
+            {
+                circleHandleDirection_ = delta / roiui::length(delta);
                 draft_ = makeCircle({anchor_.x(), anchor_.y()}, roiui::length(delta));
+            }
         }
         else if (original_
                  && (gesture_ == Gesture::Move
@@ -342,8 +381,8 @@ void ImageViewport::changeDraft(QPointF point)
                     if (roiui::length(delta) > epsilon)
                         draft_ = makeRectangle(
                             rectangle.left(), rectangle.top(), rectangle.width(), rectangle.height(),
-                            rectangle.angle()
-                                + (std::atan2(delta.y(), delta.x()) - std::atan2(initial.y(), initial.x())) * 180 / pi);
+                            rectangle.angle() + std::atan2(initial.x() * delta.y() - initial.y() * delta.x(),
+                                                          QPointF::dotProduct(initial, delta)) * 180 / pi);
                 }
                 else
                 {
@@ -371,7 +410,10 @@ void ImageViewport::changeDraft(QPointF point)
                 const auto   circle = region.circle();
                 const double radius = roiui::length(point - roiui::point(circle.center()));
                 if (radius > epsilon)
+                {
+                    circleHandleDirection_ = (point - roiui::point(circle.center())) / radius;
                     draft_ = makeCircle(circle.center(), radius);
+                }
             }
             else
             {
@@ -633,7 +675,9 @@ void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 {
     pointerInside_   = true;
     pointerPosition_ = event->position();
+    altHeld_         = event->modifiers().testFlag(Qt::AltModifier);
     updatePixelProbe();
+    updateCircleHandle(event->position());
     overlaysUpdated();
     updateCursor();
     if (assistActive_ && hasImage() && drawShape_ == DrawNone)
@@ -646,6 +690,7 @@ void ImageViewport::hoverMoveEvent(QHoverEvent *event)
     pointerInside_   = true;
     pointerPosition_ = event->position();
     updatePixelProbe();
+    updateCircleHandle(event->position());
     overlaysUpdated();
     updateCursor();
     if (assistActive_ && hasImage() && drawShape_ == DrawNone)

@@ -35,7 +35,7 @@ class Function final : public IToolInstance
 public:
     std::function<ToolResult(const Values &)> run;
 
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }

@@ -8,7 +8,6 @@ Rectangle {
     id: root
     objectName: "resultsPanel"
     color: QuiColor.Primary
-    signal roiRequested
 
     QuiMenu {
         id: trainingMenu
@@ -73,7 +72,6 @@ Rectangle {
                 imageView.zoomBy(factor);
             }
             onOneToOneRequested: imageView.fitOneToOne()
-            onRoiRequested: root.roiRequested()
         }
         ResultsImageView {
             id: imageView

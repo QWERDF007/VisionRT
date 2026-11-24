@@ -15,6 +15,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 #include <iostream>
@@ -59,6 +60,20 @@ try
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
+    QQmlComponent typeComponent(&engine,
+        QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/SelectTypeEditor.qml")));
+    std::unique_ptr<QObject> typeEditor(typeComponent.create());
+    if (!typeEditor) throw std::runtime_error(typeComponent.errorString().toStdString());
+    const auto dtypes = typeEditor->property("dtypeList").value<QJSValue>().toVariant().toList();
+    QSet<QString> dtypeLabels;
+    require(dtypes.size() == 7, "the array element type selector lost supported choices");
+    for (const auto &entry : dtypes)
+    {
+        const auto label = entry.toMap().value("label").toString();
+        require(!label.isEmpty() && !label.contains(QStringLiteral("位")), "the type selector still displays bit widths");
+        dtypeLabels.insert(label);
+    }
+    require(dtypeLabels.size() == 7, "different array element types have indistinguishable choices");
     QQmlComponent component(&engine,
                             QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ExpressionEditor.qml")));
     std::unique_ptr<QObject> editor(component.create());

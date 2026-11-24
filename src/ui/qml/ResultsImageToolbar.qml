@@ -11,7 +11,6 @@ Rectangle {
     signal fitRequested
     signal zoomRequested(real factor)
     signal oneToOneRequested
-    signal roiRequested
 
     implicitWidth: VisionRTSize.BarSize
     color: QuiColor.Primary
@@ -85,16 +84,6 @@ Rectangle {
             WorkbenchSeparator {
                 orientation: Qt.Horizontal
                 Layout.alignment: Qt.AlignHCenter
-            }
-            WorkbenchActionButton {
-                text: "编辑输入 ROI"
-                iconSource: QuiFontIcon.Crop
-                Layout.alignment: Qt.AlignHCenter
-                iconColor: enabled ? (hovered ? QuiColor.Highlight : QuiColor.FontPrimary) : QuiColor.FontCaption
-                enabled: !root.controller.runtimeBusy && root.controller.selectedNode.length > 0 && !root.controller.trainingMode
-                opacity: enabled ? 1.0 : 0.4
-                Accessible.name: "编辑输入 ROI"
-                onClicked: root.roiRequested()
             }
             WorkbenchActionButton {
                 text: "1:1 像素显示"

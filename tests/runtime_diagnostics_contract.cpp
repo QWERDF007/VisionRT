@@ -41,7 +41,7 @@ public:
         ++lifetime_.destroyed;
     }
 
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }
@@ -65,7 +65,7 @@ private:
 class BusinessFailure final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override { return {}; }
+    ToolStatus initialize(const ToolConfiguration &configuration) override { return {}; }
     ToolResult execute(const Values &) override
     {
         return {{{0, std::int64_t{9}}, {1, std::string("资源读取失败")}}, "实际资源路径"};

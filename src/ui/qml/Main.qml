@@ -441,7 +441,6 @@ ApplicationWindow {
                         window.resultsRatio = Math.max(0.30, Math.min(0.75, results.height / rightSplit.height));
                     }
                 }
-                onRoiRequested: parameters.focusRoi()
             }
             ParameterPanel {
                 id: parameters

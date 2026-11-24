@@ -21,7 +21,7 @@ Rectangle {
     signal pointerMoved(var mouse, var item)
     signal pointerReleased(var mouse, var item)
     signal executeRequested
-    signal hoverEntered
+    signal hoverEntered(point position)
     signal hoverExited
     width: VisionRTSize.NodeWidth
     height: VisionRTSize.NodeHeight
@@ -187,7 +187,7 @@ Rectangle {
             if (pressed)
                 root.pointerMoved(mouse, root);
             else
-                root.hoverEntered();
+                root.hoverEntered(Qt.point(mouse.x, mouse.y));
         }
         onReleased: function (mouse) {
             root.pointerReleased(mouse, root);
@@ -196,7 +196,7 @@ Rectangle {
             if (mouse.button === Qt.LeftButton && app.workspaceEnabled)
                 root.executeRequested();
         }
-        onEntered: root.hoverEntered()
+        onEntered: root.hoverEntered(Qt.point(mouseX, mouseY))
         onExited: root.hoverExited()
     }
 }

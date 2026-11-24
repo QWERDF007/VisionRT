@@ -65,7 +65,7 @@ ReleaseGate gate;
 class ExecuteContractErrorTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override { return {}; }
+    ToolStatus initialize(const ToolConfiguration &configuration) override { return {}; }
     ToolResult execute(const Values &) override
     {
         throw ContractError("辅助执行输出违反契约");
@@ -76,7 +76,7 @@ public:
 class UnexpectedThrowingTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override { return {}; }
+    ToolStatus initialize(const ToolConfiguration &configuration) override { return {}; }
     ToolResult execute(const Values &) override
     {
         throw std::runtime_error("辅助工具未捕获标准异常");
@@ -87,7 +87,7 @@ public:
 class LatchedReleaseTool final : public IToolInstance
 {
 public:
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }

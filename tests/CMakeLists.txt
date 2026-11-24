@@ -310,7 +310,6 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}"
         VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
-    add_dependencies(workbench_training_contract test_authoring_probe)
     visionrt_contract(workbench_roi_persistence_contract visionrt_ui)
     target_link_libraries(workbench_roi_persistence_contract PRIVATE Qt6::Test)
     target_compile_definitions(workbench_roi_persistence_contract PRIVATE
@@ -324,9 +323,7 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}"
         VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
-    add_dependencies(workbench_training_publish_contract test_authoring_probe)
-    # The real recognition module, not a probe: the draft the host builds has to reach the shipped
-    # trainer and come back as the model the shipped node decodes.
+    # The draft and the installed business instance share the training contract.
     visionrt_contract(color_training_contract visionrt_ui)
     target_link_libraries(color_training_contract PRIVATE visionrt_plugins)
     target_compile_definitions(color_training_contract PRIVATE

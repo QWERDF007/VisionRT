@@ -699,6 +699,12 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     else
         for (const auto &parameter : contract.initParams)
             node.signatures.initParams.insert_or_assign(parameter.id, parameter.type);
+    for (const auto &parameter : contract.trainParams)
+        if (parameter.scope == ParameterScope::Tool)
+        {
+            node.signatures.trainParams.emplace(parameter.id, parameter.type);
+            node.trainParams.emplace(parameter.id, copyProjectLiteral(parameter.defaultValue));
+        }
     for (const auto &input : contract.inputs)
     {
         validateLiteral(input.type, input.defaultValue);
@@ -832,12 +838,14 @@ bool ProjectEditor::setLiteralWrites(std::string_view flowId, NodeId id, std::sp
     bool changed = false;
     for (const auto &write : writes)
     {
-        if (write.stage == PortStage::Init)
+        if (write.stage == PortStage::Init || write.stage == PortStage::Train)
         {
-            const auto found = node.initParams.find(write.port);
-            if (found == node.initParams.end())
+            auto &values = write.stage == PortStage::Train ? node.trainParams : node.initParams;
+            const auto &types = write.stage == PortStage::Train ? node.signatures.trainParams : node.signatures.initParams;
+            const auto found = values.find(write.port);
+            if (found == values.end())
                 throw ContractError("初始化参数不存在：" + portLabel(write.port));
-            validateLiteral(signature(node.signatures.initParams, write.port), write.value);
+            validateLiteral(signature(types, write.port), write.value);
             if (equalValues(found->second, write.value))
                 continue;
             found->second = copyProjectLiteral(write.value);

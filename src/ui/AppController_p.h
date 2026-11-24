@@ -232,11 +232,6 @@ struct AppController::Impl : PresentationHost
     ROI                            assistPreviewRois;
     std::optional<AssistContext>   assistPreviewContext;
     std::optional<AssistContext>   pendingTraining;
-    // The geometry the last successful training call measured, in the reference picture's own
-    // coordinates. It is drawn over the training canvas until the record, the picture or the
-    // project changes; the host never derives a line from the model to fill this in.
-    ROI                            trainingFitRois;
-
     QVariantList parameterRows;
     NodeId       parameterRowsNode = 0;
 
@@ -428,7 +423,7 @@ struct AppController::Impl : PresentationHost
     // and one project transaction; rejected results leave the draft and running configuration intact.
     bool                           requestTraining(const ToolDefinition &tool, const TrainingSpec &spec);
     void                           completeTraining(const AssistOutcome &outcome);
-    bool publishTraining(const ToolDefinition &tool, const TrainingSpec &spec, const Values &outputs);
+    bool publishTraining(const ToolDefinition &tool, const TrainingSpec &spec, ToolResult &result);
     void finishRoi();
     void storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 
@@ -438,7 +433,7 @@ struct AppController::Impl : PresentationHost
     void                         clearAssistPreview();
     // Shows or drops the measured geometry a training call answered with. Both stay silent when the
     // training canvas is not the one on screen.
-    void                         showTrainingFit(const ROI &fit);
+    void                         showTrainingFit();
     void                         clearTrainingFit();
     std::optional<AssistContext> assistContext(QString *reason) const;
     bool                         assistContextCurrent(const AssistContext &context) const;

@@ -255,8 +255,9 @@ public:
         return metrics_;
     }
 
-    ToolStatus initialize(const Values &parameters) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
+        const auto &parameters = configuration.parameters;
         origin_ = DiagnosticOrigin::System;
 
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)

@@ -76,7 +76,7 @@ void RoiOverlay::paint(QPainter *p)
         p->setPen(QPen(color, width));
         p->setBrush(Qt::NoBrush);
     };
-    const auto label = [&](QPointF anchor, QString text, double angle = 0.0)
+    const auto label = [&](QPointF anchor, QString text, double angle = 0.0, Qt::Alignment alignment = Qt::AlignCenter)
     {
         p->save();
         const QFontMetricsF metrics(p->font());
@@ -86,8 +86,9 @@ void RoiOverlay::paint(QPainter *p)
         const QSizeF size(width + 2 * s.ROILabelHorizontalPadding(),
                           lines.size() * metrics.height() + 2 * s.ROILabelVerticalPadding());
         p->translate(anchor);
-        p->rotate(angle);
-        const QRectF rect(-size.width() / 2, -size.height() / 2, size.width(), size.height());
+        p->rotate(std::remainder(angle, 180.0));
+        QRectF rect(-size.width() / 2, -size.height() / 2, size.width(), size.height());
+        if (alignment.testFlag(Qt::AlignLeft)) rect.moveLeft(0);
         p->setPen(Qt::NoPen);
         p->setBrush(c.ROIInput());
         p->drawRoundedRect(rect, 2, 2);
@@ -157,21 +158,20 @@ void RoiOverlay::paint(QPainter *p)
     }
     for (const auto &group : v.assistPreview_)
         for (const auto &region : group) shape(region, c.ROIPreview(), s.ROIInputStrokeWidth(), 0);
-    const EncodedRegion *active
-        = v.inspectedInput_ ? &*v.inspectedInput_
-        : v.draft_          ? &*v.draft_
-                   : (v.selected_ >= 0 && v.selected_ < static_cast<int>(v.editable_.size()) ? &v.editable_[v.selected_]
-                                                                                             : nullptr);
+    const auto *active = v.activeRegion();
     if (active)
     {
         shape(*active, c.ROIInput(), s.ROIInputStrokeWidth(), c.ROISelectionFillOpacity());
-        const auto region   = roiui::view(*active);
-        const auto center   = map(roiui::center(region));
-        const bool writable = !v.readOnly_ && !v.inspectedInput_;
+        const auto region     = roiui::view(*active);
+        const auto center     = map(roiui::center(region));
+        const bool writable   = !v.readOnly_ && !v.inspectedInput_;
+        const qreal centerSize = s.ROICenterHandleSize();
+        const bool showMeasurements
+            = v.pointerInside_
+           && roiui::centerHandleBounds(center, centerSize).contains(v.pointerPosition_);
         const auto square   = [&](QPointF position, qreal size)
         {
             pen(c.ROIInput(), s.ROIGuideStrokeWidth());
-            p->setBrush(Qt::white);
             const qreal dpr  = window() ? window()->effectiveDevicePixelRatio() : 1;
             position         = {std::round(position.x() * dpr) / dpr, std::round(position.y() * dpr) / dpr};
             const qreal side = size - s.ROIGuideStrokeWidth();
@@ -181,7 +181,7 @@ void RoiOverlay::paint(QPainter *p)
         {
             return QStringLiteral("x: %1\ny: %2").arg(value.x(), 0, 'f', 2).arg(value.y(), 0, 'f', 2);
         };
-        if (region.kind() != RoiKind::Point)
+        if (showMeasurements && region.kind() != RoiKind::Point && region.kind() != RoiKind::Circle)
             label(center + QPointF(0, s.ROILabelOffset() + 16), coordinate(roiui::center(region)));
         if (region.kind() == RoiKind::Rectangle)
         {
@@ -189,28 +189,29 @@ void RoiOverlay::paint(QPainter *p)
             const auto controls = v.handles(*active);
             const auto axis     = roiui::rotate({1, 0}, rect.angle());
             const auto normal   = roiui::rotate({0, 1}, rect.angle());
-            arrow(center - axis * rect.width() * v.zoom() / 2,
-                  center + axis * (rect.width() * v.zoom() / 2 + s.ROIArrowHeadSize()), c.ROIInput());
-            QPolygonF guide;
-            for (std::size_t i = 5; i < controls.size(); ++i) guide.append(map(controls[i]));
-            pen(c.ROIGuide(), s.ROIGuideStrokeWidth());
-            p->drawPolygon(guide);
-            for (auto corner : guide)
-            {
-                const qreal  radius = s.ROIRotationArrowSize() / 2;
-                const QRectF arc(corner - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius));
-                p->drawArc(arc, 30 * 16, 240 * 16);
-                const auto end = corner + QPointF(0, radius);
-                arrow(end + QPointF(-s.ROIArrowHeadSize(), 0), end, c.ROIGuide());
-            }
+            arrow(center, center + axis * rect.width() * v.zoom() / 2, c.ROIInput());
             if (writable)
+            {
+                const auto rotations = roiui::rectangleRotationHandles(rect, v.imageTransform(), s.ROIRotationArrowSize());
+                pen(c.ROIGuide(), s.ROIGuideStrokeWidth());
+                for (const auto &control : rotations) p->drawPath(control.arrow);
                 for (std::size_t i = 1; i <= 4; ++i) square(map(controls[i]), s.ROIHandleSize());
-            label(center - normal * (rect.height() * v.zoom() / 2 + s.ROILabelOffset()),
-                  QString::number(rect.width(), 'f', 2));
-            label(center + axis * (rect.width() * v.zoom() / 2 + s.ROILabelOffset()),
-                  QString::number(rect.height(), 'f', 2), 90);
-            label(map(roiui::contour(region)[1]) + QPointF(s.ROILabelOffset(), -s.ROILabelOffset()),
-                  QString::number(rect.angle(), 'f', 2) + QChar(0x00b0));
+            }
+            if (showMeasurements)
+            {
+                const QFontMetricsF metrics(p->font());
+                const qreal labelHeight = metrics.height() + 2 * s.ROILabelVerticalPadding();
+                const qreal gap = s.ROILabelOffset();
+                label(center - normal * (rect.height() * v.zoom() / 2 + gap + labelHeight / 2),
+                      QStringLiteral("%1 px").arg(rect.width(), 0, 'f', 1), rect.angle());
+                label(center + axis * (rect.width() * v.zoom() / 2 + gap + labelHeight / 2),
+                      QStringLiteral("%1 px").arg(rect.height(), 0, 'f', 1), rect.angle() + 90);
+                const auto angleText = QString::number(rect.angle(), 'f', 1) + QChar(0x00b0);
+                const qreal angleWidth = metrics.horizontalAdvance(angleText) + 2 * s.ROILabelHorizontalPadding();
+                const qreal along = (std::abs(axis.x()) * angleWidth + std::abs(axis.y()) * labelHeight) / 2;
+                const qreal across = (std::abs(normal.x()) * angleWidth + std::abs(normal.y()) * labelHeight) / 2;
+                label(map(roiui::contour(region)[1]) + axis * (gap + along) - normal * (gap + across), angleText);
+            }
         }
         else if (region.kind() == RoiKind::Segment || region.kind() == RoiKind::Polygon
                  || region.kind() == RoiKind::Point)
@@ -220,42 +221,35 @@ void RoiOverlay::paint(QPainter *p)
             {
                 if (writable)
                     square(map(value), s.ROIHandleSize());
-                if (region.kind() != RoiKind::Polygon)
+                if (showMeasurements && region.kind() != RoiKind::Polygon)
                     label(map(value) + QPointF(0, -s.ROILabelOffset() - 16), coordinate(value));
             }
         }
-        else if (region.kind() == RoiKind::Circle && (v.pointerInside_ || v.gesture_ == ImageViewport::Gesture::Handle))
+        else if (region.kind() == RoiKind::Circle)
         {
-            const auto circle    = region.circle();
-            auto       direction = v.itemToImage(v.pointerPosition_) - roiui::point(circle.center());
-            if (v.gesture_ == ImageViewport::Gesture::Handle)
-                direction = v.lastPointer_ - roiui::point(circle.center());
-            if (roiui::length(direction) == 0)
-                direction = {1, 0};
-            const auto handle = center + direction / roiui::length(direction) * circle.radius() * v.zoom();
-            if (v.gesture_ == ImageViewport::Gesture::Handle
-                || std::abs(roiui::length(direction) - circle.radius()) * v.zoom() <= s.ROIEdgeHitTolerance())
+            const auto circle = region.circle();
+            const auto direction = v.circleHandleDirection_;
+            const auto handle = center + direction * circle.radius() * v.zoom();
+            pen(c.ROIInput(), s.ROIInputStrokeWidth());
+            p->drawLine(center, handle);
+            if (writable)
+                square(handle, s.ROIHandleSize());
+            if (showMeasurements)
             {
-                arrow(center, handle, c.ROIGuide());
-                if (writable)
-                    square(handle, s.ROIHandleSize());
-                label((center + handle) / 2 + QPointF(0, -s.ROILabelOffset()),
-                      QStringLiteral("r: %1").arg(circle.radius(), 0, 'f', 2));
+                const auto value = roiui::point(circle.center());
+                label(center + QPointF(centerSize / 2 + s.ROILabelOffset(), 0),
+                      QStringLiteral("x: %1 px\ny: %2 px").arg(value.x(), 0, 'f', 1).arg(value.y(), 0, 'f', 1),
+                      0, Qt::AlignLeft);
+                const auto radiusText = QStringLiteral("r: %1 px").arg(circle.radius(), 0, 'f', 1);
+                const QFontMetricsF metrics(p->font());
+                const qreal width = metrics.horizontalAdvance(radiusText) + 2 * s.ROILabelHorizontalPadding();
+                const qreal height = metrics.height() + 2 * s.ROILabelVerticalPadding();
+                const qreal extent = (std::abs(direction.x()) * width + std::abs(direction.y()) * height) / 2;
+                label(handle + direction * (s.ROILabelOffset() + extent), radiusText);
             }
         }
-    }
-    if (active)
-    {
-        const auto region   = roiui::view(*active);
-        const auto center   = map(roiui::center(region));
-        const bool writable = !v.readOnly_ && !v.inspectedInput_;
         if (writable && region.kind() != RoiKind::Point)
-        {
-            const qreal side = s.ROICenterHandleSize() - s.ROIGuideStrokeWidth();
-            pen(c.ROIInput(), s.ROIGuideStrokeWidth());
-            p->setBrush(Qt::white);
-            p->drawRect(QRectF(center - QPointF(side / 2, side / 2), QSizeF(side, side)));
-        }
+            square(center, s.ROICenterHandleSize());
         pen(c.ROICrosshair(), s.ROIGuideStrokeWidth());
         p->drawLine(center - QPointF(5, 0), center + QPointF(5, 0));
         p->drawLine(center - QPointF(0, 5), center + QPointF(0, 5));

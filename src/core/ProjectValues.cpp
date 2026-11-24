@@ -27,6 +27,7 @@ PortValue copyProjectLiteral(const PortValue &value)
 NodeDefinition copyNodeConfiguration(const NodeDefinition &node)
 {
     auto result = node;
+    for (auto &[id, value] : result.trainParams) value = copyProjectLiteral(value);
     for (auto &[id, value] : result.initParams) value = copyProjectLiteral(value);
     for (auto &[id, binding] : result.inputs) binding.literal = copyProjectLiteral(binding.literal);
     return result;

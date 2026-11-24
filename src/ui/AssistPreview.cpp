@@ -277,7 +277,7 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             instance_ = session.registry->create(session.helper);
             if (!instance_)
                 throw ContractError("辅助工具实例不可用：" + session.helper.nameEn);
-            const auto status = instance_->initialize({});
+            const auto status = request.training ? ToolStatus{} : instance_->initialize({});
             if (!status)
             {
                 outcome.status  = status;
@@ -287,29 +287,37 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             }
             instanceSession_ = sessionPtr;
         }
-        const auto inputs = normalizeInputs(session.helper.inputs, request.inputs);
-        validateToolValues(session.helper.inputs, inputs);
+        auto declarations = session.helper.inputs;
+        if (request.training)
+        {
+            declarations = session.helper.trainParams;
+            std::erase_if(declarations, [](const PortDefinition &p) { return p.scope == ParameterScope::Record; });
+        }
+        const auto inputs = normalizeInputs(declarations, request.inputs);
+        validateToolValues(declarations, inputs);
 
         phase = Phase::Execute;
-        auto result = instance_->execute(inputs);
+        auto result = request.training ? instance_->train(request.training->get(), inputs) : instance_->execute(inputs);
         // The helper is a tool like any other: its status is published into the same two ports the
         // node runtime uses, so the preview shows what a real run would.
-        outcome.status = validateToolExecution(session.helper.outputs, result.outputs, result.detail);
+        outcome.status = validateToolExecution(session.helper.outputs, result.outputs, result.detail,
+            request.training ? ProducedBy::Train : ProducedBy::Execute);
 
+        outcome.outputs = std::move(result.outputs);
+        outcome.artifacts = std::move(result.artifacts);
         if (!outcome.status)
         {
             outcome.quality = helperMessage(outcome.status.message);
             return outcome;
         }
-        outcome.outputs = result.outputs;
         if (const auto message = session.outputs.message; message != 0)
         {
-            const auto found = result.outputs.find(message);
-            if (found != result.outputs.end())
+            const auto found = outcome.outputs.find(message);
+            if (found != outcome.outputs.end())
                 if (const auto *text = std::get_if<std::string>(&found->second))
                     outcome.quality = helperMessage(*text);
         }
-        if (const auto valid = result.outputs.find(session.outputs.valid); valid != result.outputs.end())
+        if (const auto valid = outcome.outputs.find(session.outputs.valid); valid != outcome.outputs.end())
             if (const auto *flag = std::get_if<bool>(&valid->second))
                 outcome.valid = *flag;
         if (outcome.valid)
@@ -319,9 +327,9 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             {
                 if (port == 0)
                     return true;
-                const auto  found = result.outputs.find(port);
+                const auto  found = outcome.outputs.find(port);
                 const auto *groups
-                    = found == result.outputs.end() ? nullptr : std::get_if<DataRef<ROI>>(&found->second);
+                    = found == outcome.outputs.end() ? nullptr : std::get_if<DataRef<ROI>>(&found->second);
                 if (!groups || groups->get().empty())
                     return false;
                 target = groups->get();

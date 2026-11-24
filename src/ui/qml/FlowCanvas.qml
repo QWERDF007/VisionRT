@@ -38,6 +38,7 @@ FocusScope {
     property int nameOperation: FlowCanvas.NameTarget.Node
     property string nameDraft: ""
     property string hoverNodeId: ""
+    property point hoverPosition: Qt.point(0, 0)
     property string selectedWire: ""
     readonly property var selectedConnection: {
         for (const wire of routedWires)
@@ -80,9 +81,10 @@ FocusScope {
     function selected(id) {
         return selection.indexOf(id) !== -1;
     }
-    function enterNode(id) {
+    function enterNode(id, position) {
         if (root.gesture !== FlowCanvas.Gesture.None)
             return;
+        root.hoverPosition = position;
         if (root.hoverNodeId === id && (root.hoverCardVisible || hoverTimer.running))
             return;
         root.hoverNodeId = id;
@@ -99,20 +101,16 @@ FocusScope {
         root.hoverCardVisible = false;
     }
     function hoverCardX() {
-        let n = root.hoverNode;
-        if (!n)
-            return 4;
-        let right = root.nodeX(n.id) * root.zoom + root.panX + VisionRTSize.NodeWidth * root.zoom + 10;
-        let left = root.nodeX(n.id) * root.zoom + root.panX - hoverCard.width - 10;
+        let right = root.hoverPosition.x + 16;
+        let left = root.hoverPosition.x - hoverCard.width - 16;
         let maxX = Math.max(4, surface.width - hoverCard.width - 4);
         return Math.max(4, Math.min(maxX, right <= maxX ? right : left));
     }
     function hoverCardY() {
-        let n = root.hoverNode;
-        if (!n)
-            return 4;
+        let below = root.hoverPosition.y + 16;
+        let above = root.hoverPosition.y - hoverCard.height - 16;
         let maxY = Math.max(4, surface.height - hoverCard.height - 4);
-        return Math.max(4, Math.min(maxY, root.nodeY(n.id) * root.zoom + root.panY));
+        return Math.max(4, Math.min(maxY, below <= maxY ? below : above));
     }
     // One id-indexed lookup in the node model; no scan over a copy of the whole table.
     function nodeX(id) {
@@ -515,6 +513,7 @@ FocusScope {
                     // Roles are the single source for the delegate: no per-frame map is rebuilt.
                     model: app.nodeListModel
                     NodeDelegate {
+                        id: nodeDelegate
                         selected: root.selected(nodeId)
                         viewScale: root.zoom
                         x: root.nodeX(nodeId)
@@ -532,7 +531,9 @@ FocusScope {
                             app.selectNode(nodeId);
                             app.runNode();
                         }
-                        onHoverEntered: root.enterNode(nodeId)
+                        onHoverEntered: function (position) {
+                            root.enterNode(nodeId, nodeDelegate.mapToItem(surface, position));
+                        }
                         onHoverExited: root.leaveNode(nodeId)
                     }
                 }
@@ -613,7 +614,7 @@ FocusScope {
                             QuiText {
                                 text: modelData.label
                                 font: QuiFont.Body
-                                color: QuiColor.FontCaption
+                                color: QuiColor.FontPrimary
                             }
                             Item {
                                 Layout.fillWidth: true

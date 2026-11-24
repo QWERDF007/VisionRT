@@ -15,7 +15,7 @@ namespace {
 class PluginBTool final : public visionrt::IToolInstance
 {
 public:
-    visionrt::ToolStatus initialize(const visionrt::Values &) override
+    visionrt::ToolStatus initialize(const visionrt::ToolConfiguration &configuration) override
     {
         return {};
     }

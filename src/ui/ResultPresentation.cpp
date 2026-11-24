@@ -140,6 +140,9 @@ std::optional<NodeDiagnostic> ResultPresentation::status(const NodeDefinition &n
     const auto availability = host_.toolAvailability(node.toolId);
     if (availability.state != ToolAvailability::Available)
         return NodeDiagnostic{node.id, node.toolId, NodePhase::Create, availability.status};
+    const auto currentResult = displaySnapshot(node);
+    if (currentResult && currentResult->invocation == ProducedBy::Train)
+        return NodeDiagnostic{node.id, node.toolId, currentResult->phase, currentResult->status};
     if (const auto *diagnostic = instance(node.id))
         return *diagnostic;
     const auto snapshot = displaySnapshot(node);
@@ -177,7 +180,8 @@ const NodeDiagnostic *ResultPresentation::instance(NodeId node) const
 
 ResultSlot::Snapshot ResultPresentation::displaySnapshot(const NodeDefinition &node) const
 {
-    const auto *snapshot = this->snapshot(node.id);
+    const auto current = currentResults_.find(node.id);
+    const auto *snapshot = current == currentResults_.end() ? this->snapshot(node.id) : &current->second;
     if (!snapshot)
         return {};
     if ((*snapshot)->toolId != node.toolId)
@@ -236,6 +240,7 @@ bool ResultPresentation::applyNode(NodeId node, bool active, const std::shared_p
         const auto previous = snapshots_.find(node);
         if (previous == snapshots_.end() || previous->second != snapshot)
         {
+            currentResults_[node] = snapshot;
             snapshots_[node] = std::move(snapshot);
             changed          = true;
         }
@@ -254,9 +259,15 @@ bool ResultPresentation::setActive(NodeId node, bool active)
     return true;
 }
 
+void ResultPresentation::present(NodeId node, ResultSlot::Snapshot snapshot)
+{
+    currentResults_.insert_or_assign(node, std::move(snapshot));
+}
+
 void ResultPresentation::forgetNode(NodeId node)
 {
     snapshots_.erase(node);
+    currentResults_.erase(node);
     active_.erase(node);
     lifecycle_.erase(node);
     instances_.erase(node);
@@ -264,6 +275,7 @@ void ResultPresentation::forgetNode(NodeId node)
 
 void ResultPresentation::retain(const std::set<NodeId> &existing)
 {
+    std::erase_if(currentResults_, [&](const auto &item) { return !existing.contains(item.first); });
     std::erase_if(snapshots_, [&](const auto &item) { return !existing.contains(item.first); });
     std::erase_if(lifecycle_, [&](const auto &item) { return !existing.contains(item.first); });
     std::erase_if(instances_, [&](const auto &item) { return !existing.contains(item.first); });
@@ -297,6 +309,7 @@ void ResultPresentation::clear()
 {
     readback_.reset();
     snapshots_.clear();
+    currentResults_.clear();
     active_.clear();
     lifecycle_.clear();
     instances_.clear();

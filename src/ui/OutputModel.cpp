@@ -2,6 +2,7 @@
 
 #include "core/ValueJson.h"
 #include "ui/Diagnostics.h"
+#include "ui/ValueDisplay.h"
 
 #include <algorithm>
 #include <limits>
@@ -40,7 +41,7 @@ QString displayValue(const PortValue &value, const TypeSpec &type)
         return QStringLiteral("非显示型数据");
     if (const auto *text = std::get_if<std::string>(&value))
         return q(*text);
-    return ValueJson::text(value, type, ValueJson::Purpose::Display);
+    return displayValueText(value, type);
 }
 
 std::size_t estimatedStringBytes(const std::string &value)

@@ -240,7 +240,7 @@ void test200NodesExecution()
     class AddTool final : public IToolInstance
     {
     public:
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -397,7 +397,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         {
         }
 
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -444,7 +444,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         {
         }
 
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -685,7 +685,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
         std::int64_t step_ = 0;
 
     public:
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }
@@ -722,7 +722,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
     class ProcTool final : public IToolInstance
     {
     public:
-        ToolStatus initialize(const Values &) override
+        ToolStatus initialize(const ToolConfiguration &configuration) override
         {
             return {};
         }

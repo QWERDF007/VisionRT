@@ -5,7 +5,6 @@
 #include "core/NodeContracts.h"
 #include "ui/AppController.h"
 #include "ui/UiTypes.h"
-#include <quickui/Color.h>
 #include "ui/OutputModel.h"
 #include <quickui/Color.h>
 
@@ -22,6 +21,7 @@
 #include <QSGRendererInterface>
 #include <QScopeGuard>
 #include <QTest>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -269,16 +269,28 @@ class InitFailure:
     QTest::qWait(50);
     auto *failedItem = findItem(canvas, "flowNode_" + failedInit);
     require(failedItem, "initialization failure card is missing");
-    QTest::mouseMove(&window, failedItem->mapToScene(QPointF(failedItem->width() / 2, failedItem->height() / 2)).toPoint());
+    const auto hoverPoint = failedItem->mapToScene(QPointF(failedItem->width() / 2, failedItem->height() / 2)).toPoint();
+    QTest::mouseMove(&window, hoverPoint);
     require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 2000),
             "initialization failure tooltip did not open");
     auto *tooltip = findItem(canvas, "nodeHoverCard");
+    require(tooltip != nullptr, "node tooltip is missing");
+    require(QTest::qWaitFor([&] {
+        const auto bounds = tooltip->mapRectToScene(tooltip->boundingRect());
+        return std::abs(bounds.left() - hoverPoint.x() - 16) < 2
+            && std::abs(bounds.top() - hoverPoint.y() - 16) < 2;
+    }, 1000), "node tooltip does not follow the pointer at its lower right");
     QStringList tooltipText;
     const auto collectText = [&](auto &&self, QQuickItem *parent) -> void {
         for (auto *child : parent->childItems())
         {
             if (child->isVisible() && child->property("text").isValid())
+            {
                 tooltipText << child->property("text").toString();
+                require(child->property("color").value<QColor>()
+                            == quickui::QuiColor::getInstance()->property("FontPrimary").value<QColor>(),
+                        "node tooltip text does not use FontPrimary");
+            }
             self(self, child);
         }
     };
@@ -287,6 +299,29 @@ class InitFailure:
                 && tooltipText.at(1) == "预处理" && tooltipText.at(3) == "API"
                 && tooltipText.at(5) == "后处理" && tooltipText.at(4) == "0.000 ms"
                 && tooltipText.at(6) == "0.000 ms", "tooltip must contain title and three timing rows");
+    const auto movedPointer = hoverPoint + QPoint(12, 8);
+    QTest::mouseMove(&window, movedPointer);
+    require(QTest::qWaitFor([&] {
+        const auto bounds = tooltip->mapRectToScene(tooltip->boundingRect());
+        return std::abs(bounds.left() - movedPointer.x() - 16) < 2
+            && std::abs(bounds.top() - movedPointer.y() - 16) < 2;
+    }, 1000), "node tooltip did not move with the pointer");
+    QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
+    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/node-tooltip-pointer.png")),
+            "pointer tooltip screenshot could not be saved");
+    auto *surface = findItem(canvas, "flowSurface");
+    require(surface != nullptr, "flow surface is missing");
+    const auto nodeBounds = failedItem->mapRectToItem(surface, failedItem->boundingRect());
+    canvas->setProperty("panX", canvas->property("panX").toDouble() + surface->width() - nodeBounds.right() - 8);
+    canvas->setProperty("panY", canvas->property("panY").toDouble() + surface->height() - nodeBounds.bottom() - 8);
+    QTest::qWait(50);
+    const auto edgePoint = failedItem->mapToScene(QPointF(failedItem->width() / 2, failedItem->height() / 2)).toPoint();
+    QTest::mouseMove(&window, edgePoint);
+    require(QTest::qWaitFor([&] { return tooltip->isVisible(); }, 2000), "edge tooltip did not open");
+    const auto edgeBounds = tooltip->mapRectToScene(tooltip->boundingRect());
+    require(edgeBounds.right() <= edgePoint.x() - 10 && edgeBounds.bottom() <= edgePoint.y() - 10
+                && surface->boundingRect().contains(tooltip->mapRectToItem(surface, tooltip->boundingRect())),
+            "node tooltip did not flip and stay inside the canvas near an edge");
     QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
     require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/node-status-card.png")),
             "status screenshot could not be saved");

@@ -90,7 +90,7 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
 }
 } // namespace
 
-InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry)
+InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry, const std::filesystem::path &base)
     : toolId(node.toolId)
     , availability(registry.availability(node.toolId).state)
     , outputs(node.signatures.outputs)
@@ -100,6 +100,7 @@ InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const T
         version = definition->version;
         kind    = definition->kind;
         parameters = nodeParameters(node, *definition);
+        models = nodeModelReferences(node, *definition, base);
     }
 }
 
@@ -107,7 +108,7 @@ bool InstanceConfiguration::operator==(const InstanceConfiguration &other) const
 {
     return toolId == other.toolId && version == other.version && kind == other.kind
         && availability == other.availability && outputs == other.outputs
-        && sameParameters(parameters, other.parameters);
+        && models == other.models && sameParameters(parameters, other.parameters);
 }
 
 void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next,
@@ -388,7 +389,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
                 try
                 {
-                    status = instance->initialize(normalizedParams);
+                    status = instance->initialize(ToolConfiguration{normalizedParams, configuration->models});
                     origin = lifecycleOrigin(*instance, configuration->kind);
                 }
                 catch (const RegistryError &error)

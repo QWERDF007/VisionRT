@@ -43,7 +43,6 @@ VisionRTSize::VisionRTSize(QObject *parent)
     ROIInputStrokeWidth(2);
     ROIOutputStrokeWidth(1.5);
     ROIGuideStrokeWidth(1);
-    ROIGuideOffset(10);
     ROIRotationArrowSize(14);
     ROIArrowHeadSize(6);
     ROIHandleHitRadius(8);

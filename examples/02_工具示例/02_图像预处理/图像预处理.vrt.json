@@ -240,7 +240,7 @@
             {
               "port_id": 3,
               "mode": 0,
-              "literal": 10.0
+              "literal": 10
             },
             {
               "port_id": 4,
@@ -331,7 +331,7 @@
             {
               "port_id": 3,
               "mode": 0,
-              "literal": 5.0
+              "literal": 5
             }
           ]
         }

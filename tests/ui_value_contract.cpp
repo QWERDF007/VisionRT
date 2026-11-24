@@ -147,6 +147,10 @@ try
           "id": 1
         }
       }
+    },
+    {"id":4,"name_zh":"小数","type":"float","default":0,"ui":{"decimals":2}},
+    {"id":5,"name_zh":"小数数组","type":{"type":"array","dtype":"float64","rank":2},"default":[]},
+    {"id":6,"name_zh":"大整数","type":"int","default":0
     }
   ],
   "outputs": [
@@ -290,11 +294,11 @@ try
     viewport.setSize({480, 320});
     app.attachViewport(&viewport);
     require(app.editRoi(kRectInput, false), "rectangle metadata did not select the existing editor");
-    const auto session = app.roiEditor()["id"].toString();
-    require(!session.isEmpty() && viewport.singleRectangle(), "ROI editor is not a single rectangle");
-    require(app.setRoiRectangle(session, {100000000.125, 2.5, 20.5, 10.75, 17.5}), "native double rectangle rejected");
-    require(app.roiEditor()["rectangle"].toList()[0].toDouble() == 100000000.125, "rectangle editor narrowed doubles");
-    require(app.applyRoi(), "rectangle editor failed to apply");
+    require(viewport.editTarget() && viewport.singleRectangle(), "ROI editor is not a single rectangle");
+    app.endRoiPreview();
+    require(app.setParameter(kRectInput, false, "[[[2,100000000.125,2.5,20.5,10.75,17.5]]]"),
+            "native double rectangle parameter was rejected");
+    idle();
     const auto parameter = [&](PortId id)
     {
         for (const auto &row : app.parameters())
@@ -303,6 +307,8 @@ try
         return QVariantMap{};
     };
     const auto rectangle = parameter(kRectInput);
+    require(rectangle["displayText"].toString() == "[2,100000000.125,2.5,20.5,10.75,17.5]",
+            "rectangle parameters must omit trailing decimal zeros");
     require(rectangle["type"].toInt() == static_cast<int>(Type::ROI) && rectangle["editor"].toInt() == static_cast<int>(EditorKind::Rect) && rectangle["hasRect"].toBool(),
             "rectangle editor reintroduced a separate value type");
     const auto encoded = QJsonDocument::fromJson(rectangle["literal"].toString().toUtf8()).array();
@@ -321,10 +327,22 @@ try
     const auto geometryParameter = parameter(kRegionsInput);
     require(geometryParameter["typeDisplay"].toString() == QStringLiteral("点、线、矩形、圆、多边形"),
             "geometry parameter lost concrete kinds");
-    require(geometryParameter["displayText"] == geometryParameter["valueText"]
-                && geometryParameter["displayText"].toString().contains("10"),
+    require(geometryParameter["displayText"].toString().contains("10")
+                && geometryParameter["valueText"].toString().contains("10"),
             "geometry parameter replaced coordinates with a count");
     require(app.clearRoi(kRegionsInput), "geometry fixture could not be cleared");
+    require(app.setParameter(4, false, "1.123456789"), "float parameter was rejected");
+    require(parameter(4)["displayText"] == "1.123457" && parameter(4)["decimals"].toInt() == 6,
+            "float parameter display did not use six decimal places");
+    require(parameter(4)["literal"].toString().toDouble() == 1.123456789,
+            "formatting changed the stored float parameter");
+    require(app.setParameter(4, false, "1") && parameter(4)["displayText"] == "1",
+            "whole-valued floats must omit trailing decimal zeros");
+    require(app.setParameter(5, false, "[[0.0000000001,1.123456789],[-2.123456789,3]]"), "float array was rejected");
+    require(parameter(5)["displayText"] == "[[0,1.123457],[-2.123457,3]]",
+            "float arrays must display at most six decimal places without trailing zeros");
+    require(app.setParameter(6, false, "9007199254740993"), "large integer was rejected");
+    require(parameter(6)["displayText"] == "9007199254740993", "decimal formatting changed an integer parameter");
     require(app.bindInput(app.portContext(kImagesInput), source, kImagesOutput), "cannot bind writable source images");
     idle();
     // The editor shows the image the user opened; the test opens that port explicitly.

@@ -30,19 +30,20 @@ try
     output.colorOrder = ColorOrder::BGR;
     output.imageVisible = true;
     authored.outputs.push_back(output);
-    authored.initParams.push_back(PortDefinition{0, "训练数据", {Type::String}});
-    authored.training                 = TrainingSpec{};
-    authored.training->image          = PortRef{PortStage::Inputs, 2};
-    authored.training->records.fields = {
-        {1, "参考边", TypeSpec{Type::ROI}, true, 2, 2}
-    };
-    authored.training->call.tool = "FitModel";
+    PortDefinition modelPath{2, "模型路径", {Type::String}};
+    PortDefinition regions{1, "参考边", {Type::ROI}};
+    regions.scope = ParameterScope::Record;
+    regions.roi = true; regions.minRegions = 2; regions.maxRegions = 2;
+    authored.trainParams = {modelPath, regions};
+    authored.outputs.push_back(PortDefinition{3, "模型路径", {Type::String}});
+    authored.training = TrainingSpec{};
+    authored.training->image = {PortStage::Inputs, 2};
     TrainingArtifactSpec artifact;
     artifact.id         = "model";
-    artifact.sourcePort = 2;
+    artifact.sourcePort = 3;
     artifact.format     = "sample.model";
     artifact.version    = 1;
-    artifact.target     = {PortStage::Init, 0};
+    artifact.target     = {PortStage::Train, 2};
     authored.training->artifacts.push_back(std::move(artifact));
     writeToolDefinitionFile(file, authored);
 
@@ -55,8 +56,8 @@ try
     assert(result != restored.outputs.end() && result->sameGeometryAs == output.sameGeometryAs && result->colorOrder == ColorOrder::BGR);
     const PortRef framePort{PortStage::Inputs, 2};
     assert(restored.training->image == framePort);
-    assert(restored.training->records.fields.size() == 1 && restored.training->records.roiField() == 1
-           && restored.training->records.fields.front().maxRegions == 2);
+    assert(restored.trainParams.size() == 2 && restored.trainParams.back().roi
+           && restored.trainParams.back().scope == ParameterScope::Record && restored.trainParams.back().maxRegions == 2);
 
     restored.nameZh = "编辑后的声明";
     writeToolDefinitionFile(file, restored);

@@ -87,7 +87,7 @@ void validateToolOutput(const PortDefinition &port, const PortValue &value, cons
 }
 
 ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Values &outputs,
-                                 const std::string &detail)
+                                 const std::string &detail, ProducedBy phase)
 {
     const auto codeIt = outputs.find(kStatusCodePort);
     if (codeIt == outputs.end())
@@ -118,6 +118,11 @@ ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Value
         declared.insert(port.id);
         if (isReservedPort(PortStage::Outputs, port.id))
             continue;
+        if (port.producedBy != ProducedBy::Both && port.producedBy != phase)
+        {
+            outputs.insert_or_assign(port.id, Missing{});
+            continue;
+        }
         const auto found = outputs.find(port.id);
         if (found == outputs.end() || isMissing(found->second))
         {

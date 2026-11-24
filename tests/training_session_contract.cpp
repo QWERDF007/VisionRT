@@ -1,3 +1,4 @@
+#include "core/ToolRegistry.h"
 // A training draft lives in memory until the user commits it. The contract is: "加入训练" copies the
 // published frame exactly (depth, channels and colour order), records share one image entry, fields
 // are read and written by the declaration's number, and nothing reaches the disk while editing.
@@ -37,14 +38,22 @@ QJsonObject readAsset(const QString &path)
     return QJsonDocument::fromJson(file.readAll()).object();
 }
 
+PortDefinition recordParameter(PortId id, std::string name, TypeSpec type, bool roi, int minimum, int maximum)
+{
+    PortDefinition port;
+    port.id = id; port.nameZh = std::move(name); port.type = type;
+    port.scope = ParameterScope::Record; port.roi = roi; port.minRegions = minimum; port.maxRegions = maximum;
+    return port;
+}
+
 TrainingSession::Begin colourBegin(const QString &asset)
 {
     TrainingSession::Begin begin;
     begin.node                = 1;
     begin.spec.image          = PortRef{PortStage::Inputs, 1};
-    begin.spec.records.fields = {
-        {1, "颜色名称", TypeSpec{Type::String}, false, 0, 0},
-        {2,    "采样区",    TypeSpec{Type::ROI},  true, 1, 0},
+    begin.trainParams = {
+        recordParameter(1, "颜色名称", TypeSpec{Type::String}, false, 0, 0),
+        recordParameter(2, "采样区", TypeSpec{Type::ROI}, true, 1, 0),
     };
     begin.asset = std::filesystem::path(asset.toStdWString());
     return begin;
@@ -55,9 +64,9 @@ TrainingSession::Begin edgeBegin(const QString &asset)
     TrainingSession::Begin begin;
     begin.node                  = 2;
     begin.spec.image            = PortRef{PortStage::Inputs, 1};
-    begin.spec.records.maxCount = 1;
-    begin.spec.records.fields   = {
-        {1, "参考边", TypeSpec{Type::ROI}, true, 2, 2},
+    begin.spec.maxRecords = 1;
+    begin.trainParams   = {
+        recordParameter(1, "参考边", TypeSpec{Type::ROI}, true, 2, 2),
     };
     begin.asset = std::filesystem::path(asset.toStdWString());
     return begin;
@@ -149,9 +158,9 @@ int main(int argc, char **argv)
         // contract, not the names or their order.
         const auto renamedAsset     = directory.path() + QStringLiteral("/renamed.json");
         auto       renamed          = colourBegin(renamedAsset);
-        renamed.spec.records.fields = {
-            {5, "类别", TypeSpec{Type::String}, false, 0, 0},
-            {9, "区域",    TypeSpec{Type::ROI},  true, 1, 0},
+        renamed.trainParams = {
+            recordParameter(5, "类别", TypeSpec{Type::String}, false, 0, 0),
+            recordParameter(9, "区域", TypeSpec{Type::ROI}, true, 1, 0),
         };
         TrainingSession renamedSession;
         renamedSession.begin(renamed);
@@ -213,7 +222,8 @@ int main(int argc, char **argv)
         bool       copyFailed            = false;
         try
         {
-            training::SaveAssets assets(bundle, copyRoot / L"project.vrt.json");
+            ToolRegistry registry;
+            training::SaveAssets assets(bundle, copyRoot / L"project.vrt.json", registry);
         }
         catch (const std::exception &)
         {
@@ -274,10 +284,10 @@ int main(int argc, char **argv)
         require(release.images().empty() && release.records().empty(), "the last removal releases the frame");
 
         auto noDefaults            = colourBegin({});
-        noDefaults.spec.parameters = {
+        noDefaults.trainParams.insert(noDefaults.trainParams.end(), {
             {5, "数量",    TypeSpec{Type::Int}},
             {8, "说明", TypeSpec{Type::String}}
-        };
+        });
         TrainingSession explicitParameters;
         explicitParameters.begin(noDefaults);
         require(!explicitParameters.parameter(5) && !explicitParameters.parameter(8),
@@ -294,21 +304,8 @@ int main(int argc, char **argv)
                                                explicitParameters, {});
         explicitPublication.accept();
         const auto explicitAsset = explicitPublication.directory() / L"manifest.json";
-        QFile      nullFile(QString::fromStdWString(explicitAsset.wstring()));
-        require(nullFile.open(QIODevice::ReadOnly), "the parameter manifest could not be read");
-        auto nullRoot = QJsonDocument::fromJson(nullFile.readAll()).object();
-        nullFile.close();
-        auto nullParameters    = nullRoot.value("parameters").toObject();
-        nullParameters["8"]    = QJsonValue::Null;
-        nullRoot["parameters"] = nullParameters;
-        require(nullFile.open(QIODevice::WriteOnly | QIODevice::Truncate), "the null fixture could not be written");
-        nullFile.write(QJsonDocument(nullRoot).toJson());
-        nullFile.close();
-        noDefaults.asset = explicitAsset;
-        TrainingSession nullParameter;
-        nullParameter.begin(noDefaults);
-        require(!nullParameter.error().isEmpty() && nullParameter.records().empty(),
-                "a stored null parameter must be rejected rather than turned into an empty string");
+        require(!readAsset(QString::fromStdWString(explicitAsset.wstring())).contains("parameters"),
+                "training manifests must not duplicate project parameter values");
     }
     catch (const std::exception &error)
     {

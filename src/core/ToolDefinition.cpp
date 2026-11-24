@@ -71,6 +71,8 @@ const std::vector<PortDefinition> &stagePorts(const ToolDefinition &def, PortSta
 {
     switch (stage)
     {
+    case PortStage::Train:
+        return def.trainParams;
     case PortStage::Init:
         return def.initParams;
     case PortStage::Inputs:
@@ -293,7 +295,7 @@ std::vector<EditorKind> editorChoices(const TypeSpec &type)
 
 void stripHostPorts(ToolDefinition &def)
 {
-    for (auto *list : {&def.initParams, &def.inputs, &def.outputs})
+    for (auto *list : {&def.initParams, &def.inputs, &def.outputs, &def.trainParams})
     {
         const auto stage = list == &def.outputs ? PortStage::Outputs
                          : list == &def.inputs  ? PortStage::Inputs
@@ -304,7 +306,7 @@ void stripHostPorts(ToolDefinition &def)
 
 std::span<const std::string_view> toolTabs() noexcept
 {
-    static constexpr std::array<std::string_view, 4> tabs{"基本输入", "预处理", "检测", "结果处理"};
+    static constexpr std::array<std::string_view, 5> tabs{"基本输入", "预处理", "训练", "检测", "结果处理"};
     return tabs;
 }
 
@@ -331,6 +333,8 @@ std::vector<PortDefinition> &mutableStagePorts(ToolDefinition &def, PortStage st
 {
     switch (stage)
     {
+    case PortStage::Train:
+        return def.trainParams;
     case PortStage::Init:
         return def.initParams;
     case PortStage::Inputs:
@@ -498,7 +502,7 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
     }
 
     // References other ports make to this one stay valid only while it still satisfies them.
-    for (auto *list : {&def.initParams, &def.inputs, &def.outputs})
+    for (auto *list : {&def.initParams, &def.inputs, &def.outputs, &def.trainParams})
     {
         for (auto &other : *list)
         {
@@ -567,7 +571,7 @@ std::vector<std::string> erasePort(ToolDefinition &def, PortStage stage, PortId 
 
     // References other ports make to this one would dangle; each is dropped and named, so the editor
     // reports the exact loss instead of failing validation with a dangling reference later.
-    for (auto *list : {&def.initParams, &def.inputs, &def.outputs})
+    for (auto *list : {&def.initParams, &def.inputs, &def.outputs, &def.trainParams})
     {
         for (auto &other : *list)
         {
@@ -647,12 +651,12 @@ void normalizeToolDefinition(ToolDefinition &def)
 
     // The one place a port without an explicit default receives the type's empty value. A status
     // port keeps Missing: the run's status, not a 0, says whether the tool succeeded.
-    for (auto *list : {&def.initParams, &def.inputs, &def.outputs})
+    for (auto *list : {&def.initParams, &def.inputs, &def.outputs, &def.trainParams})
         for (auto &port : *list)
             if (!port.typeFrom
                 && !isReservedPort(list == &def.outputs  ? PortStage::Outputs
                                    : list == &def.inputs ? PortStage::Inputs
-                                                         : PortStage::Init,
+                                                         : list == &def.trainParams ? PortStage::Train : PortStage::Init,
                                    port.id)
                 && isMissing(port.defaultValue))
                 port.defaultValue = defaultValue(port.type);
@@ -709,138 +713,54 @@ void validateToolDefinition(const ToolDefinition &def)
             throw ContractError("Function tool cannot have init params: " + def.nameEn);
         }
     }
+    validatePorts(def.trainParams, PortStage::Train);
     validatePorts(def.inputs, PortStage::Inputs);
     validatePorts(def.outputs, PortStage::Outputs);
 
     if (def.training)
     {
-        const auto *frame = findPort(def.inputs, def.training->image.id);
-        if (def.training->image.stage != PortStage::Inputs || !frame || frame->type.type != Type::Image)
-            throw ContractError("training.image must reference an Image input: " + def.nameEn);
-        if (def.training->records.fields.empty() && def.training->regionInput == 0)
-            throw ContractError("training.records.fields cannot be empty: " + def.nameEn);
-        if (def.training->records.maxCount < 0)
-            throw ContractError("training.records.max cannot be negative: " + def.nameEn);
-        int roiFields = 0;
-        if (def.training->regionInput != 0)
+        const auto &spec = *def.training;
+        const auto *frame = findPort(def.inputs, spec.image.id);
+        if (spec.image.stage != PortStage::Inputs || !frame || frame->type.type != Type::Image)
+            throw ContractError("training.image 必须引用 Image 输入");
+        if (spec.maxRecords < 0) throw ContractError("training.max_records 不能为负数");
+        int canvases = 0;
+        for (const auto &port : def.trainParams)
         {
-            const auto *regions = findPort(def.inputs, def.training->regionInput);
-            if (!regions || regions->type.type != Type::ROI || regions->image != def.training->image)
-                throw ContractError("training.region_input must reference a ROI on the training image: " + def.nameEn);
-            ++roiFields;
+            if (port.id == 0 || port.type.type == Type::Image || port.type.type == Type::TrainingSet)
+                throw ContractError("训练参数必须有正编号且不能包含图像或训练集");
+            if (port.roi)
+            {
+                ++canvases;
+                if (port.scope != ParameterScope::Record || port.type.type != Type::ROI
+                    || port.minRegions < 0 || port.maxRegions < 0
+                    || (port.maxRegions && port.minRegions > port.maxRegions))
+                    throw ContractError("训练画布需要有效的记录级 ROI 参数");
+            }
         }
-        for (const auto &field : def.training->records.fields)
+        if (canvases != 1) throw ContractError("训练工具需要唯一的记录级画布 ROI");
+        if (spec.overlayOutput)
         {
-            if (field.id == 0)
-                throw ContractError("training field ids must be positive: " + def.nameEn);
-            if (field.nameZh.empty())
-                throw ContractError("training fields need a name: " + def.nameEn);
-            if (field.type.type == Type::Image || field.type.type == Type::TrainingSet)
-                throw ContractError("training fields cannot hold an image or a training set: " + def.nameEn);
-            if (field.roi)
-            {
-                ++roiFields;
-                if (field.type.type != Type::ROI)
-                    throw ContractError("the canvas training field must be a ROI: " + def.nameEn);
-            }
-            if (field.minRegions < 0 || field.maxRegions < 0
-                || (field.maxRegions != 0 && field.minRegions > field.maxRegions))
-                throw ContractError("training field region bounds are invalid: " + def.nameEn);
+            const auto *output = findPort(def.outputs, spec.overlayOutput);
+            if (!output || output->type.type != Type::ROI || output->producedBy == ProducedBy::Execute)
+                throw ContractError("训练叠加需要共享 ROI 输出");
         }
-        if (roiFields > 1)
-            throw ContractError("a training tool declares at most one canvas field: " + def.nameEn);
-        // Training parameters are typed values with the same limits and controls as a value port;
-        // one validation path keeps their defaults, steps and options consistent with parameters.
-        std::vector<PortDefinition> parameters;
-        parameters.reserve(def.training->parameters.size());
-        for (const auto &declared : def.training->parameters)
+        std::set<std::string> artifacts;
+        std::set<PortId> targets, sources;
+        for (const auto &artifact : spec.artifacts)
         {
-            if (declared.type.type == Type::Image || declared.type.type == Type::TrainingSet)
-                throw ContractError("training parameters cannot hold an image or a training set: " + def.nameEn);
-            PortDefinition parameter;
-            parameter.id           = declared.id;
-            parameter.nameZh       = declared.nameZh;
-            parameter.type         = declared.type;
-            parameter.defaultValue = declared.defaultValue;
-            parameter.editor       = declared.editor;
-            parameter.step         = declared.step;
-            parameter.decimals     = declared.decimals;
-            parameter.minimum      = declared.minimum;
-            parameter.maximum      = declared.maximum;
-            parameter.options      = declared.options;
-            parameters.push_back(std::move(parameter));
-        }
-        validatePorts(parameters, PortStage::Init);
-        if (def.training->call.tool.empty())
-            throw ContractError("training.call 需要训练器：" + def.nameEn);
-        {
-            if (def.training->writes.empty() && def.training->artifacts.empty())
-                throw ContractError("training.call needs at least one write or artifact: " + def.nameEn);
-            for (const auto &input : def.training->call.inputs)
-            {
-                if (input.port == 0)
-                    throw ContractError("training.call.inputs needs a port: " + def.nameEn);
-                if (const auto *role = std::get_if<TrainingSetSource>(&input.source))
-                {
-                    continue;
-                }
-                if (const auto *field = std::get_if<TrainingFieldRef>(&input.source))
-                {
-                    const bool declared
-                        = std::any_of(def.training->records.fields.begin(), def.training->records.fields.end(),
-                                      [&](const TrainingFieldSpec &entry) { return entry.id == field->id; });
-                    if (!declared)
-                        throw ContractError("training.call 引用了未声明的训练字段：" + std::to_string(field->id) + "（"
-                                            + def.nameEn + "）");
-                    continue;
-                }
-                if (const auto *parameter = std::get_if<TrainingParameterRef>(&input.source))
-                {
-                    const bool declared
-                        = std::any_of(def.training->parameters.begin(), def.training->parameters.end(),
-                                      [&](const TrainingParameterSpec &entry) { return entry.id == parameter->id; });
-                    if (!declared)
-                        throw ContractError("training.call 引用了未声明的训练参数：" + std::to_string(parameter->id)
-                                            + "（" + def.nameEn + "）");
-                    continue;
-                }
-                if (const auto *literal = std::get_if<TypedLiteral>(&input.source))
-                {
-                    if (isMissing(literal->value))
-                        throw ContractError("training.call 的字面量必须有值：" + def.nameEn);
-                    validateValue(literal->type, literal->value);
-                    continue;
-                }
-                const auto *reference = std::get_if<PortRef>(&input.source);
-                if (!reference || reference->stage == PortStage::Outputs || !findPort(def, *reference))
-                    throw ContractError("training.call 输入引用了不存在的端口：" + def.nameEn);
-            }
-            for (const auto &write : def.training->writes)
-            {
-                if (write.sourcePort == 0)
-                    throw ContractError("training.writes 的来源端口必须大于 0：" + def.nameEn);
-                if (write.target.stage == PortStage::Outputs || isReservedPort(write.target.stage, write.target.id))
-                    throw ContractError("training.writes 引用了不可写端口：" + formatPortRef(write.target) + "（"
-                                        + def.nameEn + "）");
-                const auto *port = findPort(def, write.target);
-                if (!port || port->type.type == Type::Image)
-                    throw ContractError("training.writes 引用了不可写入的端口：" + formatPortRef(write.target) + "（"
-                                        + def.nameEn + "）");
-            }
-            for (const auto &artifact : def.training->artifacts)
-            {
-                if (artifact.id.empty() || artifact.format.empty() || artifact.sourcePort == 0)
-                    throw ContractError("training.artifacts 需要 id、format 和来源端口：" + def.nameEn);
-                if (artifact.target.stage != PortStage::Init || isReservedPort(PortStage::Init, artifact.target.id))
-                    throw ContractError("training.artifacts 必须写入初始化参数：" + formatPortRef(artifact.target)
-                                        + "（" + def.nameEn + "）");
-                const auto *port = findPort(def.initParams, artifact.target.id);
-                if (!port || port->type != TypeSpec{Type::String})
-                    throw ContractError("training.artifacts 目标必须是 String 初始化参数："
-                                        + formatPortRef(artifact.target) + "（" + def.nameEn + "）");
-            }
+            const auto *target = findPort(def.trainParams, artifact.target.id);
+            const auto *output = findPort(def.outputs, artifact.sourcePort);
+            if (!artifacts.insert(artifact.id).second || !targets.insert(artifact.target.id).second
+                || !sources.insert(artifact.sourcePort).second || artifact.id.empty() || artifact.format.empty()
+                || artifact.version < 1 || artifact.target.stage != PortStage::Train
+                || !target || target->type != TypeSpec{Type::String} || target->scope != ParameterScope::Tool
+                || !output || output->type != TypeSpec{Type::String} || output->producedBy == ProducedBy::Execute)
+                throw ContractError("模型产物必须关联唯一的训练路径参数与共享路径输出");
         }
     }
+    else if (!def.trainParams.empty())
+        throw ContractError("训练参数需要 training 声明");
 
     const auto requireImage = [&](const PortRef &reference, const char *context)
     {
@@ -849,7 +769,7 @@ void validateToolDefinition(const ToolDefinition &def)
             throw ContractError(std::string(context) + " must reference an Image port: " + formatPortRef(reference));
     };
 
-    for (const auto *list : {&def.initParams, &def.inputs, &def.outputs})
+    for (const auto *list : {&def.initParams, &def.inputs, &def.outputs, &def.trainParams})
         for (const auto &port : *list)
         {
             if (port.image)

@@ -63,8 +63,9 @@ public:
     DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId);
     ~DomainToolAdapter() override;
 
-    ToolStatus initialize(const Values &initParams) override;
+    ToolStatus initialize(const ToolConfiguration &initParams) override;
     ToolResult execute(const Values &inputs) override;
+    ToolResult train(const TrainingSet &, const Values &) override;
     ToolStatus release() override;
     DiagnosticOrigin lifecycleOrigin() const noexcept override { return origin_; }
 

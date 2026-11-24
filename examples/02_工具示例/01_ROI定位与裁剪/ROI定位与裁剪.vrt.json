@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
-          "tool_version_snapshot": "2.0.0",
+          "tool_version_snapshot": "1.0.0",
           "alias": "投影定位亮条",
           "pos": [
             0,
@@ -277,7 +277,7 @@
           "node_seq": "3",
           "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
-          "tool_version_snapshot": "2.0.0",
+          "tool_version_snapshot": "1.0.0",
           "alias": "按定位结果裁剪",
           "pos": [
             0,

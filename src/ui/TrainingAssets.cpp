@@ -1,6 +1,8 @@
 #include "ui/TrainingAssets.h"
 
 #include "ui/TrainingSession.h"
+#include "core/ToolRegistry.h"
+#include "core/ToolPaths.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -89,7 +91,8 @@ void readFrame(const QString &path, cv::Mat &pixels, ColorOrder &order)
 }
 
 Revision::Revision(const std::filesystem::path &base, const TrainingSession &draft,
-                   const std::map<std::string, Array> &models)
+                   const std::map<std::string, ModelArtifact> &models,
+                   const std::map<std::string, std::filesystem::path> &destinations)
 {
     const auto revision    = nextRevision(base);
     const auto destination = base / std::to_wstring(revision);
@@ -116,7 +119,7 @@ Revision::Revision(const std::filesystem::path &base, const TrainingSession &dra
     {
         const auto relative = QString::fromStdString("models/" + id + ".bin");
         QFile file(QString::fromStdWString((directory_ / std::filesystem::path(relative.toStdWString())).wstring()));
-        const auto bytes = model.elements<std::uint8_t>();
+        const auto &bytes = model.bytes;
         if (!file.open(QIODevice::WriteOnly)
             || file.write(reinterpret_cast<const char *>(bytes.data()), static_cast<qint64>(bytes.size()))
                    != static_cast<qint64>(bytes.size()))
@@ -131,6 +134,18 @@ Revision::Revision(const std::filesystem::path &base, const TrainingSession &dra
         throw ContractError("无法提交训练清单：" + file.errorString().toStdString());
     std::filesystem::rename(directory_, destination);
     directory_ = destination;
+    for (const auto &[id, path] : destinations)
+    {
+        if (path.empty()) continue;
+        std::filesystem::create_directories(path.parent_path());
+        QSaveFile modelFile(QString::fromStdWString(path.wstring()));
+        modelFile.setDirectWriteFallback(false);
+        const auto &bytes = models.at(id).bytes;
+        if (!modelFile.open(QIODevice::WriteOnly)
+            || modelFile.write(reinterpret_cast<const char *>(bytes.data()), static_cast<qint64>(bytes.size())) != static_cast<qint64>(bytes.size())
+            || !modelFile.commit())
+            throw ContractError("无法保存训练模型：" + modelFile.errorString().toStdString());
+    }
     discard.dismiss();
 }
 
@@ -180,7 +195,7 @@ Revision::Revision(const std::filesystem::path &base, const std::filesystem::pat
     discard.dismiss();
 }
 
-SaveAssets::SaveAssets(ProjectDefinition &project, const std::filesystem::path &destination)
+SaveAssets::SaveAssets(ProjectDefinition &project, const std::filesystem::path &destination, const ToolRegistry &registry)
 {
     for (auto &flow : project.flows)
         for (auto &node : flow.nodes)
@@ -191,6 +206,34 @@ SaveAssets::SaveAssets(ProjectDefinition &project, const std::filesystem::path &
             if (node.trainingAsset.parent_path() == base)
                 continue;
             auto revision      = std::make_unique<Revision>(base, node.trainingAsset);
+            if (const auto *tool = registry.find(node.toolId); tool && tool->training)
+                for (const auto &artifact : tool->training->artifacts)
+                {
+                    auto &value = node.trainParams.at(artifact.target.id);
+                    const auto configured = pathFromUtf8(std::get<std::string>(value));
+                    if (configured.empty()) continue;
+                    const auto source = configured.is_absolute() ? configured : project.path.parent_path() / configured;
+                    const auto relative = source.lexically_normal().lexically_relative(node.trainingAsset.lexically_normal());
+                    if (!relative.empty() && *relative.begin() != "..")
+                    {
+                        const auto newPath = (revision->directory() / relative).lexically_relative(destination.parent_path());
+                        const auto text = newPath.generic_u8string();
+                        value = std::string(reinterpret_cast<const char *>(text.data()), text.size());
+                    }
+                    else if (configured.is_relative() && source != destination.parent_path() / configured)
+                    {
+                        const auto target = destination.parent_path() / configured;
+                        std::filesystem::create_directories(target.parent_path());
+                        QFile input(QString::fromStdWString(source.wstring()));
+                        QSaveFile output(QString::fromStdWString(target.wstring()));
+                        output.setDirectWriteFallback(false);
+                        if (!input.open(QIODevice::ReadOnly)) throw ContractError("模型文件无法读取");
+                        const auto bytes = input.readAll();
+                        if (input.error() != QFileDevice::NoError || !output.open(QIODevice::WriteOnly)
+                            || output.write(bytes) != bytes.size() || !output.commit())
+                            throw ContractError("模型文件无法复制");
+                    }
+                }
             node.trainingAsset = revision->directory();
             revisions_.push_back(std::move(revision));
         }

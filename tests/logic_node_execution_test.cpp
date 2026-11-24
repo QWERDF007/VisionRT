@@ -1,6 +1,4 @@
-// Node-model materialisation, atomic editing transactions, execution gating and
-// merge semantics. These contracts cover schema 3 / format 4 behaviour that the
-// earlier suite could not exercise.
+// Node-model materialisation, atomic editing transactions, execution gating and merge semantics.
 #include "core/NodeContracts.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
@@ -83,7 +81,7 @@ class Function final : public IToolInstance
 {
 public:
     std::function<ToolResult(const Values &)> run;
-    ToolStatus initialize(const Values &) override
+    ToolStatus initialize(const ToolConfiguration &configuration) override
     {
         return {};
     }
@@ -218,6 +216,8 @@ void materialisationAndTransactions()
     require(contract.inputs.size() == 1 && contract.inputs.front().id == 2
                 && contract.inputs.front().nameZh == "半径列表",
             "variable port was not materialised");
+    require(contract.inputs.front().group == "流程控制" && contract.outputs.back().group == "流程控制",
+            "derived parameters and results must retain their flow-control group");
     require(contract.outputs.size() == 3 && contract.outputs[0].id == kStatusCodePort
                 && contract.outputs[1].id == kStatusMessagePort && contract.outputs[2].id == 3,
             "only exposed results become business outputs");

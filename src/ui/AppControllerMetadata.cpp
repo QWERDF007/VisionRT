@@ -2,6 +2,7 @@
 #include "core/NodeContracts.h"
 #include "core/ValueJson.h"
 #include "ui/DisplayTypes.h"
+#include "ui/ValueDisplay.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -100,6 +101,7 @@ QVariantMap metadata(const ToolDefinition &definition)
     };
 
     result["inputs"]     = ports(definition.inputs, PortStage::Inputs);
+    result["trainParams"] = ports(definition.trainParams, PortStage::Train);
     result["initParams"] = ports(definition.initParams, PortStage::Init);
     result["outputs"]    = ports(definition.outputs, PortStage::Outputs);
     return result;
@@ -140,12 +142,26 @@ QVariantList AppController::parameters() const
     // Rows come from the materialised contract, the same definition execution consumes; the raw
     // declaration is still the source for type_from selection options.
     const auto *contract = impl_->effectiveTool();
-    auto        add      = [&](PortId id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
+    auto        add      = [&](PortId id, const TypeSpec &type, PortStage stage, const PortDefinition *declaration)
     {
+        const bool initialization = stage == PortStage::Init;
+        const bool trainingParameter = stage == PortStage::Train;
         PortValue   literal = Missing{};
         BindingMode mode    = BindingMode::Literal;
         QString     source;
-        if (initialization)
+        if (trainingParameter)
+        {
+            if (declaration->scope == ParameterScope::Tool)
+            {
+                const auto found = impl_->training->parameter(id);
+                if (found) literal = portValueOf(*found);
+            }
+            else if (impl_->training && impl_->training->selected() >= 0)
+            {
+                if (const auto value = impl_->training->value(impl_->training->selected(), id)) literal = portValueOf(*value);
+            }
+        }
+        else if (initialization)
         {
             const auto found = node->initParams.find(id);
             if (found != node->initParams.end())
@@ -188,13 +204,16 @@ QVariantList AppController::parameters() const
             && impl_->roiSession.input() == id)
             literal = impl_->roiSession.draft();
         QString text;
+        QString formattedText;
         try
         {
             text = valueText(literal, type);
+            formattedText = displayValueText(literal, type);
         }
         catch (const std::exception &error)
         {
             text = q(error.what());
+            formattedText = text;
         }
         QVariantList options;
         const auto   addOption = [&](const QString &label, const QString &value)
@@ -212,7 +231,7 @@ QVariantList AppController::parameters() const
             {
                 const auto *stringValue = std::get_if<std::string>(&value);
                 const auto  optionText  = stringValue ? q(*stringValue) : valueText(value, type);
-                addOption(optionText, optionText);
+                addOption(stringValue ? optionText : displayValueText(value, type), optionText);
             }
         // type_from parameters drive both the source selection and the resolved
         // contract, so their option lists still come from the raw declaration.
@@ -251,7 +270,7 @@ QVariantList AppController::parameters() const
                 }
         const auto *string     = std::get_if<std::string>(&literal);
         const auto  inputFound = node->inputs.find(id);
-        const bool  hasSource  = inputFound != node->inputs.end() && inputFound->second.mode == BindingMode::Upstream
+        const bool  hasSource  = !trainingParameter && inputFound != node->inputs.end() && inputFound->second.mode == BindingMode::Upstream
                             && inputFound->second.source.has_value();
         // Every path parameter opens the same file-or-folder picker, so the editor kind is the
         // declaration itself. A path mode parameter stays a tool-owned value and no longer selects
@@ -278,7 +297,7 @@ QVariantList AppController::parameters() const
                                  {"height", rectangle.height()},
                                  { "angle",  rectangle.angle()}
                 };
-                rectDisplayText = ValueJson::text(Array::fromNested(record), {Type::Array, DType::Float64, 1});
+                rectDisplayText = displayRegionText(record);
             }
             catch (const ContractError &)
             {
@@ -319,17 +338,20 @@ QVariantList AppController::parameters() const
         if (rectangleEditor)
             displayText = hasRect ? rectDisplayText : QStringLiteral("[]");
         else if (type.type == Type::ROI)
-            displayText = text;
+            displayText = formattedText;
         else if (type.type == Type::Array)
-            displayText = arrayText;
+            displayText = arrayText == QStringLiteral("[]") ? arrayText : formattedText;
         else if (string)
             displayText = q(*string);
         else
-            displayText = text;
+            displayText = formattedText;
 
         QVariantMap row{
             {"roiDrawShape", roiDrawShape},
             {"id", static_cast<uint>(id)},
+            {"stage", static_cast<int>(stage)},
+            {"recordScoped", trainingParameter && declaration->scope == ParameterScope::Record},
+            {"recordId", trainingParameter && declaration->scope == ParameterScope::Record ? selectedTrainingDraftRecord() : QString{}},
             {"name", declaration ? q(declaration->nameZh) : q(portLabel(id))},
             {"type", static_cast<int>(type.type)},
             {"typeDetail", typeText(type)},
@@ -350,17 +372,15 @@ QVariantList AppController::parameters() const
             {"sourcePort", hasSource ? static_cast<uint>(inputFound->second.source->port) : 0u},
             {"title", q(node->title())},
             {"editor", static_cast<int>(editorKind)},
-            {"tab", declaration ? static_cast<int>(declaration->tab) : static_cast<int>(ParameterTab::BasicInput)},
-            {"group", initialization ? QStringLiteral("初始化配置")
-                      : declaration  ? q(declaration->group)
-                                     : QString{}},
+            {"tab", trainingParameter ? static_cast<int>(ParameterTab::Training) : declaration ? static_cast<int>(declaration->tab) : static_cast<int>(ParameterTab::BasicInput)},
+            {"group", declaration ? q(declaration->group) : QString{}},
             {"options", options},
             {"optionsProvider",
              declaration ? static_cast<int>(declaration->optionsProvider) : static_cast<int>(OptionsProvider::None)},
             {"minimum", QString{}},
             {"maximum", QString{}},
             {"step", QString{}},
-            {"decimals", -1},
+            {"decimals", type.type == Type::Float ? kValueDisplayDecimals : -1},
             {"canIncrement", false},
             {"canDecrement", false},
             {"inputMode", static_cast<int>(mode)}
@@ -402,7 +422,7 @@ QVariantList AppController::parameters() const
                 row["maximum"] = valueText(*declaration->maximum, type);
             if (declaration->step)
                 row["step"] = valueText(*declaration->step, type);
-            if (declaration->decimals)
+            if (declaration->decimals && type.type != Type::Float)
                 row["decimals"] = *declaration->decimals;
         }
         result.push_back(row);
@@ -443,27 +463,16 @@ QVariantList AppController::parameters() const
 
     if (contract)
     {
-        // Published models are derived from the revision. Before publication the same business
-        // parameters remain available for choosing an existing model.
-        const auto derivedTrainingPath = [&](PortId id)
+        if (tool->training)
         {
-            if (!tool->training || node->trainingAsset.empty())
-                return false;
-
-            return std::any_of(tool->training->artifacts.begin(), tool->training->artifacts.end(),
-                               [&](const TrainingArtifactSpec &artifact)
-                               { return artifact.target.stage == PortStage::Init && artifact.target.id == id; });
-        };
+            impl_->ensureTrainingSession();
+            for (const auto &port : tool->trainParams)
+                add(port.id, port.type, PortStage::Train, &port);
+        }
         for (const auto &port : contract->initParams)
         {
-            // Derived initialisation entries are internal presentation sources: the parameter
-            // editors own them, so they never appear as editable rows while still being handed to
-            // the tool through nodeParameters().
-            if (tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, port.id))
-                continue;
-            if (derivedTrainingPath(port.id))
-                continue;
-            add(port.id, port.type, true, &port);
+            if (tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, port.id)) continue;
+            add(port.id, port.type, PortStage::Init, &port);
         }
 
         // Explicit execution conditions exist on the logical models only; a fixed
@@ -557,7 +566,7 @@ QVariantList AppController::parameters() const
                 // enumerating the raw port again would show the same value twice.
                 if (tool && tool->nodeModel == NodeModel::Condition && port.id == kConditionInputPort)
                     continue;
-                add(port.id, port.type, false, &port);
+                add(port.id, port.type, PortStage::Inputs, &port);
             }
     }
     else
@@ -566,14 +575,70 @@ QVariantList AppController::parameters() const
         {
             if (tool && tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, id))
                 continue;
-            add(id, type, true, nullptr);
+            add(id, type, PortStage::Init, nullptr);
         }
 
-        for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
+        for (const auto &[id, type] : node->signatures.inputs) add(id, type, PortStage::Inputs, nullptr);
     }
+    const QStringList basicGroups{"流程控制", "检测图像", "检测区域", "输入数据"};
+    for (auto &value : result)
+    {
+        auto row = value.toMap();
+        if (!row.contains("stage")) row.insert("stage", static_cast<int>(PortStage::Inputs));
+        if (row.value("tab").toInt() == static_cast<int>(ParameterTab::BasicInput))
+        {
+            QString group;
+            if ((row.value("isMeta").toBool() && row.value("editor").toInt() != static_cast<int>(EditorKind::Expression)) || row.value("system").toBool()
+                || row.value("id").toUInt() == kUpstreamStatusPort || row.value("group") == QStringLiteral("流程控制")) group = basicGroups[0];
+            else if (row.value("type").toInt() == static_cast<int>(Type::Image)) group = basicGroups[1];
+            else if (row.value("type").toInt() == static_cast<int>(Type::ROI)) group = basicGroups[2];
+            else group = basicGroups[3];
+            row.insert("group", group);
+        }
+        value = row;
+    }
+    std::stable_sort(result.begin(), result.end(), [&](const QVariant &a, const QVariant &b)
+    {
+        const auto left = a.toMap(), right = b.toMap();
+        if (left.value("tab") != right.value("tab")) return left.value("tab").toInt() < right.value("tab").toInt();
+        if (left.value("tab").toInt() == static_cast<int>(ParameterTab::BasicInput))
+            return basicGroups.indexOf(left.value("group").toString()) < basicGroups.indexOf(right.value("group").toString());
+        return false;
+    });
     impl_->parameterRows     = result;
     impl_->parameterRowsNode = node->id;
     return result;
+}
+
+QVariantList AppController::parameterGroups() const
+{
+    QVariantList result;
+    for (const auto &value : parameters())
+    {
+        const auto row = value.toMap();
+        const auto name = row.value("group").toString();
+        const auto tab = row.value("tab").toInt();
+        auto group = std::find_if(result.begin(), result.end(), [&](const QVariant &entry)
+        { const auto map = entry.toMap(); return map.value("name").toString() == name && map.value("tab").toInt() == tab; });
+        if (group == result.end())
+        {
+            result.append(QVariantMap{{"nodeId", selectedNode()}, {"name", name}, {"tab", tab}, {"parameters", QVariantList{}}});
+            group = std::prev(result.end());
+        }
+        auto map = group->toMap();
+        auto rows = map.value("parameters").toList();
+        rows.append(QVariantMap{{"id", row.value("id")}, {"stage", row.value("stage")}, {"recordId", row.value("recordId")}});
+        map.insert("parameters", rows);
+        *group = map;
+    }
+    return result;
+}
+
+QString AppController::outputTitle() const
+{
+    const auto *node = impl_->currentNode();
+    const auto result = node ? impl_->presentation.displaySnapshot(*node) : ResultSlot::Snapshot{};
+    return result && result->invocation == ProducedBy::Train ? QStringLiteral("训练输出") : QStringLiteral("运行输出");
 }
 
 } // namespace visionrt

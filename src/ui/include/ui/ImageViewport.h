@@ -5,6 +5,7 @@
 #include "ui/Export.h"
 
 #include <QPointF>
+#include <QPointer>
 #include <QQuickItem>
 #include <QQuickPaintedItem>
 #include <QSize>
@@ -229,6 +230,7 @@ protected:
     void     hoverMoveEvent(QHoverEvent *event) override;
     void     hoverLeaveEvent(QHoverEvent *event) override;
     bool     event(QEvent *event) override;
+    bool     eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     friend class RoiOverlay;
@@ -251,6 +253,8 @@ private:
     void                         changeDraft(QPointF imagePoint);
     std::optional<EncodedRegion> completedDraft() const;
     std::vector<QPointF>         handles(const EncodedRegion &roi) const;
+    const EncodedRegion        *activeRegion() const;
+    void                         updateCircleHandle(QPointF itemPoint);
     int                          hitRoi(QPointF imagePoint) const;
     void                         commitDraft();
     void                         clearGesture();
@@ -264,9 +268,11 @@ private:
     qint64                       uploadedTextureKey_ = 0;
 
     QMetaObject::Connection      windowActiveConnection_;
+    QPointer<QQuickWindow>       observedWindow_;
     QImage                       display_;
     int                          sourceType_    = -1;
     bool                         pointerInside_ = false;
+    bool                         altHeld_ = false;
     QPointF                      pointerPosition_;
     QString                      pixelText_;
     QSize                        imageSize_;
@@ -294,6 +300,7 @@ private:
     QPointF                      anchor_;
     QTransform                   gestureInverse_;
     QPointF                      lastPointer_;
+    QPointF                      circleHandleDirection_{1, 0};
     int                          handle_ = -1;
     std::optional<EncodedRegion> original_;
     std::optional<EncodedRegion> draft_;

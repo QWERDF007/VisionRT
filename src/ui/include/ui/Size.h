@@ -36,7 +36,6 @@ class VISIONRT_UI_API VisionRTSize final : public QObject
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIInputStrokeWidth)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIOutputStrokeWidth)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIGuideStrokeWidth)
-    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIGuideOffset)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIRotationArrowSize)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIArrowHeadSize)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROIHandleHitRadius)

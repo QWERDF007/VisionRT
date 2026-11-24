@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <vector>
 
 namespace visionrt {
@@ -61,6 +62,8 @@ public:
         NodeId                node = 0;
         TrainingSpec          spec;
         std::filesystem::path asset;
+        std::vector<PortDefinition> trainParams;
+        Values parameters;
     };
 
     // Starts a session over the tool's declaration. An existing draft for the same node, spec and
@@ -68,6 +71,16 @@ public:
     // work instead of rereading a file that was never written.
     void begin(Begin start);
     void end();
+
+    auto recordParameters() const
+    {
+        return start_.trainParams | std::views::filter([](const PortDefinition &p) { return p.scope == ParameterScope::Record; });
+    }
+    auto toolParameters() const
+    {
+        return start_.trainParams | std::views::filter([](const PortDefinition &p) { return p.scope == ParameterScope::Tool; });
+    }
+    PortId roiParameter() const;
 
     bool active() const noexcept
     {
@@ -122,13 +135,10 @@ public:
     // Rectangles the canvas field accepts; 0 means the declaration sets no fixed budget.
     int                               regionBudget() const noexcept;
 
-    // Typed values the training page offers beside the records. They start from the declaration's
-    // defaults, live only in this draft, and reach the node only through a published trainer result.
+    // Tool-scoped values start from the declaration and remain in the draft until applied.
     std::optional<TrainingFieldValue>    parameter(PortId id) const;
     bool                                 setParameter(PortId id, TrainingFieldValue value);
     std::map<PortId, TrainingFieldValue> parameters() const;
-    // One row per declared parameter, shaped like a record field row so QML reuses its controls.
-    QVariantList                         parameterRows() const;
 
     bool dirty() const noexcept
     {
@@ -153,7 +163,7 @@ public:
     // types; a record names its image by number, never by list position.
     DataRef<TrainingSet> trainingSet() const;
 
-    // The published manifest: typed records, parameters, image files and model files, all relative
+    // The published manifest: typed records, image files and model files, all relative
     // to the manifest. The caller writes the files; this only states what the asset contains.
     QJsonObject manifest(const std::map<TrainingImageId, QString> &imageFiles,
                          const std::map<std::string, QString>     &artifactFiles) const;
@@ -165,9 +175,8 @@ public:
 private:
     void                         load();
     void                         materialiseThumbnail(TrainingDraftImage &image) const;
-    const TrainingFieldSpec     *field(PortId id) const;
-    const TrainingParameterSpec *parameterSpec(PortId id) const;
-    PortId                       roiField() const;
+    const PortDefinition     *field(PortId id) const;
+    const PortDefinition *parameterSpec(PortId id) const;
     void                         assignDefaults(TrainingDraftRecord &record) const;
     void                         pruneImages();
 

@@ -112,6 +112,7 @@ public:
     bool applyNode(NodeId node, bool active, const std::shared_ptr<const NodeDiagnostic> &lifecycle,
                    const std::shared_ptr<const NodeDiagnostic> &instance, ResultSlot::Snapshot snapshot,
                    std::uint64_t generation);
+    void present(NodeId node, ResultSlot::Snapshot snapshot);
     void forgetNode(NodeId node);
     // Event-driven running state. Only the transient activity set changes; the snapshot, error and
     // timing shown by the card stay whatever the last authoritative poll published.
@@ -204,6 +205,7 @@ private:
     RuntimeEngine    *runtime_ = nullptr;
 
     std::map<NodeId, ResultSlot::Snapshot>                  snapshots_;
+    std::map<NodeId, ResultSlot::Snapshot>                  currentResults_;
     std::set<NodeId>                                        active_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycle_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instances_;

@@ -162,7 +162,7 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
                               .arg(workbench::q(locator->algorithm))
                               .arg(write.sourcePort));
         const auto *target
-            = workbench::port(write.target.stage == PortStage::Init ? tool->initParams : tool->inputs, write.target.id);
+            = workbench::port(write.target.stage == PortStage::Train ? tool->trainParams : write.target.stage == PortStage::Init ? tool->initParams : tool->inputs, write.target.id);
         if (!target || target->type != source->type)
             return reject(QStringLiteral("参数 %1 缺失或类型不匹配").arg(write.target.id));
     }
@@ -170,7 +170,7 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (trainingMode)
     {
         const auto *spec = trainingSpec();
-        if (!spec || (spec->regionInput != 0 ? spec->regionInput : spec->records.roiField()) != locator->regionTarget)
+        if (!spec || (training ? training->roiParameter() : 0) != locator->regionTarget)
             return reject(QStringLiteral("训练画布字段不存在"));
         if (!training || !training->active() || training->selected() < 0 || trainingAssistImage.empty())
             return reject(QStringLiteral("请先加入训练参考图"));
@@ -223,12 +223,6 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         request.inputs.emplace(locator.frameInput, DataRef<Image>(Image{trainingAssistImage}));
         if (append)
             seeds = training->regions(training->selected());
-        if (append && training->spec().regionInput != 0)
-        {
-            const auto value = resolvedInput(node, training->spec().regionInput);
-            if (const auto *roi = std::get_if<DataRef<ROI>>(&value); roi && !roi->get().empty())
-                seeds = roi->get().front();
-        }
     }
     else
     {

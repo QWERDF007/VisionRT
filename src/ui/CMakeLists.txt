@@ -33,6 +33,7 @@ visionrt_add_module(ui SOURCES
     ToolEditorController.cpp
     DisplayConverter.cpp
     DisplayTypes.cpp
+    ValueDisplay.cpp
     OutputModel.cpp
     Diagnostics.cpp
     ImageViewport.cpp

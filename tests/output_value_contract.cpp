@@ -1,10 +1,13 @@
 #include "ToolResultAssertions.h"
 #include "ui/OutputModel.h"
+#include "core/ToolValueValidation.h"
 
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <iostream>
+#include <limits>
 
 using namespace visionrt;
 
@@ -42,6 +45,8 @@ void arrayDisplay()
     model.setResult(&definition, snapshot, {});
     const auto full = OutputModel::fullText(*model.capture(2));
     const auto text = model.get(2)["preview"].toString();
+    require(!model.get(2)["typeDisplay"].toString().contains(QStringLiteral("位")),
+            "UI array type descriptions must omit bit widths");
     require(text == full, "Array display is not the complete encoded value");
     require(QJsonDocument::fromJson(text.toUtf8()).array() == QJsonDocument::fromJson(full.toUtf8()).array(),
             "Array preview flattened nested values or did not escape native strings");
@@ -56,6 +61,73 @@ int main(int argc, char **argv)
 try
 {
     QCoreApplication application(argc, argv);
+    {
+        auto detection = hostPort(PortStage::Outputs, kStatusCodePort);
+        detection.id = 2;
+        detection.nameZh = "检测值";
+        detection.producedBy = ProducedBy::Execute;
+        auto training = detection;
+        training.id = 3;
+        training.nameZh = "训练值";
+        training.producedBy = ProducedBy::Train;
+        const std::vector<PortDefinition> ports{hostPort(PortStage::Outputs, 0), hostPort(PortStage::Outputs, 1), detection, training};
+        auto result = toolResult({{3, std::int64_t{7}}}, executionSuccess());
+        require(validateToolExecution(ports, result.outputs, {}, ProducedBy::Train).code == 0
+                    && isMissing(result.outputs.at(2)), "training must clear detection-only outputs");
+        result = toolResult({{2, std::int64_t{9}}}, executionSuccess());
+        require(validateToolExecution(ports, result.outputs, {}).code == 0 && isMissing(result.outputs.at(3)),
+                "execution must clear training-only outputs");
+        result = toolResult({}, executionSuccess());
+        bool rejected = false;
+        try { validateToolExecution(ports, result.outputs, {}, ProducedBy::Train); }
+        catch (const ContractError &) { rejected = true; }
+        require(rejected, "a produced output remains mandatory");
+    }
+    {
+        ToolDefinition decimalOutputs;
+        decimalOutputs.outputs = {
+            {2, "小数", {Type::Float}},
+            {3, "对齐数据", {Type::Array, DType::Float64, 3}},
+            {4, "圆", {Type::ROI}},
+            {5, "单精度数组", {Type::Array, DType::Float32, 2}},
+            {6, "文本", {Type::String}}
+        };
+        auto precise = std::make_shared<NodeSnapshot>();
+        precise->outputs = {
+            {2, 1.123456789},
+            {3, Array::fromNested(NestedVector<double, 3>{{{1.123456789, -2.7755575615628914e-17,
+                                                           2.7755575615628914e-15, 1.23, 1}}, {}})},
+            {4, DataRef<ROI>(ROI{{makeCircle({10.123456789, 20.123456789}, 3.25)}})},
+            {5, Array::fromNested(NestedVector<float, 2>{{0.123456789f, 1}})},
+            {6, std::string("1.000000")}
+        };
+        OutputModel decimals;
+        decimals.setResult(&decimalOutputs, precise, {});
+        require(decimals.get(2)["preview"] == "1.123457", "output floats must display at most six decimals");
+        require(decimals.get(3)["preview"] == "[[[1.123457,0,0,1.23,1]],[]]",
+                "output arrays must omit trailing zeros and rounded negative zero");
+        require(decimals.get(3)["typeDisplay"] == QStringLiteral("三维浮点数数组"),
+                "double array descriptions must omit the redundant bit width");
+        require(decimals.get(4)["preview"] == "[[[3,10.123457,20.123457,3.25]]]",
+                "output ROI coordinates must share the numeric display policy");
+        require(decimals.get(5)["preview"] == "[[0.123457,1]]", "float32 arrays did not use the display precision");
+        require(decimals.get(5)["typeDisplay"] == QStringLiteral("二维单精度浮点数数组"),
+                "float32 arrays must use a semantic description without a bit width");
+        require(decimals.get(6)["preview"] == "1.000000", "numeric display formatting changed string contents");
+        const auto original = QJsonDocument::fromJson(OutputModel::fullText(*decimals.capture(3)).toUtf8()).array();
+        require(original[0].toArray()[0].toArray()[0].toDouble() == 1.123456789
+                    && std::get<Array>(precise->outputs.at(3)).elements<double>()[0] == 1.123456789,
+                "output display formatting changed copied or native values");
+        precise->outputs[2] = std::numeric_limits<double>::infinity();
+        precise->outputs[3] = Array::fromNested(NestedVector<double, 3>{{{std::numeric_limits<double>::quiet_NaN(),
+                                                                        2.123456789}}});
+        decimals.setResult(&decimalOutputs, precise, {});
+        require(QJsonDocument::fromJson(decimals.get(2)["preview"].toString().toUtf8()).object()["non_finite"] == "Infinity",
+                "non-finite scalar display lost its typed representation");
+        const auto exceptional = QJsonDocument::fromJson(decimals.get(3)["preview"].toString().toUtf8()).array()[0].toArray()[0].toArray();
+        require(exceptional[0].toObject()["non_finite"] == "NaN" && exceptional[1].toDouble() == 2.123457,
+                "non-finite array elements were lost during numeric formatting");
+    }
     arrayDisplay<std::uint8_t, 1>();
     arrayDisplay<std::int32_t, 1>();
     arrayDisplay<std::int64_t, 1>();

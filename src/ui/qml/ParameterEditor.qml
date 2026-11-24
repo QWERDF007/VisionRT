@@ -19,9 +19,10 @@ ColumnLayout {
     // source, from a retained binding or this round's success.
     readonly property bool upstream: parameter.inputMode === BindingMode.Upstream
     readonly property int bindingPort: root.conditionRow ? root.parameter.bindingPort : root.parameter.id
-    readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled
+    readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled && (!parameter.recordScoped || !!parameter.recordId)
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
-    readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
+    readonly property string displayText: parameter.displayText === undefined ? root.valueText : parameter.displayText
+    readonly property string parameterKey: nodeId + ":" + parameter.stage + ":" + (parameter.recordId || "") + ":" + parameter.id
     readonly property real numberValue: Number(root.valueText)
     readonly property real minimumValue: parameter.minimum === undefined || parameter.minimum === "" ? -Infinity : Number(parameter.minimum)
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
@@ -31,7 +32,16 @@ ColumnLayout {
     spacing: 5
 
     function commit(text) {
-        return root.editable && app.setParameter(parameter.id, parameter.init, text);
+        if (!root.editable) return false;
+        if (parameter.stage === PortStage.Train)
+            return parameter.recordId ? app.setTrainingField(parameter.recordId, parameter.id, text) : app.setTrainingParameter(parameter.id, text);
+        return app.setParameter(parameter.id, parameter.init, text);
+    }
+    function clearRegions() {
+        return parameter.stage === PortStage.Train ? commit("[[]]") : app.clearRoi(parameter.id);
+    }
+    function drawRegion(shape) {
+        return parameter.stage === PortStage.Train ? app.startTrainingRoi(parameter.id, shape) : app.startRoiDraw(parameter.id, shape);
     }
     onParameterKeyChanged: {
         pathPicker.close();
@@ -108,7 +118,7 @@ ColumnLayout {
                 ParameterActionButton {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.conditionRow)
+                    visible: root.parameter.stage !== PortStage.Train && !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.conditionRow)
                     Layout.fillHeight: true
                     padding: 0
                     verticalPadding: 0
@@ -154,7 +164,7 @@ ColumnLayout {
                 dialogMode: QuiFileFolderDialog.DialogMode.FileOrFolder
                 onAccepted: path => {
                     if (root.editable)
-                        app.setParameterPath(root.parameter.id, root.parameter.init, path);
+                        root.parameter.stage === PortStage.Train ? app.setTrainingParameterPath(root.parameter.id, path) : app.setParameterPath(root.parameter.id, root.parameter.init, path);
                 }
             }
         }
@@ -280,7 +290,7 @@ ColumnLayout {
                 app.logParameterDraftRejected(root.parameter.id + "：" + text);
             }
             stepValue: function (direction, text) {
-                return root.editable && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text);
+                return root.editable && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text, root.parameter.stage);
             }
         }
     }
@@ -505,6 +515,7 @@ ColumnLayout {
         id: rectEditor
         ParameterTextField {
             id: field
+            property string committedText: ""
             backgroundColor: QuiColor.Hovered
             readonly property bool hasRect: root.parameter.hasRect === true
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === RoiDrawShape.DrawRectangle
@@ -520,15 +531,16 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle);
+                    root.drawRegion(RoiDrawShape.DrawRectangle);
                 }
             }
-            onActionRequested: app.clearRoi(root.parameter.id)
+            onActionRequested: root.clearRegions()
 
             function sync(force) {
                 const currentText = hasRect ? (root.parameter.displayText || "[]") : "[]";
                 if (force || !inputItem.activeFocus) {
                     text = currentText;
+                    committedText = currentText;
                     invalid = false;
                 }
             }
@@ -536,12 +548,16 @@ ColumnLayout {
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
+                if (text === committedText)
+                    return;
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
-                    app.clearRoi(root.parameter.id);
+                    root.clearRegions();
                     invalid = false;
                     return;
                 }
                 invalid = !root.commit(text);
+                if (!invalid)
+                    committedText = text;
             }
 
             onCancelRequested: sync(true)
@@ -582,10 +598,10 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle);
+                    root.drawRegion(root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle);
                 }
             }
-            onActionRequested: app.clearRoi(root.parameter.id)
+            onActionRequested: root.clearRegions()
 
             MouseArea {
                 anchors.fill: parent
@@ -597,28 +613,28 @@ ColumnLayout {
                 id: shapeMenu
                 MenuItem {
                     text: "画矩形"
-                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle)
+                    onTriggered: root.drawRegion(RoiDrawShape.DrawRectangle)
                 }
                 MenuItem {
                     text: "画圆"
-                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawCircle)
+                    onTriggered: root.drawRegion(RoiDrawShape.DrawCircle)
                 }
                 MenuItem {
                     text: "画线"
-                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawLine)
+                    onTriggered: root.drawRegion(RoiDrawShape.DrawLine)
                 }
                 MenuItem {
                     text: "画多边形"
-                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawPolygon)
+                    onTriggered: root.drawRegion(RoiDrawShape.DrawPolygon)
                 }
                 MenuItem {
                     text: "画点"
-                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawPoint)
+                    onTriggered: root.drawRegion(RoiDrawShape.DrawPoint)
                 }
             }
 
             function sync(force) {
-                const currentText = root.valueText;
+                const currentText = root.displayText;
                 if (force || !inputItem.activeFocus) {
                     text = currentText;
                     committedText = currentText;
@@ -632,7 +648,7 @@ ColumnLayout {
                 if (text === committedText)
                     return;
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
-                    app.clearRoi(root.parameter.id);
+                    root.clearRegions();
                     invalid = false;
                     return;
                 }
@@ -674,7 +690,7 @@ ColumnLayout {
             }
 
             function sync(force) {
-                const currentText = (root.valueText && root.valueText !== "null") ? root.valueText : "[]";
+                const currentText = (root.displayText && root.displayText !== "null") ? root.displayText : "[]";
                 committedText = currentText;
                 if (force || !inputItem.activeFocus) {
                     text = committedText;

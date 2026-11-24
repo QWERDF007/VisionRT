@@ -3,8 +3,11 @@
 #include <visionrt/contracts/ROI.h>
 
 #include <QPointF>
+#include <QPainterPath>
 #include <QPolygonF>
+#include <QTransform>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <vector>
@@ -31,6 +34,50 @@ inline QPointF rotate(QPointF value, double degrees)
     const double angle = degrees * std::numbers::pi / 180;
     return {value.x() * std::cos(angle) - value.y() * std::sin(angle),
             value.x() * std::sin(angle) + value.y() * std::cos(angle)};
+}
+
+inline QRectF centerHandleBounds(QPointF center, qreal size)
+{
+    return {center - QPointF(size / 2, size / 2), QSizeF(size, size)};
+}
+
+struct RotationHandle
+{
+    QPointF      center;
+    QPolygonF    bounds;
+    QPainterPath arrow;
+};
+
+inline std::array<RotationHandle, 4> rectangleRotationHandles(const RectangleView &rect,
+                                                           const QTransform &imageToItem, qreal iconSize)
+{
+    std::array<RotationHandle, 4> result;
+    const auto corners = rect.corners();
+    const std::array<QPointF, 4> signs{QPointF(-1, -1), QPointF(1, -1), QPointF(1, 1), QPointF(-1, 1)};
+    const qreal half = iconSize / 2;
+    const qreal radius = iconSize / 2;
+    const qreal inset = iconSize / 4;
+    QPainterPath arrow;
+    const QRectF arc(-half + inset, -half + inset, 2 * radius, 2 * radius);
+    arrow.arcMoveTo(arc, 90);
+    arrow.arcTo(arc, 90, 90);
+    const auto tip = arrow.currentPosition();
+    const qreal head = iconSize / 5;
+    arrow.moveTo(tip + QPointF(-head, -head));
+    arrow.lineTo(tip);
+    arrow.lineTo(tip + QPointF(head, -head));
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        const auto corner = imageToItem.map(point(corners[i]));
+        auto &handle = result[i];
+        handle.center = corner - rotate(signs[i] * half, rect.angle());
+        QTransform transform;
+        transform.translate(handle.center.x(), handle.center.y());
+        transform.rotate(rect.angle() + 90 * i);
+        handle.bounds = transform.map(QPolygonF(QRectF(-half, -half, iconSize, iconSize)));
+        handle.arrow = transform.map(arrow);
+    }
+    return result;
 }
 
 inline QPointF center(const RegionView &region)
