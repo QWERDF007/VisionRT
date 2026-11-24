@@ -632,7 +632,7 @@ void parameterEditorsContract()
         while (!pending.isEmpty())
         {
             auto *item = pending.takeLast();
-            if (item->property("headerText").toString() == QStringLiteral("输入参数")
+            if (item->property("headerText").toString() == QStringLiteral("输入数据")
                 && item->property("expand").isValid()) return item;
             pending.append(item->childItems());
         }

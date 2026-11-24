@@ -42,20 +42,10 @@ visionrt_add_module(ui SOURCES
     PUBLIC_LIBRARIES visionrt_runtime visionrt_python visionrt_plugins visionrt_tools visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui
     PRIVATE_LIBRARIES visionrt_avoid)
-set(_ui_enum_headers
-    "${CMAKE_SOURCE_DIR}/src/ui/include/ui/UiState.h"
-    "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h"
-    "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/TypeSpec.h"
-    "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/ROI.h"
-    "${CMAKE_SOURCE_DIR}/src/runtime/include/runtime/RuntimeEngine.h"
-    "${CMAKE_SOURCE_DIR}/src/runtime/include/runtime/Snapshot.h"
-    "${CMAKE_SOURCE_DIR}/src/python/include/python/PythonEnvironment.h"
-    "${CMAKE_SOURCE_DIR}/src/log/include/log/LogLevel.h")
 set(_ui_enums "${CMAKE_CURRENT_BINARY_DIR}/include/UiEnums.h")
 add_custom_command(OUTPUT "${_ui_enums}"
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts/tools/export_enums.py"
-        --qml "${_ui_enums}" ${_ui_enum_headers}
-    DEPENDS ${_ui_enum_headers} "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts/tools/export_enums.py"
+    COMMAND visionrt_enum_export --qml "${_ui_enums}"
+    DEPENDS visionrt_enum_export
     VERBATIM)
 target_sources(visionrt_ui PRIVATE "${_ui_enums}")
 target_include_directories(visionrt_ui PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/include")

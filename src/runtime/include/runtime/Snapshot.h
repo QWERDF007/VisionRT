@@ -12,24 +12,8 @@
 #include <stop_token>
 
 namespace visionrt {
-enum class NodeDisposition
-{
-    Pending,
-    Running,
-    Succeeded,
-    Failed,
-    Canceled
-};
-
-enum class NodePhase
-{
-    Create,
-    Prepare,
-    Initialize,
-    Execute,
-    Convert,
-    Release
-};
+#define VRT_ENUM_FILE "runtime/Snapshot.def"
+#include <visionrt/contracts/EnumDeclarations.h>
 
 struct NodeDiagnostic
 {

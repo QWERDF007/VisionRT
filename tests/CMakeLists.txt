@@ -1,8 +1,8 @@
 add_library(visionrt_python_testing STATIC ${CMAKE_CURRENT_SOURCE_DIR}/TestPythonEnvironment.cpp ${CMAKE_CURRENT_SOURCE_DIR}/TestPythonEnvironment.h)
-target_link_libraries(visionrt_python_testing PUBLIC visionrt_python_bridge visionrt_python pybind11::embed)
+target_link_libraries(visionrt_python_testing PUBLIC visionrt_python_bridge visionrt_python pybind11::headers Python3::Python)
 target_include_directories(visionrt_python_testing PUBLIC "${CMAKE_SOURCE_DIR}/tests")
 target_compile_definitions(visionrt_python_testing PUBLIC
-    VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
+    VISIONRT_TEST_PYTHON_EXECUTABLE="${VISIONRT_TEST_PYTHON_EXECUTABLE}")
 
 include(AddTest)
 visionrt_define_test_groups()
@@ -29,7 +29,7 @@ visionrt_contract(tool_registry_contract visionrt_core)
 visionrt_contract(definition_json_contract visionrt_core)
 visionrt_contract(tools_package_contract visionrt_core)
 visionrt_contract(custom_tool_store_contract visionrt_core)
-add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
+add_test(NAME validator_cli_contract COMMAND "${VISIONRT_TEST_PYTHON_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
     --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}"
     --module "$<TARGET_FILE:test_registration_valid>" --bad-module "$<TARGET_FILE:test_plugin_legacy>")
@@ -40,12 +40,12 @@ add_test(NAME package_app_contract COMMAND "${CMAKE_COMMAND}" -E env
     "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
     "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
     "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
-    "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
+    "${VISIONRT_TEST_PYTHON_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
 visionrt_apply_test_environment(package_app_contract)
 # The release record is assembled from facts another process produced; its audit rules are pure
 # Python and need neither a build nor an installation, so they run as their own quick test.
 add_test(NAME release_evidence_contract COMMAND "${CMAKE_COMMAND}" -E env
-    "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_release_evidence.py")
+    "${VISIONRT_TEST_PYTHON_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_release_evidence.py")
 # The six real nested Git+CMake builds are a separate entry: the quick package suite must not
 # recurse into a compiler, and a candidate selects them explicitly with -L integration.
 add_test(NAME build_metadata_integration_contract COMMAND "${CMAKE_COMMAND}" -E env
@@ -54,11 +54,11 @@ add_test(NAME build_metadata_integration_contract COMMAND "${CMAKE_COMMAND}" -E 
     "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
     "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
     "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
-    "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_build_metadata_integration.py")
+    "${VISIONRT_TEST_PYTHON_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_build_metadata_integration.py")
 visionrt_apply_test_environment(build_metadata_integration_contract)
 set_tests_properties(build_metadata_integration_contract PROPERTIES LABELS "package;integration")
 add_test(NAME dependency_manifest_contract COMMAND "${CMAKE_COMMAND}" -E env
-    "CMAKE_COMMAND=${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" -S
+    "CMAKE_COMMAND=${CMAKE_COMMAND}" "${VISIONRT_TEST_PYTHON_EXECUTABLE}" -S
     "${CMAKE_SOURCE_DIR}/tests/dependency_manifest_contract.py")
 visionrt_apply_test_environment(dependency_manifest_contract)
 if(WIN32)
@@ -67,7 +67,7 @@ if(WIN32)
     add_test(NAME build_incremental_contract COMMAND "${CMAKE_COMMAND}" -E env
         "CMAKE_COMMAND=${CMAKE_COMMAND}" "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
         "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}" "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
-        "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
+        "${VISIONRT_TEST_PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
 endif()
 visionrt_contract(value_json_contract visionrt_core)
 # The log contract is split by responsibility: text/allocation, aggregation and lifecycle.
@@ -85,7 +85,7 @@ visionrt_contract(python_value_contract visionrt_python_bridge)
 # window so a rejected environment is a test result rather than a manual exercise.
 visionrt_contract(python_probe_contract visionrt_python LABELS bridge)
 target_compile_definitions(python_probe_contract PRIVATE
-    VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
+    VISIONRT_TEST_PYTHON_EXECUTABLE="${VISIONRT_TEST_PYTHON_EXECUTABLE}")
 visionrt_contract(python_loading_contract visionrt_python_testing)
 visionrt_contract(python_adapter_contract visionrt_python_testing)
 visionrt_contract(python_shutdown_contract visionrt_python_testing)
@@ -180,7 +180,7 @@ if(VISIONRT_BUILD_APP)
     visionrt_contract(python_environment_contract visionrt_ui LABELS backend)
     target_link_libraries(python_environment_contract PRIVATE Qt6::Test)
     target_compile_definitions(python_environment_contract PRIVATE
-        VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+        VISIONRT_TEST_PYTHON_EXECUTABLE="${VISIONRT_TEST_PYTHON_EXECUTABLE}"
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(tool_editor_controller_test visionrt_ui LABELS backend)
     target_link_libraries(tool_editor_controller_test PRIVATE Qt6::Test)
@@ -345,7 +345,7 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
     visionrt_contract(ui_result_isolation_contract visionrt_ui)
     target_link_libraries(ui_result_isolation_contract PRIVATE Qt6::Test)
     target_compile_definitions(ui_result_isolation_contract PRIVATE
-        VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+        VISIONRT_TEST_PYTHON_EXECUTABLE="${VISIONRT_TEST_PYTHON_EXECUTABLE}"
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(recent_projects_contract visionrt_ui)
     visionrt_contract(ui_preferences_contract visionrt_ui)

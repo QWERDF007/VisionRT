@@ -269,12 +269,14 @@ def execute(inputs):
         editor.setMode(flow, before, port, BindingMode::Literal);
     for (PortId port = 1; port <= 5; ++port)
     {
-        editor.bindFreeInput(flow, {before, static_cast<PortId>(port + 1)}, {bridge, port});
+        const SourcePort sourcePort = port == 1 ? SourcePort{reader, 2}
+                                                : SourcePort{before, static_cast<PortId>(port + 1)};
+        editor.bindFreeInput(flow, sourcePort, {bridge, port});
         editor.bindFreeInput(flow, {bridge, static_cast<PortId>(port + 1)}, {after, port});
     }
     editor.bindFreeInput(flow, {bridge, 2}, {crop, 1});
     editor.bindFreeInput(flow, {bridge, 7}, {crop, 2});
-    editor.bindFreeInput(flow, {before, 2}, {builtin, 1});
+    editor.bindFreeInput(flow, {reader, 2}, {builtin, 1});
     ProjectStorage storage(registry);
     auto           project = editor.project();
     project.path           = root / "pipeline.json";

@@ -15,22 +15,8 @@
 #include <variant>
 
 namespace visionrt {
-enum class RunMode
-{
-    Once,
-    Loop,
-    Node
-};
-enum class RuntimeState
-{
-    Idle,
-    RunningOnce,
-    RunningLoop,
-    RunningNode,
-    Stopping,
-    Resetting,
-    Refreshing
-};
+#define VRT_ENUM_FILE "runtime/RuntimeEngine.def"
+#include <visionrt/contracts/EnumDeclarations.h>
 
 struct NodeUpdate
 {
@@ -59,15 +45,6 @@ struct RuntimeReadback
     std::uint64_t session                                   = 0;
     std::uint64_t round                                     = 0;
     bool          operator==(const RuntimeReadback &) const = default;
-};
-
-enum class RuntimePhase
-{
-    Setup,
-    Submission,
-    Completion,
-    Management,
-    Notification
 };
 
 struct RuntimeDiagnostic

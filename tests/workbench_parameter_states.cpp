@@ -62,11 +62,30 @@ void parameterStatesContract(visionrt::AppController &app)
     QTest::mouseMove(window, divider - QPoint(0, 250), 30);
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, divider - QPoint(0, 250));
     QTest::qWait(100);
+    // Review the data editors with the image and ROI groups collapsed, as in the workbench.
+    for (const auto id : {testing::parameters::Images, testing::parameters::Rois})
+    {
+        auto *group = findItem(findItem, panel, "parameter_" + QString::number(id));
+        while (group && !group->property("expand").isValid()) group = group->parentItem();
+        require(group != nullptr, "image or ROI parameter group is missing");
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          group->mapToScene(QPointF(group->width() / 2, group->property("headerHeight").toReal() / 2)).toPoint());
+        require(QTest::qWaitFor([&] { return !group->property("expand").toBool(); }, 1000),
+                "image or ROI group did not collapse for the editor review");
+    }
     for (const auto &parameter : app.parameters())
     {
+        const auto id = parameter.toMap().value("id").toUInt();
+        if (id == testing::parameters::Images || id == testing::parameters::Rois) continue;
         auto *row = findItem(findItem, panel, "parameter_" + parameter.toMap().value("id").toString());
-        require(row && row->isVisible() && row->mapToItem(panel, QPointF(0, row->height())).y() < panel->height(),
-                "parameter state evidence leaves a field outside the visible panel");
+        const bool visible = QTest::qWaitFor([&] {
+            return row && row->isVisible()
+                && row->mapToItem(panel, QPointF(0, row->height())).y() < panel->height();
+        }, 1000);
+        const auto detail = QString("parameter %1 is outside the editor review: bottom=%2, panel=%3, visible=%4")
+            .arg(id).arg(row ? row->mapToItem(panel, QPointF(0, row->height())).y() : -1)
+            .arg(panel->height()).arg(row && row->isVisible()).toStdString();
+        require(visible, detail.c_str());
     }
     auto *labelsRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Labels));
     require(labelsRow != nullptr, "structure row is missing from actual field state review");

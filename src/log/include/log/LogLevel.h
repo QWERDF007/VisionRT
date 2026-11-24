@@ -9,16 +9,8 @@ namespace visionrt
 
 // Production severity. `Off` is a threshold value only: no message carries it, it rejects every
 // new record. The numeric order is the filter order, so a threshold comparison is one comparison.
-enum class LogLevel
-{
-    Trace    = 0,
-    Debug    = 1,
-    Info     = 2,
-    Warn     = 3,
-    Error    = 4,
-    Critical = 5,
-    Off      = 6
-};
+#define VRT_ENUM_FILE "log/LogLevel.def"
+#include <visionrt/contracts/EnumDeclarations.h>
 
 // Stable keys used by the preferences file and the settings window. They are the storage format,
 // so they never follow the UI language; the window owns the translated labels.

@@ -13,7 +13,7 @@
 | --- | --- |
 | SDK 类型、状态与模块 ABI | [Contracts 文档](../3rdparty/VisionRTContracts/docs/README.md) |
 | 工具声明、JSON 读写及名称 | [声明接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[编解码](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[语义名称](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationNames.def) |
-| 公共枚举与 QML/Python 导出 | [枚举源](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[生成器](../3rdparty/VisionRTContracts/tools/export_enums.py)、[Qt 注册](../src/ui/UiTypes.cpp) |
+| 公共枚举与 QML/Python 导出 | [枚举源](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.def)、[原生生成器](../3rdparty/VisionRTContracts/tools/EnumExport.cpp)、[宿主枚举目录](../tools/export_ui_enums.cpp)、[Qt 注册](../src/ui/UiTypes.cpp) |
 | 工具发现及工作台适配 | [工具包](../src/core/ToolPackage.cpp)、[注册表](../src/core/ToolRegistry.cpp)、[集成登记](../src/core/include/core/ToolIntegrations.h) |
 | 工程配置与持久化 | [工程模型](../src/core/include/core/Project.h)、[编辑事务](../src/core/ProjectEditor.cpp)、[存储](../src/core/ProjectStorage.cpp)、[动态契约](../src/core/NodeContracts.cpp) |
 | 执行、快照与读回 | [运行时](../src/runtime/include/runtime/RuntimeEngine.h)、[快照](../src/runtime/include/runtime/Snapshot.h)、[结果展示](../src/ui/ResultPresentation.h) |
@@ -39,7 +39,7 @@
 ## 构建与发行
 
 - [工具脚本索引](../tools/README.md)、[构建入口](../tools/build.cmd)、[默认构建预设](../CMakePresets.json)、[根 CMake](../CMakeLists.txt)、[依赖配置](../tools/dependencies.json)、[子模块来源](../.gitmodules)。
-- [模块构建](../cmake/AddModule.cmake)、[构建身份](../cmake/WriteBuildInfo.cmake)、[部署](../cmake/Deploy.cmake.in)。
+- [模块构建](../cmake/AddModule.cmake)、[构建身份](../cmake/WriteBuildInfo.cmake)、[Git 工作区查询](../3rdparty/VisionRTContracts/cmake/GitWorkspace.cmake)、[原生生成增量验证](../tests/build_incremental_contract.py)、[部署](../cmake/Deploy.cmake.in)。
 - [安装打包](../tools/package_app.py)、[依赖闭包](../tools/runtime_dependencies.py)、[发布证据](../tools/release_evidence.py)、[工具校验器](../tools/visionrt_validate_tool.cpp)。
 - [测试注册与分组](../tests/CMakeLists.txt)、[分组机制](../cmake/AddTest.cmake)、[随包示例](../examples/README.md)。
 

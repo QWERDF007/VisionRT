@@ -43,14 +43,8 @@ struct PythonEnvironment
 //
 // The text is UTF-8 and deliberately Qt-free: this header reaches translation units that include the
 // CPython API, where Qt's keyword macros would rewrite an interpreter structure.
-enum class PythonEnvironmentPhase
-{
-    Unconfigured,  // no interpreter was chosen: a legal setting, not a failure
-    Probing,       // one check is running; Python tools stay unavailable until it answers
-    Ready,         // the bridge runs the selected interpreter
-    Invalid,       // the selected interpreter was rejected; `reason` states exactly why
-    BackendFailed, // the interpreter was accepted but the bridge could not start
-};
+#define VRT_ENUM_FILE "python/PythonEnvironment.def"
+#include <visionrt/contracts/EnumDeclarations.h>
 
 struct PythonEnvironmentStatus
 {

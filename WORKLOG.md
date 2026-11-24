@@ -30,6 +30,43 @@
 - ...
 -->
 
+### 2026-11-24 — 提交原生构建改动
+
+**目标**
+- 提交已验证的原生构建、共享契约及工具仓清理改动。
+
+**当前状态**
+- Contracts 已提交为 8dc07bdc3b5e4c1f6dac40f5cc152df14e831df5，两份检出一致且干净；两个父仓固定相同契约。本次全部改动及认知资产纳入提交，提交身份以 Git 历史为准，尚未推送。
+- 本次只整理账本和 Git 引用，未改变已验证的代码行为；实现及验证详情见下方“原生构建去除 Python 生成依赖”。
+
+**验证证据**
+- 两份 SDK 的暂存树一致，均为 5dedfb4e8ae0c59e2f72a8be73a11d32b841eadd；差异检查通过。
+- 沿用 build/native-final-tests.log 的宿主 12 项、build/native-metadata-tests.log 的 13 项及工具仓 build/native-final-tests.log 的 8 项通过证据；真实运行和安装消费证据见下方条目。
+
+**下一步**
+- 验收使用 build/bin/VisionRT.exe；无待续接代码改动。认知对齐以本轮 terminal_proof 为准。
+
+### 2026-11-24 — 原生构建去除 Python 生成依赖
+
+**目标**
+- 两仓配置和原生编译不执行 Python，统一 C++ 枚举和公共工具错误来源，保留运行时 Python 功能。
+
+**当前状态**
+- Contracts 提供标准库原生生成器和定义表展开；宿主 QML、工具作者 SDK 均使用其产物。公共工具错误由 C++ 定义表统一维护，删除旧 Python 枚举解析器及错误 JSON 源文件。
+- 构建身份改用共享 CMake/Git 查询；桥接仅查找 Development.Embed，并直接链接 pybind11 头和 CPython 库。测试解释器仅在执行测试时使用，原生构建不探测或执行解释器。
+- 默认 build/bin/VisionRT.exe 与工具包已更新；两份 Contracts 改动内容一致，父仓引用均为 df519c35c33008852ef35278124eaf85e9f28d56。本轮未提交或推送，工具仓既有 nlohmann 删除仍保留。
+- 安装流程与参数截图夹具已按当前端口和分组契约更新，截图等待实际折叠布局完成。旧工具仓构建缓存 build/python/visiontools_sdk/errors.json 清理被自动审查拒绝（blocked by policy）；源码已删除，该缓存不被读取或打包，不影响交付。
+
+**验证证据**
+- PATH 中 Python 为零、开发 SDK 中 exe 为零的隔离环境完成两仓构建；宿主构建 VisionRT、visionrt_validate_tool，工具仓完成 CPU 默认构建且 Python 测试开关开启。见 build/native-no-python/environment.log、host-configure.log、host-build.log，以及工具仓 build/native-no-python-configure.log、native-no-python-build.log。
+- 默认原生产物重建通过，见 build/native-final-build.log、native-final-consumer-build.log 及工具仓 build/native-final-build.log。原生生成测试覆盖关键字、消息转义、中文输出路径、定义变更增量重建和无变化时不重写；公共错误测试先复现 1006 消息不一致，现已验证全部十个错误。
+- `tools/build.cmd ctest --test-dir build -C Release --tests-from-file F:/Projects/VisionRT/build/native-final-selection.txt --output-on-failure --timeout 120` 的 12 项全部通过，含 SDK 隔离安装、真实 Python 安装消费、QML 工作台、示例及嵌套构建；见 build/native-final-tests.log、build/evidence/native-host.xml。元数据脚本 13 项通过，见 build/native-metadata-tests.log；工具侧 8 项通过，见其 build/native-final-tests.log。
+- 工具包以 rtx40-build profile 安装至 build/bin/tools-package，接受 30 个声明、安装消费者实际执行 13 个 CPU 工具，见工具仓 build/native-package.log。默认程序打开随包线缆工程、执行并截图，以 0 退出；已检查 build/evidence/native-enum-workbench.png。
+- 两份 SDK 改动文件逐一 SHA256 比较无差异，三仓差异检查通过；实现和验证入口见 docs/README.md。
+
+**下一步**
+- 验收入口为 build/bin/VisionRT.exe；提交时先提交 Contracts，并让两个父仓固定同一新提交，再提交父仓改动。认知对齐以本轮 terminal_proof 为准。
+
 ### 2026-11-24 — 工程文件统一使用 JSON 后缀
 
 **目标**

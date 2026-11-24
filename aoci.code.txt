@@ -6,14 +6,14 @@
 .gitignore[FV5T]: F:排除构建、缓存、本机宿主配置、临时交付文件和本地方案 | R:code:.aoci/.gitignore | A:- | S:AOCI认知资产保持可追踪，只有宿主配置按机器忽略
 .gitmodules[FV7T]: F:声明六个依赖子模块的来源与跟踪分支 | R:code:CMakeLists.txt | A:- | S:adaptagrams使用用户派生仓库的visionrt分支；实际检出版本由父仓gitlink固定
 AGENTS.md[SG8S]: F:定义项目工程纪律、任务账本规则及AOCI认知使用边界 | R:code:WORKLOG.md,code:aoci.meta.txt | A:- | S:索引语义须依据真实证据由模型创作，专项流程以实时Guide和机器契约为准
-CMakeLists.txt[FV9S]: F:编排平台模块、桌面入口、校验器、依赖部署、示例同步和测试的根构建 | R:code:cmake/AddModule.cmake,code:tests/CMakeLists.txt,code:cmake/Deploy.cmake.in | A:VisionRT,visionrt_validate_tool,visionrt_examples,deploy | S:版本只由project声明；Python桥接仅为构建依赖，不进入宿主启动链接；CTest先于Contracts启用；示例统一清空后复制，避免退役文件残留
+CMakeLists.txt[FV9S]: F:编排模块、桌面入口、原生枚举生成器、校验器、部署和测试的根构建 | R:code:cmake/AddModule.cmake,code:tools/export_ui_enums.cpp,code:tests/CMakeLists.txt,code:cmake/Deploy.cmake.in | A:VisionRT,visionrt_enum_export,visionrt_validate_tool,visionrt_examples,deploy | S:版本只由project声明；桥接仅为构建依赖，不进入宿主启动链接；CTest先于Contracts启用；示例清空后复制，避免退役文件残留
 CMakePresets.json[FV5T]: F:提供启用或关闭推理的Release配置、构建与测试预设 | R:code:CMakeLists.txt | A:release,cpu-release | S:两个预设共享build目录
 LICENSE[SG3M]: F:提供项目Apache 2.0许可正文 | R:- | A:- | S:-
 README.md[SG4T]: F:介绍工业视觉低代码平台并指向工程文档与常用构建入口 | R:code:docs/README.md,code:tools/build.cmd | A:- | S:-
 WORKLOG.md[SG6L]: F:维护项目唯一任务账本，记录交付目标、当前状态、验证证据和续接入口 | R:code:AGENTS.md | A:- | S:固定示例后按最新在前排列；仅需用户决定的事项进入顶部待裁决，未验证内容不得记为完成
 
 ===/<repository>/cmake/===
-AddModule.cmake[FV8T]: F:统一创建模块DLL、导出头、日志接入、安装规则和模块元数据清单 | R:code:cmake/ModuleLogging.cpp.in,code:cmake/WriteBuildInfo.cmake | A:visionrt_add_module,visionrt_module_logging,visionrt_write_module_catalog | S:模块编译默认隐藏符号；元数据由链接后实际产物生成，模块清单从已注册目标派生
+AddModule.cmake[FV8T]: F:统一创建模块DLL、导出头、日志接入、安装规则和模块元数据清单 | R:code:cmake/ModuleLogging.cpp.in,code:cmake/WriteBuildInfo.cmake | A:visionrt_add_module,visionrt_module_logging,visionrt_write_module_catalog | S:include目录输入仅作头文件，定义表不得交给DLL链接器；模块默认隐藏符号；元数据取链接后实际产物，清单从注册目标派生
 AddTest.cmake[FQ7S]: F:注册契约测试、成本分组、运行环境与聚合构建目标 | R:code:tests/CMakeLists.txt | A:visionrt_contract,visionrt_group_test,visionrt_audit_test_groups | S:UI测试共享桌面资源锁；测试目标不参与默认构建；空组和不存在的前置目标在配置时失败
 Config3rdparty.cmake[FV4T]: F:为Taskflow头文件库提供接口目标 | R:code:CMakeLists.txt | A:visionrt_taskflow | S:-
 ConfigBuildTree.cmake[FV5T]: F:统一构建树bin、lib输出路径与Debug名称后缀 | R:code:CMakeLists.txt | A:CMAKE_RUNTIME_OUTPUT_DIRECTORY,CMAKE_DEBUG_POSTFIX | S:MSVC各配置输出到同层目录，构建树相互隔离
@@ -21,7 +21,7 @@ ConfigCompiler.cmake[FV6T]: F:设置编译警告、标准预处理器和MSVC动�
 ConfigDependencyDefaults.cmake[FV7T]: F:从统一依赖清单与显式配置解析本机依赖目录 | R:code:tools/dependencies.json | A:visionrt_dependency_default,visionrt_resolve_path | S:优先级为CMake变量、环境变量、候选路径、平台清单默认值；仅返回存在且满足所需文件的路径
 ConfigLibavoid.cmake[FV5T]: F:从adaptagrams子模块源码构建静态连线避障库 | R:code:.gitmodules | A:visionrt_avoid | S:公开LIBAVOID_NO_DLL，避免消费者按动态库导入
 ConfigOpenCV.cmake[FV7T]: F:定位OpenCV组件并从导入目标生成运行库清单 | R:code:cmake/ConfigDependencyDefaults.cmake | A:VISIONRT_OPENCV_RUNTIME_DLLS,VISIONRT_OPENCV_BIN | S:运行DLL通过目标生成表达式匹配实际构建配置，不能猜测Release或Debug文件名
-ConfigPython.cmake[FV7T]: F:解析开发Python解释器、嵌入依赖与pybind11并收集测试DLL | R:code:cmake/ConfigDependencyDefaults.cmake,code:src/python_bridge/CMakeLists.txt | A:VISIONRT_PYTHON_BIN,PYTHON_DLLS | S:构建解释器路径只供开发测试，应用运行环境由用户选择，发行包不携带解释器
+ConfigPython.cmake[FV7T]: F:解析CPython嵌入开发资源、pybind11头、测试解释器路径及运行DLL | R:code:cmake/ConfigDependencyDefaults.cmake,code:src/python_bridge/CMakeLists.txt | A:VISIONRT_TEST_PYTHON_EXECUTABLE,VISIONRT_PYTHON_BIN,PYTHON_DLLS | S:只查找Development.Embed并启用PYBIND11_NOPYTHON，配置不执行解释器；测试路径仅供开发测试，应用运行环境仍由用户选择
 ConfigQT.cmake[FV6T]: F:解析Qt依赖、启用自动代码生成并定位部署工具 | R:code:cmake/ConfigDependencyDefaults.cmake | A:VISIONRT_QT_BIN,VISIONRT_WINDEPLOYQT | S:Qt最低要求6.5，QTP0004仅在6.8及以上启用
 ConfigQuickUI.cmake[FV5T]: F:复用QuickUI子模块或导入包并确定QML运行资源目录 | R:code:.gitmodules | A:VISIONRT_QUICKUI_DLL,VISIONRT_QUICKUI_QML_ROOT | S:优先构建本地子模块；导入目标与源码目标使用不同资源定位
 ConfigSpdlog.cmake[FV6T]: F:从固定子模块构建仅供内部模块链接的spdlog静态库 | R:code:.gitmodules,code:cmake/AddModule.cmake | A:spdlog::spdlog | S:关闭示例、测试、安装、共享库与外部fmt，不在运行期下载依赖
@@ -31,15 +31,15 @@ GetGitRevisionDescription.cmake[XV5M]: F:读取Git引用、提交与分支并提
 GetGitRevisionDescription.cmake.in[FV5T]: F:为版本配置解析普通引用、packed-refs或游离HEAD的提交哈希 | R:code:cmake/GetGitRevisionDescription.cmake | A:HEAD_REF,HEAD_HASH | S:引用文件经configure_file复制以进入CMake依赖追踪
 ModuleLogging.cpp.in[IO6T]: F:生成各DLL默认日志器的注册与恢复实现 | R:code:cmake/ModuleLogging.h.in,code:src/common/include/common/LoggerBinding.h | A:registerLogger,unregisterLogger | S:每个模块保存原默认logger，解绑时从本模块registry移除共享logger再恢复原值
 ModuleLogging.h.in[IO5T]: F:生成带模块导出标记的日志器注册接口 | R:code:cmake/ModuleLogging.cpp.in | A:registerLogger,unregisterLogger | S:-
-PrintConfig.cmake[XV3T]: F:输出本次配置的版本、编译器、依赖和构建开关摘要 | R:code:CMakeLists.txt | A:- | S:-
+PrintConfig.cmake[XV3T]: F:输出版本、编译器、CPython开发库、运行目录和构建开关摘要 | R:code:CMakeLists.txt | A:- | S:-
 VersionBuildTime.h.in[FV4T]: F:生成仅供版本实现使用的构建时间宏 | R:code:cmake/ConfigVersion.cmake | A:BUILD_TIME | S:-
 VersionDef.h.in[LV6S]: F:生成版本分量、整数编码、构建字符串和API选择宏 | R:code:cmake/ConfigVersion.cmake,code:cmake/ConfigCompiler.cmake | A:MAKE_VERSION,VERSION,VERSION_STRING,VERSION_API | S:整数版本按百万、万、百、一位组合；变参展开依赖MSVC标准预处理器
 VersionUtils.h.in[FV4T]: F:生成宿主与Contracts提交、分支及版本内部宏 | R:code:cmake/ConfigVersion.cmake | A:COMMIT,BRANCH,CONTRACTS_VERSION | S:-
-WriteBuildInfo.cmake[OV7S]: F:在构建完成阶段写入组件版本、Git身份、dirty与产物时间元数据 | R:code:cmake/check_git_workspace.py,code:cmake/AddModule.cmake | A:COMPONENT,OUTPUT,SOURCE_FILE,SCAN_DIR,RELEASE_BUILD | S:发布模式拒绝未知或脏候选；优先取实际产物修改时刻，不能用配置时刻冒充构建完成
-check_git_workspace.py[XV6S]: F:用NUL分隔Git状态判定组件提交、分支及生产输入是否干净 | R:code:cmake/WriteBuildInfo.cmake | A:check_git_workspace,is_whitelisted | S:同时检查重命名前后路径与未跟踪文件；只豁免指定账本和文档路径，查询失败保留unknown
+WriteBuildInfo.cmake[OV7T]: F:通过共享CMake与Git查询生成组件身份、dirty及实际产物时间元数据 | R:code:cmake/AddModule.cmake,code:3rdparty/VisionRTContracts/cmake/GitWorkspace.cmake | A:COMPONENT,OUTPUT,REPO_DIR,SOURCE_FILE,SCAN_DIR,RELEASE_BUILD | S:原生构建不调用Python；发布拒绝脏或未知候选；优先取产物修改时刻，不能用配置时间冒充构建完成
+check_git_workspace.py[XV6T]: F:为Python打包代码适配共享CMake的Git工作区查询 | R:code:3rdparty/VisionRTContracts/cmake/GitWorkspace.cmake,code:tools/package_app.py | A:check_git_workspace | S:Git状态策略只在共享CMake实现；失败保留unknown，不把查询失败判成干净
 
 ===/<repository>/docs/===
-README.md[SG7T]: F:索引共享契约、工程文件、工作台数值类型展示、ROI及构建验证入口 | R:code:WORKLOG.md,code:CMakePresets.json,code:src/ui/ValueDisplay.cpp,code:src/ui/DisplayTypes.cpp | A:- | S:只维护入口，运行证据归任务账本；实现事实指向源码，避免第二套定义
+README.md[SG7T]: F:索引共享契约、工作台展示交互、原生生成与构建验证入口 | R:code:WORKLOG.md,code:CMakePresets.json,code:tools/export_ui_enums.cpp,code:src/ui/ValueDisplay.cpp | A:- | S:只维护入口，运行证据归任务账本；实现事实指向源码，避免第二套定义
 
 ===/<repository>/examples/01_基础入门/01_图像读取/===
 README.md[SA3T]: F:说明双图批次读取示例的操作及预期索引与总数 | R:- | A:- | S:-
@@ -150,7 +150,8 @@ LogModel.cpp[IO5S]: F:将日志服务批次维护为有界QML行模型并支持�
 LogService.cpp[RO8L]: F:实现异步日志、每日文件、UI邮箱、Qt桥接及重复错误聚合 | R:code:src/log/include/log/LogService.h,code:src/common/include/common/LoggerBinding.h | A:LogService::start,LogService::shutdown,LogService::write,boundedSingleLine | S:文件与窗口共用格式；队列超限丢最旧；首个错误立即发出、后续重复聚合；关闭先封入口再排空并恢复Qt handler
 
 ===/<repository>/src/log/include/log/===
-LogLevel.h[CO5T]: F:定义有序日志等级及持久化键转换接口 | R:code:src/log/LogLevel.cpp | A:LogLevel,logLevelKey,parseLogLevel | S:Off仅为阈值，不是消息等级；键不随界面语言变化
+LogLevel.def[FO5T]: F:集中声明供C++和QML展开的日志等级与整数值 | R:code:src/log/include/log/LogLevel.h,code:tools/export_ui_enums.cpp | A:LogLevel | S:数字顺序参与严重度比较；Off仅为过滤阈值
+LogLevel.h[CO5T]: F:展开日志等级定义并公开持久化键转换接口 | R:code:src/log/include/log/LogLevel.def,code:src/log/LogLevel.cpp | A:LogLevel,logLevelKey,parseLogLevel | S:Off不是消息等级；持久化键不随界面语言变化
 LogModel.h[LO5T]: F:公开有界日志列表模型、容量和文本复制接口 | R:code:src/log/LogModel.cpp | A:LogModel,LineRole,LevelRole | S:模型直接保存服务格式化后的整行，不重新拼接日志
 LogService.h[LO8M]: F:声明进程级日志服务、配置、消息来源及有界文本接口 | R:code:src/log/LogService.cpp | A:LogService,LogConfig,LogRecord,LogSource,BoundedText | S:生产者共享锁与关闭独占锁形成排空屏障；窗口隐藏不复制GUI数据；阈值变化只影响新消息
 
@@ -172,11 +173,12 @@ PythonProbe.cpp[IE7M]: F:在后台以隔离子进程探测所选CPython、NumPy�
 
 ===/<repository>/src/python/include/python/===
 PythonBackend.h[LE7T]: F:公开Python桥接生命周期、工厂、环境状态及实际模块取证接口 | R:code:src/python/PythonBackend.cpp | A:PythonBackend,PythonRuntimeFacts | S:不回退编译期或系统解释器；刷新使用调用方传入的环境状态快照
-PythonEnvironment.h[DE7S]: F:定义解释器探测事实、唯一环境状态与路径身份比较 | R:code:src/python/PythonProbe.cpp,code:src/python/PythonBackend.cpp | A:PythonEnvironment,PythonEnvironmentStatus,PythonEnvironmentPhase,environmentPathEquals | S:Qt无关以免宏污染CPython头；Ready才可执行；路径事实来自所选解释器而非本机猜测
+PythonEnvironment.def[FE6T]: F:集中声明所选Python环境的阶段枚举与整数值 | R:code:src/python/include/python/PythonEnvironment.h,code:tools/export_ui_enums.cpp | A:PythonEnvironmentPhase | S:-
+PythonEnvironment.h[DE7T]: F:定义解释器探测事实、唯一环境状态与路径身份比较并展开阶段定义 | R:code:src/python/include/python/PythonEnvironment.def,code:src/python/PythonProbe.cpp,code:src/python/PythonBackend.cpp | A:PythonEnvironment,PythonEnvironmentStatus,PythonEnvironmentPhase,environmentPathEquals | S:Qt无关以免宏污染CPython头；Ready才可执行；路径事实来自所选解释器而非本机猜测
 PythonProbe.h[LE6T]: F:公开解释器选择解析、同步探测及单任务后台探测接口 | R:code:src/python/PythonProbe.cpp | A:PythonProbe,PythonProbeResult,resolvePythonExecutable | S:空选择合法；目录有多个候选时要求用户明确文件，不自动选择
 
 ===/<repository>/src/python_bridge/===
-CMakeLists.txt[FV6T]: F:构建CPython桥接DLL并把受管包加载器嵌入生成头 | R:code:src/python_bridge/managed_packages.py | A:visionrt_python_bridge | S:脚本作为配置依赖，修改会触发重新配置
+CMakeLists.txt[FV6T]: F:用pybind11头与CPython开发库构建桥接DLL并嵌入受管包加载器 | R:code:cmake/ConfigPython.cmake,code:src/python_bridge/managed_packages.py | A:visionrt_python_bridge | S:加载器源码只作为配置数据读取，不在构建期执行；源码变化触发重新配置
 PythonBridge.cpp[IE7S]: F:实现宿主动态解析的桥接入口和解释器、工厂生命周期转换 | R:code:src/python_bridge/include/python_bridge/PythonBridgeApi.h,code:src/python_bridge/PythonRuntime.cpp | A:vrt_python_create,vrt_python_destroy,vrt_python_refresh,vrt_python_factory | S:工厂以调用方存储placement构造，并由创建它的桥接模块销毁
 PythonImages.cpp[ID7M]: F:在OpenCV图像与NumPy数组之间建立持有底层存储的视图 | R:code:src/python_bridge/PythonStorage.cpp,code:src/python_bridge/PythonImages.h | A:imageViews,imageHeaders | S:capsule及缓冲租约延长像素存储寿命，释放Python缓冲时持有GIL
 PythonImages.h[LD5T]: F:声明图像批次与NumPy列表的桥接入口 | R:code:src/python_bridge/PythonImages.cpp | A:imageViews,imageHeaders | S:-
@@ -202,8 +204,10 @@ RuntimeInternal.h[RW7S]: F:定义冻结运行、轮上下文、分离普通参�
 ===/<repository>/src/runtime/include/runtime/===
 NodeActivity.h[RW6S]: F:传递带运行身份的节点进出执行事件并合并GUI唤醒 | R:code:src/runtime/RuntimeEngine.cpp | A:NodeActivityEvent,ActivityMailbox | S:邮箱溢出只影响新鲜度；最终状态必须从pollLatest快照恢复，事件不携带业务数据
 Receiver.h[LW7T]: F:定义跨流程接收请求、消费游标及只读结果通道 | R:code:src/runtime/Receiver.cpp,code:src/tools/ReceiveTool.cpp | A:IResultReader,ReceiveRequest,ReceiveCursor,ReceiveOutcome | S:传输保留源业务状态与已有值，是否接受该值由接收工具裁决
-RuntimeEngine.h[LW8S]: F:公开运行状态机、快照拉取、读回与完成确认协议 | R:code:src/runtime/RuntimeEngine.cpp | A:RuntimeEngine,RuntimeUpdate,RuntimeReadback,RuntimeCompletion,RuntimeState | S:工作线程不访问QObject；回调仅唤醒；完成需GUI确认后才释放Busy
-Snapshot.h[RD8S]: F:定义节点诊断、调用阶段、发布身份与不可变结果槽及可取消等待 | R:code:src/runtime/NodeRuntime.cpp,code:src/runtime/Receiver.cpp | A:NodeSnapshot,ResultSlot,NodeDiagnostic,InputUse | S:快照绑定generation/session/round/publication与执行修订；invocation区分Execute和Train，业务状态与框架执行处置独立
+RuntimeEngine.def[FW6T]: F:集中声明运行模式、运行状态与运行诊断阶段的枚举数值 | R:code:src/runtime/include/runtime/RuntimeEngine.h,code:tools/export_ui_enums.cpp | A:RunMode,RuntimeState,RuntimePhase | S:-
+RuntimeEngine.h[LW8S]: F:公开运行状态机、快照拉取、读回和完成确认协议并展开运行枚举 | R:code:src/runtime/include/runtime/RuntimeEngine.def,code:src/runtime/RuntimeEngine.cpp | A:RuntimeEngine,RuntimeUpdate,RuntimeReadback,RuntimeCompletion,RuntimeState | S:工作线程不访问QObject；回调仅唤醒；完成需GUI确认后才释放Busy
+Snapshot.def[FD6T]: F:集中声明节点执行处置与调用阶段的枚举数值 | R:code:src/runtime/include/runtime/Snapshot.h,code:tools/export_ui_enums.cpp | A:NodeDisposition,NodePhase | S:-
+Snapshot.h[RD8S]: F:定义节点诊断、发布身份、不可变结果槽及可取消等待并展开节点阶段枚举 | R:code:src/runtime/include/runtime/Snapshot.def,code:src/runtime/NodeRuntime.cpp,code:src/runtime/Receiver.cpp | A:NodeSnapshot,ResultSlot,NodeDiagnostic,InputUse | S:快照绑定generation/session/round/publication与执行修订；invocation区分Execute和Train，业务状态与框架执行处置独立
 
 ===/<repository>/src/tools/===
 CMakeLists.txt[FV4T]: F:构建接收和合流宿主工具模块 | R:code:cmake/AddModule.cmake | A:visionrt_tools | S:-
@@ -230,7 +234,7 @@ AppControllerRouting.cpp[IU5T]: F:把QML节点几何与有效绑定交给连线�
 AppControllerTraining.cpp[AU8L]: F:协调训练草稿、记录ROI、参数建议、业务实例后台train及模型保存和共享结果展示 | R:code:src/ui/TrainingSession.cpp,code:src/ui/TrainingAssets.cpp,code:src/ui/AppControllerAssist.cpp,code:src/ui/ResultPresentation.h | A:addTrainingImage,applyTraining,setTrainingMode,requestTraining,completeTraining,publishTraining | S:训练读取声明原帧及有效色序；画布和文本共写Record字段；完成时持有契约副本，避免发布失效引用；产物匹配后写修订并提交训练参数和模型路径；保存失败保留旧模型、展示失败结果；叠加只取共享ROI输出，宿主不解析模型
 AppController_p.h[AU7L]: F:集中控制器服务、参数投影、展示与训练交互的所有权及内部协调接口 | R:code:src/ui/AppController.cpp,code:src/ui/ResultPresentation.h,code:src/ui/TrainingSession.cpp | A:AppController::Impl,workbench::metadata | S:展示与ROI草稿各有唯一所有者；训练草稿按节点保留，待训练身份阻止编辑；有效契约缓存随工程及执行修订失效
 AssistPreview.cpp[RU7L]: F:以单工作线程和有界待办执行定位预览、确认及业务训练，并异步释放实例 | R:code:src/ui/include/ui/AssistPreview.h,code:src/ui/AppControllerAssist.cpp,code:src/ui/AppControllerTraining.cpp | A:AssistPreview::request,AssistPreview::configure,AssistPreview::releaseSession,AssistPreview::shutdown | S:训练新建业务实例且不初始化，以Tool级参数调用train；悬停合并，epoch筛旧结果，释放须GUI确认才解除Busy
-CMakeLists.txt[FV6T]: F:构建工作台、共享数值展示、图像视口、ROI和训练发布模块，生成枚举并嵌入QML | R:code:cmake/ConfigLibavoid.cmake,code:src/ui/UiTypes.cpp | A:visionrt_ui | S:QML以NO_PLUGIN嵌入同一DLL，枚举从实际头文件生成，不另维护数值
+CMakeLists.txt[FV6T]: F:构建工作台、数值展示、图像ROI与训练模块，用原生目标生成枚举并嵌入QML | R:code:tools/export_ui_enums.cpp,code:src/ui/UiTypes.cpp,code:cmake/ConfigLibavoid.cmake | A:visionrt_ui | S:QML以NO_PLUGIN嵌入同一DLL；生成头依赖原生生成器目标，不在配置阶段执行Python
 Color.cpp[CU4T]: F:初始化节点连线及输入蓝色、输出紫色、辅助线和标签颜色以及ROI选中填充透明度 | R:code:src/ui/include/ui/Color.h | A:VisionRTColor::getInstance,VisionRTColor::create | S:单例由C++拥有，QML不得回收
 Diagnostics.cpp[IO6M]: F:将工具、节点、运行与存储诊断转换为完整中文消息及结构化JSON | R:code:src/ui/include/ui/Diagnostics.h | A:statusDisplay,diagnosticMessage,diagnosticObject,diagnosticJson | S:message与detail分别保留，不从消息文本反推错误分类；大身份数字用字符串编码
 DisplayConverter.cpp[IU7L]: F:后台转换图像批次为QImage并保留原始OpenCV类型，按请求身份丢弃过期结果 | R:code:src/ui/include/ui/DisplayConverter.h | A:DisplayConverter::requestBatch,DisplayConverter::convert,DisplayConverter::waitForReads | S:仅一个运行请求和一个最新待办；8位颜色保真，归一化图像仍带原类型；非有限像素显示黑色，源变更前排空读者
@@ -284,7 +288,8 @@ ToolTreeModel.h[LU5T]: F:定义分类工具树的角色、过滤和可用性更�
 TrainingAssets.h[LU8T]: F:公开原帧、模型字节和指定路径的发布修订，以及保存时资产复制接口 | R:code:src/ui/TrainingAssets.cpp | A:Revision,SaveAssets,writeFrame,readFrame,assetName,projectBase | S:Revision及SaveAssets不可复制，accept前持有本次修订并在拒绝或异常时清理；目的目录规则由发布和另存共用，模型引用调整复用注册声明
 TrainingSession.h[LU6S]: F:定义按统一端口区分Tool与Record作用域的训练草稿、原帧和发布投影接口 | R:code:src/ui/TrainingSession.cpp | A:TrainingSession,TrainingDraftImage,TrainingDraftRecord,trainingFieldValueOf,portValueOf | S:记录按稳定图片编号引用独立原始像素；缩略图仅供显示；Tool参数源于节点，未应用编辑不落盘，脏草稿跟随另存路径
 UiPreferences.h[LC6T]: F:公开平台设置、用户交互偏好及共享设置文档写入接口 | R:code:src/ui/UiPreferences.cpp | A:Settings,SettingsState,UiPreferences | S:空解释器是合法未配置；FirstRun与Unreadable必须区分，损坏文件不能覆盖
-UiState.h[FU5T]: F:集中定义节点状态、目录类型、端口关系和界面决策枚举 | R:code:src/ui/UiTypes.cpp | A:NodeState,CatalogEntryKind,RelationKind,UnsavedDecision,SettingsPage | S:QML值从此处生成，不单独维护数字
+UiState.def[FU5T]: F:集中声明节点状态、目录类型、端口关系、未保存决策与设置页的枚举数值 | R:code:src/ui/include/ui/UiState.h,code:tools/export_ui_enums.cpp | A:NodeState,CatalogEntryKind,RelationKind,UnsavedDecision,SettingsPage | S:-
+UiState.h[FU5T]: F:向宿主代码公开由统一定义表展开的界面状态与决策枚举 | R:code:src/ui/include/ui/UiState.def,code:src/ui/UiTypes.cpp | A:NodeState,CatalogEntryKind,RelationKind,UnsavedDecision,SettingsPage | S:-
 UiTypes.h[LU4T]: F:声明工作台QML类型注册入口 | R:code:src/ui/UiTypes.cpp | A:registerUiTypes | S:-
 ValueDisplay.h[LU6T]: F:公开统一显示精度、类型化值及单条ROI记录的文本展示接口 | R:code:src/ui/ValueDisplay.cpp,code:src/core/ValueJson.cpp | A:kValueDisplayDecimals,displayValueText,displayRegionText | S:用于显示，持久化和完整复制使用原始值编码；区域记录由调用边界保证有效
 WireRouter.h[LU5T]: F:定义节点几何、路由结果及正交连线计算接口 | R:code:src/ui/WireRouter.cpp | A:NodeBounds,RoutedWire,WireRouter | S:失败路径携带错误，不返回替代路线
@@ -345,9 +350,10 @@ archive_evidence.py[XQ4T]: F:把构建证据目录中的普通文件复制归档
 build.cmd[XV7M]: F:初始化MSVC x64环境并代理命令或编排配置、分组测试和打包 | R:code:CMakeLists.txt,code:tools/package_app.py | A:--config,--group,--test,--package,--build-dir | S:命令代理返回实际退出码；开发优先按成本组构建和验证
 dependencies.json[FV6T]: F:集中声明Qt、OpenCV和开发Python的本机默认路径及部署模式 | R:code:cmake/ConfigDependencyDefaults.cmake,code:tools/dependency_utils.py | A:dependencies | S:Python默认值是构建依赖，不代表发行应用运行环境
 dependency_utils.py[XV6M]: F:共享严格JSON、依赖路径解析、文件链接与DLL配置筛选原语 | R:code:tools/dependencies.json | A:load_dependencies,resolve_dependency_root,link_file,link_dir,dll_matches_config | S:成对识别Debug与Release库，避免把名称尾部d误判为调试依赖
+export_ui_enums.cpp[XV6T]: F:组合协议、界面、运行、Python环境和日志定义表并调用共享原生导出器 | R:code:src/ui/CMakeLists.txt,code:3rdparty/VisionRTContracts/tools/EnumExport.cpp | A:main,wmain | S:只编译定义表，不链接Qt或业务DLL，避免生成器与被生成模块形成构建循环；Windows入口接收宽字符路径
 link_dependencies.py[OV5M]: F:把开发依赖、Qt运行资源和工具包链接到构建bin目录 | R:code:tools/dependency_utils.py,code:tools/dependencies.json | A:link_external_dependencies,link_qt_runtime,link_tools | S:仅用于开发运行树，不等同可分发安装包
 package_app.py[OV8L]: F:生成并校验便携安装，部署工具ZIP、Qt、运行依赖和JSON示例并记录文件所有权 | R:code:tools/runtime_dependencies.py,code:tools/dependency_utils.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,example_project_problems,main | S:清理只处理已验证旧清单且保留用户目录；ZIP先暂存校验再替换；拒绝捆绑解释器及启动链导入CPython；校验成功才写安装清单；示例检查只读分类和示例两级目录中的JSON
-release_evidence.py[XV7M]: F:汇总双仓提交、Contracts身份、构建事实、包证据及解释器实际加载报告 | R:code:tools/package_app.py,code:src/main.cpp | A:audit,summarize_report,main | S:缺少必要场景、Contracts不同或实际NumPy与解释器越出所选环境时不标记complete并退出2；allow-dirty只能作本地核对
+release_evidence.py[XV7M]: F:汇总双仓提交、Contracts身份、构建及测试解释器配置、包证据与实际加载报告 | R:code:tools/package_app.py,code:src/main.cpp | A:audit,build_facts,summarize_report,main | S:缺少必要场景、Contracts不同或实际NumPy与解释器越出所选环境时不标记complete并退出2；allow-dirty只能作本地核对
 runtime_dependencies.py[XV7S]: F:读取模块清单和PE导入表，计算随包依赖闭包与CPython启动链违规 | R:code:tools/package_app.py,code:cmake/AddModule.cmake | A:load_modules,runtime_closure,read_pe_imports,python_runtime_imports | S:同时读取普通和延迟导入；仅从宿主可达的链判断启动CPython，动态加载的桥接不自动算违规
 verify_ui_notifications.cjs[TU6T]: F:从CTest环境启动CDB取证静默通知、像素读取、视口销毁和训练写入调用 | R:code:tests/ui_notifications_contract.cpp,code:tests/viewport_lifetime_contract.cpp,code:tests/workbench_training_publish_contract.cpp | A:capture | S:要求Windows及匹配PDB；像素访问含负对照，草稿和拒绝阶段训练写入为零、成功发布一次，不能只看退出码
 visionrt_validate_tool.cpp[EE7S]: F:提供工具声明、模块索引、整包及实际原生工厂注册的命令行校验 | R:code:src/core/ToolPackage.cpp,code:src/plugins/PluginLoader.cpp | A:--package,--index,--emit-normalized-json,--load | S:load只用于package且不创建工具实例或加载模型；参数错误退出1，校验失败退出2

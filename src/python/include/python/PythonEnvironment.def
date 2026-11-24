@@ -1,0 +1,7 @@
+VRT_ENUM_BEGIN(PythonEnvironmentPhase, int)
+VRT_ENUM_VALUE(Unconfigured, 0)
+VRT_ENUM_VALUE(Probing, 1)
+VRT_ENUM_VALUE(Ready, 2)
+VRT_ENUM_VALUE(Invalid, 3)
+VRT_ENUM_VALUE(BackendFailed, 4)
+VRT_ENUM_END(PythonEnvironmentPhase)

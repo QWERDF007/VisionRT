@@ -16,6 +16,7 @@ function(visionrt_add_module module)
     cmake_parse_arguments(ARG "" "" "SOURCES;PUBLIC_LIBRARIES;PRIVATE_LIBRARIES" ${ARGN})
     set(target visionrt_${module})
     file(GLOB_RECURSE headers CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/include/*")
+    set_source_files_properties(${headers} PROPERTIES HEADER_FILE_ONLY TRUE)
     add_library(${target} SHARED ${ARG_SOURCES} ${headers})
     string(TOUPPER "${module}" module_upper)
     set(export_header "${CMAKE_CURRENT_BINARY_DIR}/include/${module}/Export.h")
@@ -47,12 +48,10 @@ function(visionrt_add_module module)
         COMMAND "${CMAKE_COMMAND}"
             -DCOMPONENT=${target}
             -DVERSION=${PROJECT_VERSION}${PROJECT_VERSION_SUFFIX}
-            -DCOMMIT=${REPO_COMMIT} -DBRANCH=${REPO_BRANCH}
             -DREPO_DIR=${CMAKE_SOURCE_DIR}
             -DSOURCE_FILE=$<TARGET_FILE:${target}>
             -DOUTPUT=$<TARGET_FILE_DIR:${target}>/${metadata}
             -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
-            -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         VERBATIM)
     install(FILES "$<TARGET_FILE_DIR:${target}>/${metadata}"

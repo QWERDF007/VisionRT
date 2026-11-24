@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-20T13:34:27Z",
-  "updated_at": "2026-11-24T06:20:48Z",
+  "updated_at": "2026-11-24T13:54:55Z",
   "files": {
     ".clang-format": {
       "role": "index",
@@ -35,9 +35,9 @@
     },
     "CMakeLists.txt": {
       "role": "index",
-      "sha256": "f95e761a3c547c499624af39933985227f160a34c720a9c86d1d030f6b71109b",
-      "size": 6016,
-      "normalized_sha256": "f95e761a3c547c499624af39933985227f160a34c720a9c86d1d030f6b71109b"
+      "sha256": "c8d3ff32c529dfa5ef0c8661e04aff66651ed12e89c4acd821ad3e678911beb1",
+      "size": 6002,
+      "normalized_sha256": "c8d3ff32c529dfa5ef0c8661e04aff66651ed12e89c4acd821ad3e678911beb1"
     },
     "CMakePresets.json": {
       "role": "index",
@@ -59,15 +59,15 @@
     },
     "WORKLOG.md": {
       "role": "index",
-      "sha256": "cc1a815df79e473a659d91298e95bbf541eb272c9cabdc9effba4ad2d2d4be2c",
-      "size": 540233,
-      "normalized_sha256": "cc1a815df79e473a659d91298e95bbf541eb272c9cabdc9effba4ad2d2d4be2c"
+      "sha256": "50a10a15d996d25cc10a32f9f38f6d6e3a6a051734f22c2815a830e65bbab3ed",
+      "size": 544280,
+      "normalized_sha256": "50a10a15d996d25cc10a32f9f38f6d6e3a6a051734f22c2815a830e65bbab3ed"
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "7359a002e041edaf1bd4f4aa074082d568f17558142a2f9050f4329560929f06",
-      "size": 82542,
-      "normalized_sha256": "7359a002e041edaf1bd4f4aa074082d568f17558142a2f9050f4329560929f06"
+      "sha256": "a186395b6c7fe2c01f51c407c57d5ae7fba1f27e7b56e7914c8ea5079b0e02f2",
+      "size": 84645,
+      "normalized_sha256": "a186395b6c7fe2c01f51c407c57d5ae7fba1f27e7b56e7914c8ea5079b0e02f2"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1334,9 +1334,9 @@
     },
     "cmake/AddModule.cmake": {
       "role": "index",
-      "sha256": "76db59f52d88d28e171306e9d1ee9e6951d5e8d00af03d15f3596a8c07ff2ffd",
-      "size": 4232,
-      "normalized_sha256": "76db59f52d88d28e171306e9d1ee9e6951d5e8d00af03d15f3596a8c07ff2ffd"
+      "sha256": "669320c56101b691af81b8f54ccfdca50cf1898ee9d7532b70e33f5c16963777",
+      "size": 4195,
+      "normalized_sha256": "669320c56101b691af81b8f54ccfdca50cf1898ee9d7532b70e33f5c16963777"
     },
     "cmake/AddTest.cmake": {
       "role": "index",
@@ -1382,9 +1382,9 @@
     },
     "cmake/ConfigPython.cmake": {
       "role": "index",
-      "sha256": "c4c3bd26ce07dc493fbd2aa2e854de0a82c19237dd48ed9c57f2bda3c51b13b9",
-      "size": 1085,
-      "normalized_sha256": "c4c3bd26ce07dc493fbd2aa2e854de0a82c19237dd48ed9c57f2bda3c51b13b9"
+      "sha256": "44e2d97b26a746f3cd48dde47d0c79aeacbc84d1b1cbed7d23ae7a3cd80f40a7",
+      "size": 1671,
+      "normalized_sha256": "44e2d97b26a746f3cd48dde47d0c79aeacbc84d1b1cbed7d23ae7a3cd80f40a7"
     },
     "cmake/ConfigQT.cmake": {
       "role": "index",
@@ -1442,9 +1442,9 @@
     },
     "cmake/PrintConfig.cmake": {
       "role": "index",
-      "sha256": "2e9c8f26fff237b17748bc7b6a570b1b5797f135b8fb42a9bd6c30572f5294b7",
-      "size": 1074,
-      "normalized_sha256": "2e9c8f26fff237b17748bc7b6a570b1b5797f135b8fb42a9bd6c30572f5294b7"
+      "sha256": "c1ba2fe44abf13a60751ac2c98a78c71d4029ab76daf75fefee6b0a54cc0d009",
+      "size": 1073,
+      "normalized_sha256": "c1ba2fe44abf13a60751ac2c98a78c71d4029ab76daf75fefee6b0a54cc0d009"
     },
     "cmake/VersionBuildTime.h.in": {
       "role": "index",
@@ -1466,21 +1466,21 @@
     },
     "cmake/WriteBuildInfo.cmake": {
       "role": "index",
-      "sha256": "ddef8b161f98acc410b83459ac1fbde62b9369e9ec560044b3b6ebbfa6f32fdf",
-      "size": 5716,
-      "normalized_sha256": "ddef8b161f98acc410b83459ac1fbde62b9369e9ec560044b3b6ebbfa6f32fdf"
+      "sha256": "f282af636f6afbfaad7491453e431dc878c33ff542cd84aa59ba80cce011f572",
+      "size": 3926,
+      "normalized_sha256": "f282af636f6afbfaad7491453e431dc878c33ff542cd84aa59ba80cce011f572"
     },
     "cmake/check_git_workspace.py": {
       "role": "index",
-      "sha256": "8ccdf660fcf70dc8479734f17bb3413c85b83b411cc68cf82e6320b85ef29b25",
-      "size": 3819,
-      "normalized_sha256": "8ccdf660fcf70dc8479734f17bb3413c85b83b411cc68cf82e6320b85ef29b25"
+      "sha256": "f1761939e257d01e1a18867bd592fa9958a9948105d23df4a2ee19b3c1afcb43",
+      "size": 1047,
+      "normalized_sha256": "f1761939e257d01e1a18867bd592fa9958a9948105d23df4a2ee19b3c1afcb43"
     },
     "docs/README.md": {
       "role": "index",
-      "sha256": "dd7b36ed4cb7d49ee8bb0b3176e42392b8989af82b420911b943d6680e36f171",
-      "size": 6617,
-      "normalized_sha256": "dd7b36ed4cb7d49ee8bb0b3176e42392b8989af82b420911b943d6680e36f171"
+      "sha256": "b15d73cea5b18467784c104365388810169baa31f7b4b113915bcaa2e53a961a",
+      "size": 6826,
+      "normalized_sha256": "b15d73cea5b18467784c104365388810169baa31f7b4b113915bcaa2e53a961a"
     },
     "docs/VisionRT_EasyTouch与训练实施方案.md": {
       "role": "index",
@@ -2283,11 +2283,17 @@
       "size": 34592,
       "normalized_sha256": "da9b040ec6e77afdae1f1bbe712fd5f48832911fc9cf169a02b144805a8446d4"
     },
+    "src/log/include/log/LogLevel.def": {
+      "role": "index",
+      "sha256": "a53f5f8157480960cbaf39772d787b0bc6d4d9c7f3920a8bb7546065e76492fd",
+      "size": 227,
+      "normalized_sha256": "a53f5f8157480960cbaf39772d787b0bc6d4d9c7f3920a8bb7546065e76492fd"
+    },
     "src/log/include/log/LogLevel.h": {
       "role": "index",
-      "sha256": "e56f549902bb117593872c7a9cde6ed66bc9bd7d5aff46b87634e24f44415c25",
-      "size": 804,
-      "normalized_sha256": "e56f549902bb117593872c7a9cde6ed66bc9bd7d5aff46b87634e24f44415c25"
+      "sha256": "316ace23eef8ba6e6ce29d05b6e610ebf9de8581bc89d6d11aeb62b6c4ecf637",
+      "size": 744,
+      "normalized_sha256": "316ace23eef8ba6e6ce29d05b6e610ebf9de8581bc89d6d11aeb62b6c4ecf637"
     },
     "src/log/include/log/LogModel.h": {
       "role": "index",
@@ -2355,11 +2361,17 @@
       "size": 3649,
       "normalized_sha256": "d78327bbd14fc76a5440bc4d1f45cae745f14a9697d31a83bfa9e0886fe19b59"
     },
+    "src/python/include/python/PythonEnvironment.def": {
+      "role": "index",
+      "sha256": "e0573f347f1aa661a612cbbf9ae36121e5c135a1109756bb32d7a2aab6f479ee",
+      "size": 225,
+      "normalized_sha256": "e0573f347f1aa661a612cbbf9ae36121e5c135a1109756bb32d7a2aab6f479ee"
+    },
     "src/python/include/python/PythonEnvironment.h": {
       "role": "index",
-      "sha256": "7cbf9e9bfa969113086fa98509e3402af0acc2ce581b248ee86a7a25ae370abe",
-      "size": 4238,
-      "normalized_sha256": "7cbf9e9bfa969113086fa98509e3402af0acc2ce581b248ee86a7a25ae370abe"
+      "sha256": "f75b9e2140aee4431865d9bb8c35789cb5ba82bf28100a68320294f86219072b",
+      "size": 3896,
+      "normalized_sha256": "f75b9e2140aee4431865d9bb8c35789cb5ba82bf28100a68320294f86219072b"
     },
     "src/python/include/python/PythonProbe.h": {
       "role": "index",
@@ -2369,9 +2381,9 @@
     },
     "src/python_bridge/CMakeLists.txt": {
       "role": "index",
-      "sha256": "5c093961e8bc76ddf6c93e69a069df6c6d182baa1d24d98903201bfecf8dca44",
-      "size": 621,
-      "normalized_sha256": "5c093961e8bc76ddf6c93e69a069df6c6d182baa1d24d98903201bfecf8dca44"
+      "sha256": "a8539b3e44e83ce1ef61eb0b2826c32020cfd5f8633b1377dcc34ca57bec06f0",
+      "size": 639,
+      "normalized_sha256": "a8539b3e44e83ce1ef61eb0b2826c32020cfd5f8633b1377dcc34ca57bec06f0"
     },
     "src/python_bridge/PythonBridge.cpp": {
       "role": "index",
@@ -2487,17 +2499,29 @@
       "size": 1421,
       "normalized_sha256": "14c4a4546f7b0addf56af00b8bbe229e60bbb968944e5b26145c9be83670c7d0"
     },
+    "src/runtime/include/runtime/RuntimeEngine.def": {
+      "role": "index",
+      "sha256": "488e6a198b75711222bfcaf40c75e35073c91b4493dca5a0fc18df55c1896273",
+      "size": 596,
+      "normalized_sha256": "488e6a198b75711222bfcaf40c75e35073c91b4493dca5a0fc18df55c1896273"
+    },
     "src/runtime/include/runtime/RuntimeEngine.h": {
       "role": "index",
-      "sha256": "f2c6dce97889083fbfdcfc375c02289d15971e23aa88b04911ea956955842e92",
-      "size": 4764,
-      "normalized_sha256": "f2c6dce97889083fbfdcfc375c02289d15971e23aa88b04911ea956955842e92"
+      "sha256": "24e44b4f1799bf99f5152f2d7b17a95049b2fd6665d92b800bbaf4146ba5f279",
+      "size": 4570,
+      "normalized_sha256": "24e44b4f1799bf99f5152f2d7b17a95049b2fd6665d92b800bbaf4146ba5f279"
+    },
+    "src/runtime/include/runtime/Snapshot.def": {
+      "role": "index",
+      "sha256": "194cb883cc3539db10d45ae38c196aff810c674e9bd70dbc88164b2cb8560661",
+      "size": 423,
+      "normalized_sha256": "194cb883cc3539db10d45ae38c196aff810c674e9bd70dbc88164b2cb8560661"
     },
     "src/runtime/include/runtime/Snapshot.h": {
       "role": "index",
-      "sha256": "4c9642f4592d9b875e459eb086dd2718c3d99084a7fbcc9f833c113a2c700c4f",
-      "size": 3728,
-      "normalized_sha256": "4c9642f4592d9b875e459eb086dd2718c3d99084a7fbcc9f833c113a2c700c4f"
+      "sha256": "e9be8b10043e1fbe93f13fb5c1b7c7ef545399d0976c085ccbfa7036aa9f1d2c",
+      "size": 3618,
+      "normalized_sha256": "e9be8b10043e1fbe93f13fb5c1b7c7ef545399d0976c085ccbfa7036aa9f1d2c"
     },
     "src/tools/CMakeLists.txt": {
       "role": "index",
@@ -2621,9 +2645,9 @@
     },
     "src/ui/CMakeLists.txt": {
       "role": "index",
-      "sha256": "55c199da195460a94a6bc5afb7dacfc3515bc5ccffb1a991e7916dc15e2d9744",
-      "size": 2780,
-      "normalized_sha256": "55c199da195460a94a6bc5afb7dacfc3515bc5ccffb1a991e7916dc15e2d9744"
+      "sha256": "790d143a105326753a7a1020cb8c51239864a2690d0ba986bc13a79bab1d6ce1",
+      "size": 1995,
+      "normalized_sha256": "790d143a105326753a7a1020cb8c51239864a2690d0ba986bc13a79bab1d6ce1"
     },
     "src/ui/Color.cpp": {
       "role": "index",
@@ -2931,11 +2955,17 @@
       "size": 2924,
       "normalized_sha256": "e8a96d8464cbb6d1c743a912d32c921793df855655bfb28de1108e3473d4a74b"
     },
+    "src/ui/include/ui/UiState.def": {
+      "role": "index",
+      "sha256": "89da074eec14f11e5d23eed3f4bb29f19d0b51ad58c34f2f28bae27c7bd03fca",
+      "size": 763,
+      "normalized_sha256": "89da074eec14f11e5d23eed3f4bb29f19d0b51ad58c34f2f28bae27c7bd03fca"
+    },
     "src/ui/include/ui/UiState.h": {
       "role": "index",
-      "sha256": "6a3336ae80222b6a8d124830542ec2c8f28fba6204c17bba5b8d30508fd0c56a",
-      "size": 400,
-      "normalized_sha256": "cd69df8ad60d085db18c2b368fe0b07112bfb90e92bf8aaf34acc42fe16c15c4"
+      "sha256": "ec2fc27cc321c3cd006d3661606298ab52197c275052f4c7009331a2d18a85b5",
+      "size": 125,
+      "normalized_sha256": "ec2fc27cc321c3cd006d3661606298ab52197c275052f4c7009331a2d18a85b5"
     },
     "src/ui/include/ui/UiTypes.h": {
       "role": "index",
@@ -3251,9 +3281,9 @@
     },
     "tests/CMakeLists.txt": {
       "role": "observe",
-      "sha256": "553392acbd04c0b006b5342e76ac9d1467c4b13c1b4d3bdd486e450f02f38928",
-      "size": 41390,
-      "normalized_sha256": "553392acbd04c0b006b5342e76ac9d1467c4b13c1b4d3bdd486e450f02f38928"
+      "sha256": "e2d0441471d47b3d2c87d639a6ae594aa4cc522b8d0035f7b5fef2800c4b1fa1",
+      "size": 41538,
+      "normalized_sha256": "e2d0441471d47b3d2c87d639a6ae594aa4cc522b8d0035f7b5fef2800c4b1fa1"
     },
     "tests/DirectoryEvents.h": {
       "role": "observe",
@@ -3311,9 +3341,9 @@
     },
     "tests/TestPythonEnvironment.h": {
       "role": "observe",
-      "sha256": "b1166b0dea5455367f2ebce99a6be9bfbfdf18dec80b9ea62eda60333c42bd10",
-      "size": 562,
-      "normalized_sha256": "b1166b0dea5455367f2ebce99a6be9bfbfdf18dec80b9ea62eda60333c42bd10"
+      "sha256": "fef90e8aad070fdad4203a34d0858ecd97c6d77efdb625c11a0f2730b50905b9",
+      "size": 570,
+      "normalized_sha256": "fef90e8aad070fdad4203a34d0858ecd97c6d77efdb625c11a0f2730b50905b9"
     },
     "tests/ToolResultAssertions.h": {
       "role": "observe",
@@ -3335,9 +3365,9 @@
     },
     "tests/build_incremental_contract.py": {
       "role": "observe",
-      "sha256": "327d0f2b6effd24a1a92567a4e9b351722eac57ddb3559e517e369089eeafc3c",
-      "size": 4682,
-      "normalized_sha256": "327d0f2b6effd24a1a92567a4e9b351722eac57ddb3559e517e369089eeafc3c"
+      "sha256": "06f930c312fd762d7687be5a85a4ba6c6ff867cc6ac549d84a03070cb1788e7e",
+      "size": 7120,
+      "normalized_sha256": "06f930c312fd762d7687be5a85a4ba6c6ff867cc6ac549d84a03070cb1788e7e"
     },
     "tests/color_training_contract.cpp": {
       "role": "observe",
@@ -3431,9 +3461,9 @@
     },
     "tests/installed_pipeline_contract.cpp": {
       "role": "observe",
-      "sha256": "d5692f0672d6f28327357fc1eb327baf19765f1798736c0efd0732bd55d21624",
-      "size": 21625,
-      "normalized_sha256": "d5692f0672d6f28327357fc1eb327baf19765f1798736c0efd0732bd55d21624"
+      "sha256": "d2fb85e75853d794d0cee33f4218e50466404e027a6c919fff611fdf6964517a",
+      "size": 21769,
+      "normalized_sha256": "d2fb85e75853d794d0cee33f4218e50466404e027a6c919fff611fdf6964517a"
     },
     "tests/installed_python_author_contract.cpp": {
       "role": "observe",
@@ -3677,9 +3707,9 @@
     },
     "tests/test_package_app.py": {
       "role": "observe",
-      "sha256": "7921812fe91ec38e577d6a449d68f4e4924a7782fd83e94dd657eb15fdbc8ef8",
-      "size": 57253,
-      "normalized_sha256": "7921812fe91ec38e577d6a449d68f4e4924a7782fd83e94dd657eb15fdbc8ef8"
+      "sha256": "42dcb17fb8d5036debe5d8a0ca98815862e560f332dd3e565fade211f12ccd5f",
+      "size": 57060,
+      "normalized_sha256": "42dcb17fb8d5036debe5d8a0ca98815862e560f332dd3e565fade211f12ccd5f"
     },
     "tests/test_plugin_module.cpp": {
       "role": "observe",
@@ -3917,15 +3947,15 @@
     },
     "tests/workbench_parameter_states.cpp": {
       "role": "observe",
-      "sha256": "4ebdef5bdc7c142740d0d037ed427245acd62f2aed2de81f25e1d20d6f9f8bb6",
-      "size": 7634,
-      "normalized_sha256": "4ebdef5bdc7c142740d0d037ed427245acd62f2aed2de81f25e1d20d6f9f8bb6"
+      "sha256": "5f887c7a70cd825c5edfc1729753d21e8a800ee1671467d94e5cacbcb954a41c",
+      "size": 8925,
+      "normalized_sha256": "5f887c7a70cd825c5edfc1729753d21e8a800ee1671467d94e5cacbcb954a41c"
     },
     "tests/workbench_parameters.cpp": {
       "role": "observe",
-      "sha256": "229f11d6e84396b40155c059094ff450ea82cf424ebad0290461e3c7c752066b",
+      "sha256": "ef6b886e5902ad74b74ce1b5926655b62365d750cb78fecb869933ce30c46cd8",
       "size": 34816,
-      "normalized_sha256": "229f11d6e84396b40155c059094ff450ea82cf424ebad0290461e3c7c752066b"
+      "normalized_sha256": "ef6b886e5902ad74b74ce1b5926655b62365d750cb78fecb869933ce30c46cd8"
     },
     "tests/workbench_paths.cpp": {
       "role": "observe",
@@ -4023,6 +4053,12 @@
       "size": 13655,
       "normalized_sha256": "4ba2f298d06c4e39bb39c355b8956b2a6bb01810293d0cc88976b8381f1b6efd"
     },
+    "tools/export_ui_enums.cpp": {
+      "role": "index",
+      "sha256": "fecf48f27dd9d738d5687dd0b7ac90f712659f05409a07efa6913b44e3754fc7",
+      "size": 1548,
+      "normalized_sha256": "fecf48f27dd9d738d5687dd0b7ac90f712659f05409a07efa6913b44e3754fc7"
+    },
     "tools/link_dependencies.py": {
       "role": "index",
       "sha256": "b8a07daac0e68c0a69f444632539887dad8c466e9edcc59014c64a112bb08484",
@@ -4031,15 +4067,15 @@
     },
     "tools/package_app.py": {
       "role": "index",
-      "sha256": "256e8aac590cdf7832ea83c71ed56046a5843456c9a6089b31799ce5e7466abb",
-      "size": 60320,
-      "normalized_sha256": "256e8aac590cdf7832ea83c71ed56046a5843456c9a6089b31799ce5e7466abb"
+      "sha256": "cfd929b462e8aee6bb56b64f2be3fe0dda03f22e52ba46b765573409b28fd016",
+      "size": 60218,
+      "normalized_sha256": "cfd929b462e8aee6bb56b64f2be3fe0dda03f22e52ba46b765573409b28fd016"
     },
     "tools/release_evidence.py": {
       "role": "index",
-      "sha256": "711bce36f9fb4de8771c31061e43005b41932739f65f868058e1390cf17659be",
-      "size": 14066,
-      "normalized_sha256": "711bce36f9fb4de8771c31061e43005b41932739f65f868058e1390cf17659be"
+      "sha256": "2c9184078c3fb29cbdc7ce748e7f1b1ee806d336adad32282615749f3ce52d5e",
+      "size": 14083,
+      "normalized_sha256": "2c9184078c3fb29cbdc7ce748e7f1b1ee806d336adad32282615749f3ce52d5e"
     },
     "tools/runtime_dependencies.py": {
       "role": "index",

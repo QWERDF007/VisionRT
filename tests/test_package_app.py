@@ -689,9 +689,8 @@ class BuildMetadataScriptContract(unittest.TestCase):
             f"-DOUTPUT={output_file.as_posix()}",
             f"-DREPO_DIR={repo_dir.as_posix()}",
             f"-DGIT_EXECUTABLE={self._find_git()}",
-            # The script must query git through the interpreter this test already runs on; guessing
-            # python3 from PATH can pick an unrelated one and silently produce commit=unknown.
-            f"-DPYTHON_EXECUTABLE={sys.executable}",
+            # Native metadata must work even when the former build interpreter is unavailable.
+            f"-DPYTHON_EXECUTABLE={self.root / 'unavailable-python.exe'}",
         ]
         if source_file:
             cmd.append(f"-DSOURCE_FILE={source_file.as_posix()}")
@@ -986,8 +985,6 @@ class BuildMetadataScriptContract(unittest.TestCase):
 
     def test_status_parser_handles_unicode_and_renames(self) -> None:
         """Matrix Case 13: Stable NUL-delimited status parser handles unicode, semicolons, and renames (S47-02)."""
-        if package_app.check_git_workspace is None:
-            self.skipTest("check_git_workspace not available")
 
         # 1. Unicode and semicolon in untracked production file -> dirty=True
         (self.repo_dir / "src/中文;测试 1.h").write_text("#pragma once\n", encoding="utf-8")

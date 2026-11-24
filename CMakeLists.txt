@@ -30,6 +30,11 @@ option(VISIONRT_RELEASE_BUILD "显式发布候选构建模式（要求干净工�
 # 独立通用工具 SDK（Git 子模块）
 add_subdirectory(3rdparty/VisionRTContracts)
 
+include(3rdparty/VisionRTContracts/tools/EnumExport.cmake)
+visionrt_add_enum_exporter(visionrt_enum_export tools/export_ui_enums.cpp)
+target_include_directories(visionrt_enum_export PRIVATE
+    src/ui/include src/runtime/include src/python/include src/log/include)
+
 include(AddModule)
 add_subdirectory(src/common)
 add_subdirectory(src/log)
@@ -61,24 +66,18 @@ if(VISIONRT_BUILD_APP)
         COMMAND ${CMAKE_COMMAND}
             -DCOMPONENT=VisionRT
             -DVERSION=${PROJECT_VERSION}${PROJECT_VERSION_SUFFIX}
-            -DCOMMIT=${REPO_COMMIT}
-            -DBRANCH=${REPO_BRANCH}
             -DREPO_DIR=${CMAKE_SOURCE_DIR}
             -DSOURCE_FILE=$<TARGET_FILE:VisionRT>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
             -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
-            -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMAND ${CMAKE_COMMAND}
             -DCOMPONENT=VisionRTContracts
             -DVERSION=${VISIONRT_CONTRACTS_VERSION}
-            -DCOMMIT=${VISIONRT_CONTRACTS_COMMIT}
-            -DBRANCH=${VISIONRT_CONTRACTS_BRANCH}
             -DREPO_DIR=${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts
             -DSOURCE_FILE=$<TARGET_FILE:VisionRTContracts>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/contracts-build-info.json
             -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
-            -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMENT "记录 VisionRT 与 VisionRTContracts 的构建完成时刻"
         VERBATIM)

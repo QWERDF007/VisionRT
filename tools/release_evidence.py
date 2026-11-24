@@ -74,7 +74,7 @@ def build_facts(build_dir: Path) -> dict:
         "generator": values.get("CMAKE_GENERATOR", ""),
         "buildType": values.get("CMAKE_BUILD_TYPE", ""),
         "compiler": values.get("CMAKE_CXX_COMPILER", ""),
-        "pythonExecutable": values.get("Python3_EXECUTABLE", ""),
+        "testPythonExecutable": values.get("VISIONRT_TEST_PYTHON_EXECUTABLE", ""),
     }
 
 

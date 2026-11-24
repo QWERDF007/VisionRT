@@ -52,11 +52,7 @@ from runtime_dependencies import (
     shipped_pe_files, python_runtime_imports, runtime_closure,
 )
 
-try:
-    from check_git_workspace import check_git_workspace, is_whitelisted
-except ImportError:
-    check_git_workspace = None
-    is_whitelisted = None
+from check_git_workspace import check_git_workspace
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
