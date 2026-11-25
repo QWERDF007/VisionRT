@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-20T13:34:27Z",
-  "updated_at": "2026-11-25T14:31:42Z",
+  "updated_at": "2026-11-25T15:37:37Z",
   "files": {
     ".clang-format": {
       "role": "index",
@@ -59,15 +59,15 @@
     },
     "WORKLOG.md": {
       "role": "index",
-      "sha256": "0fc637ce56a325915e6b12c1779b716733f4eb477a10b7fffc71a4fdc596e248",
-      "size": 562435,
-      "normalized_sha256": "0fc637ce56a325915e6b12c1779b716733f4eb477a10b7fffc71a4fdc596e248"
+      "sha256": "da95c27427e43fda4709a8f1127f064f53f90f8236749ca12946874513fda7e1",
+      "size": 566240,
+      "normalized_sha256": "da95c27427e43fda4709a8f1127f064f53f90f8236749ca12946874513fda7e1"
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "caafae5695e72c0d0def9c5d7e013cfce10094f83da27225486e4839c487b2bd",
-      "size": 81211,
-      "normalized_sha256": "caafae5695e72c0d0def9c5d7e013cfce10094f83da27225486e4839c487b2bd"
+      "sha256": "b64031ad589bec132afa6bcf17ef614abc839ce560ea04dc3c52401cac9e9c6f",
+      "size": 82428,
+      "normalized_sha256": "b64031ad589bec132afa6bcf17ef614abc839ce560ea04dc3c52401cac9e9c6f"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1478,9 +1478,9 @@
     },
     "docs/README.md": {
       "role": "index",
-      "sha256": "5b443508eb96053d86e6dd46d0885bf075fea220dd91b3a5c70c197214286409",
-      "size": 8194,
-      "normalized_sha256": "5b443508eb96053d86e6dd46d0885bf075fea220dd91b3a5c70c197214286409"
+      "sha256": "e15f14ae2f65fbe2de763fad43f6f3f7a3b14c861322df42ec133907f4762234",
+      "size": 8218,
+      "normalized_sha256": "e15f14ae2f65fbe2de763fad43f6f3f7a3b14c861322df42ec133907f4762234"
     },
     "docs/VisionRT_EasyTouch与训练实施方案.md": {
       "role": "index",
@@ -1996,9 +1996,9 @@
     },
     "examples/README.md": {
       "role": "index",
-      "sha256": "813400b8e2068335367c6c0d29ef76a60275d39f821d691c4d33281731f0bfcc",
-      "size": 1347,
-      "normalized_sha256": "813400b8e2068335367c6c0d29ef76a60275d39f821d691c4d33281731f0bfcc"
+      "sha256": "539d929096d72fc990d9fdfecd04f5d22c03e4dfd0762af34d81b5993c94fad6",
+      "size": 1790,
+      "normalized_sha256": "539d929096d72fc990d9fdfecd04f5d22c03e4dfd0762af34d81b5993c94fad6"
     },
     "examples/综合示例/01_多分支视觉检测/README.md": {
       "role": "index",
@@ -2083,6 +2083,24 @@
       "sha256": "a05b233e696f6afef3f5a39987b6ac45beeee780a01a25bc123c7b7d4cfb3117",
       "size": 17440,
       "normalized_sha256": "a05b233e696f6afef3f5a39987b6ac45beeee780a01a25bc123c7b7d4cfb3117"
+    },
+    "examples/综合示例/弯曲引脚检测/README.md": {
+      "role": "index",
+      "sha256": "37440be3e881206ccb29f78dddee7d5450bf16c9bb2551d5d2e70a1f82a4dc9f",
+      "size": 704,
+      "normalized_sha256": "37440be3e881206ccb29f78dddee7d5450bf16c9bb2551d5d2e70a1f82a4dc9f"
+    },
+    "examples/综合示例/畸变标尺校正测量/README.md": {
+      "role": "index",
+      "sha256": "5f77f245560b787a5d16bf665a65b6558d428c1685a9a82506bff272b9023a39",
+      "size": 746,
+      "normalized_sha256": "5f77f245560b787a5d16bf665a65b6558d428c1685a9a82506bff272b9023a39"
+    },
+    "examples/综合示例/畸变标尺校正测量/assets/calplate_80mm.cpd": {
+      "role": "index",
+      "sha256": "974cb16dcf278ac72bac010dff94b05d9aade6d8639b68dd5aa7fff61fd5a6d3",
+      "size": 51634,
+      "normalized_sha256": "974cb16dcf278ac72bac010dff94b05d9aade6d8639b68dd5aa7fff61fd5a6d3"
     },
     "examples/综合示例/识别线缆颜色/README.md": {
       "role": "index",
@@ -3430,9 +3448,9 @@
     },
     "tests/CMakeLists.txt": {
       "role": "observe",
-      "sha256": "22ebb9ef4edfe52476ec6e07715f8d11249ef6eb40e9db3df3935b32c5f24565",
-      "size": 42188,
-      "normalized_sha256": "22ebb9ef4edfe52476ec6e07715f8d11249ef6eb40e9db3df3935b32c5f24565"
+      "sha256": "44d0a9ad1c3419a132137f796bb7e9d12b0afe0bd0bc9d34627e15b4bf0c8d79",
+      "size": 42538,
+      "normalized_sha256": "44d0a9ad1c3419a132137f796bb7e9d12b0afe0bd0bc9d34627e15b4bf0c8d79"
     },
     "tests/DirectoryEvents.h": {
       "role": "observe",
@@ -3598,9 +3616,9 @@
     },
     "tests/example_pipelines.cpp": {
       "role": "observe",
-      "sha256": "f8e476ea0d729502175c162c4346a80f45c529847f3f6e009896887b2b494b42",
-      "size": 46993,
-      "normalized_sha256": "f8e476ea0d729502175c162c4346a80f45c529847f3f6e009896887b2b494b42"
+      "sha256": "bb42dce085cde66d0a26a5088838b091eb5d4d23fd05c5d7d89e3e9da424d3a5",
+      "size": 48614,
+      "normalized_sha256": "bb42dce085cde66d0a26a5088838b091eb5d4d23fd05c5d7d89e3e9da424d3a5"
     },
     "tests/example_project_contract.cpp": {
       "role": "observe",
@@ -3679,6 +3697,12 @@
       "sha256": "96bf2d8130bfa4595ba74505afbf1d2a9ee6cd63513d9248360ef1e5fd595148",
       "size": 18905,
       "normalized_sha256": "96bf2d8130bfa4595ba74505afbf1d2a9ee6cd63513d9248360ef1e5fd595148"
+    },
+    "tests/merlic_examples_contract.cpp": {
+      "role": "observe",
+      "sha256": "79e8a86f3c244b6965d7e814082cc44620a9e7073cc81172ffee93e9f7fff3ba",
+      "size": 12723,
+      "normalized_sha256": "79e8a86f3c244b6965d7e814082cc44620a9e7073cc81172ffee93e9f7fff3ba"
     },
     "tests/module_registration_contract.cpp": {
       "role": "observe",
@@ -3880,9 +3904,9 @@
     },
     "tests/test_package_app.py": {
       "role": "observe",
-      "sha256": "64c691828c43fbb6c0b065ebb8bbd2413b830e5503afe838dc25c99bcab06ad3",
-      "size": 58687,
-      "normalized_sha256": "64c691828c43fbb6c0b065ebb8bbd2413b830e5503afe838dc25c99bcab06ad3"
+      "sha256": "53cdeeb2b80552fe129e257e99b40d0b8c2fff2c894d23d07185d1236ce9f9bb",
+      "size": 58895,
+      "normalized_sha256": "53cdeeb2b80552fe129e257e99b40d0b8c2fff2c894d23d07185d1236ce9f9bb"
     },
     "tests/test_plugin_module.cpp": {
       "role": "observe",
@@ -4246,9 +4270,9 @@
     },
     "tools/package_app.py": {
       "role": "index",
-      "sha256": "44d957f44aaad55e61a63334b93d6b67eac8ddfa69a82554eea33ffa2868cdee",
-      "size": 61577,
-      "normalized_sha256": "44d957f44aaad55e61a63334b93d6b67eac8ddfa69a82554eea33ffa2868cdee"
+      "sha256": "b982a0b6a7efdc5126bc4ca35211f84e485894152e29f41e610bad4db19bc38f",
+      "size": 61719,
+      "normalized_sha256": "b982a0b6a7efdc5126bc4ca35211f84e485894152e29f41e610bad4db19bc38f"
     },
     "tools/release_evidence.py": {
       "role": "index",

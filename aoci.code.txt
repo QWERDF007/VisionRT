@@ -39,10 +39,10 @@ WriteBuildInfo.cmake[OV7T]: F:通过共享CMake与Git查询生成组件身份、
 check_git_workspace.py[XV6T]: F:为Python打包代码适配共享CMake的Git工作区查询 | R:code:3rdparty/VisionRTContracts/cmake/GitWorkspace.cmake,code:tools/package_app.py | A:check_git_workspace | S:Git状态策略只在共享CMake实现；失败保留unknown，不把查询失败判成干净
 
 ===/<repository>/docs/===
-README.md[SG7T]: F:索引共享契约、工程容器、参数页、训练资源包、标定和构建验证入口 | R:code:WORKLOG.md,code:src/core/include/core/ProjectArchive.h,code:src/ui/include/ui/TrainingAssets.h | A:- | S:只维护实现索引，运行证据归WORKLOG，避免重复维护代码事实
+README.md[SG7T]: F:索引共享契约、工程容器、参数页、训练资源包、综合示例和构建验证入口 | R:code:WORKLOG.md,code:src/core/include/core/ProjectArchive.h,code:src/ui/include/ui/TrainingAssets.h,code:examples/README.md | A:- | S:只维护实现索引，运行证据归WORKLOG，避免重复维护代码事实
 
 ===/<repository>/examples/===
-README.md[SA5T]: F:索引无编号三个综合示例的.vrtapp工程、集中图片、训练资源包和验证入口 | R:code:src/core/include/core/ProjectArchive.h,code:tools/package_app.py | A:- | S:修改安装示例须另存；原图存examples/images，训练资源包与描述文件存assets，相对路径均基于安装目录
+README.md[SA5T]: F:索引无编号五个综合示例的.vrtapp工程、集中图片、训练资源包和验证入口 | R:code:src/core/include/core/ProjectArchive.h,code:tools/package_app.py | A:- | S:修改安装示例须另存；原图存examples/images，训练资源包与描述文件存assets，相对路径均基于安装目录
 
 ===/<repository>/src/common/===
 CMakeLists.txt[FV5T]: F:构建共享common模块并生成公共版本头 | R:code:cmake/AddModule.cmake,code:src/common/Version.cpp | A:visionrt_common | S:-
@@ -314,7 +314,7 @@ dependencies.json[FV6T]: F:集中声明Qt、OpenCV和开发Python的本机默认
 dependency_utils.py[XV6M]: F:共享严格JSON、依赖路径解析、文件链接与DLL配置筛选原语 | R:code:tools/dependencies.json | A:load_dependencies,resolve_dependency_root,link_file,link_dir,dll_matches_config | S:成对识别Debug与Release库，避免把名称尾部d误判为调试依赖
 export_ui_enums.cpp[XV6T]: F:组合协议、界面、运行、Python环境和日志定义表并调用共享原生导出器 | R:code:src/ui/CMakeLists.txt,code:3rdparty/VisionRTContracts/tools/EnumExport.cpp | A:main,wmain | S:只编译定义表，不链接Qt或业务DLL，避免生成器与被生成模块形成构建循环；Windows入口接收宽字符路径
 link_dependencies.py[OV5M]: F:把开发依赖、Qt运行资源和工具包链接到构建bin目录 | R:code:tools/dependency_utils.py,code:tools/dependencies.json | A:link_external_dependencies,link_qt_runtime,link_tools | S:仅用于开发运行树，不等同可分发安装包
-package_app.py[OV8L]: F:生成并验证便携安装，部署工具包、Qt、运行依赖和综合示例并记录产品所有权 | R:code:tools/runtime_dependencies.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,verify_examples,example_project_problems,main | S:无编号三个.vrtapp综合工程为必装集合，校验program.json、集中图片与.zip训练包manifest.json并拒绝遗留.json和绝对路径；清理依旧产品清单保留用户文件，工具包先暂存校验，拒绝捆绑解释器
+package_app.py[OV8L]: F:生成并验证便携安装，部署工具包、Qt、运行依赖和五个综合示例并记录产品所有权 | R:code:tools/runtime_dependencies.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,verify_examples,example_project_problems,main | S:无编号五个.vrtapp综合工程为必装集合，校验program.json、集中图片与.zip训练包manifest.json并拒绝遗留.json和绝对路径；清理依旧产品清单保留用户文件，工具包先暂存校验，拒绝捆绑解释器
 release_evidence.py[XV7M]: F:汇总双仓提交、Contracts身份、构建及测试解释器配置、包证据与实际加载报告 | R:code:tools/package_app.py,code:src/main.cpp | A:audit,build_facts,summarize_report,main | S:缺少必要场景、Contracts不同或实际NumPy与解释器越出所选环境时不标记complete并退出2；allow-dirty只能作本地核对
 runtime_dependencies.py[XV7S]: F:读取模块清单和PE导入表，计算随包依赖闭包与CPython启动链违规 | R:code:tools/package_app.py,code:cmake/AddModule.cmake | A:load_modules,runtime_closure,read_pe_imports,python_runtime_imports | S:同时读取普通和延迟导入；仅从宿主可达的链判断启动CPython，动态加载的桥接不自动算违规
 verify_ui_notifications.cjs[TU6T]: F:从CTest环境启动CDB取证静默通知、像素负对照、视口销毁和模型保存调用 | R:code:tests/ui_notifications_contract.cpp,code:tests/viewport_lifetime_contract.cpp,code:tests/workbench_training_publish_contract.cpp | A:capture | S:要求Windows及匹配PDB，禁用调试堆；除退出码外校验通知静默、像素负对照和实际模型保存调用次数
@@ -331,4 +331,13 @@ README.md[SA3T]: F:说明同源图像分支裁剪二值化与圆测量的操作�
 
 ===/<repository>/examples/综合示例/识别线缆颜色/===
 README.md[SA5T]: F:索引线缆对齐与五工位识色.vrtapp工程、集中图片和训练发布入口 | R:code:src/ui/AppControllerTraining.cpp,code:src/ui/qml/ParameterPanel.qml | A:- | S:训练原图与模型打包在assets的.zip资源包，工程仅保留元数据与区域；相对路径基于安装目录
+
+===/<repository>/examples/综合示例/弯曲引脚检测/===
+README.md[SA4T]: F:索引弯曲引脚检测.vrtapp工程、9张集中图片、匹配对齐与双数据集存在性训练资源包及验证入口 | R:code:examples/README.md | A:- | S:对齐与存在性模型及原图打包于assets的alignment-model.zip和presence-model.zip，相对路径基于安装目录
+
+===/<repository>/examples/综合示例/畸变标尺校正测量/===
+README.md[SA4T]: F:索引畸变标尺校正测量.vrtapp工程、强畸变集中图片、标定训练资源包及去畸变测量验证入口 | R:code:examples/README.md,code:examples/综合示例/畸变标尺校正测量/assets/calplate_80mm.cpd | A:- | S:强畸变标定板原图与模型打包于assets/calibration-model.zip，校正后测量均值与样本标准差，相对路径基于安装目录
+
+===/<repository>/examples/综合示例/畸变标尺校正测量/assets/===
+calplate_80mm.cpd[FA5L]: F:提供Version3六角网格标定板尺寸、极性、定位标记和物理圆心坐标 | R:code:examples/综合示例/畸变标尺校正测量/README.md | A:- | S:坐标单位为米，27行31列亮标记，首个定位标记索引15,13
 
