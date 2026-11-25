@@ -79,6 +79,7 @@ __pycache__/
 *VisionRT_9e99572*
 /visionrt-acceptance/
 *.zip
+!examples/**/assets/*.zip
 visionrt-next/
 logs/
 

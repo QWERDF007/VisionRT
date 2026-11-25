@@ -3,7 +3,7 @@
 ===/<repository>/===
 .clang-format[FC4S]: F:规定C++排版、限定符顺序和头文件分组 | R:- | A:- | S:-
 .gitattributes[FV4T]: F:强制CMD脚本以CRLF检出 | R:code:tools/build.cmd | A:- | S:-
-.gitignore[FV5T]: F:排除构建、缓存、本机宿主配置、临时交付文件和本地方案 | R:code:.aoci/.gitignore | A:- | S:AOCI认知资产保持可追踪，只有宿主配置按机器忽略
+.gitignore[FV5T]: F:排除构建、缓存、本机宿主配置、临时压缩包和本地方案 | R:code:.aoci/.gitignore | A:- | S:AOCI认知资产与examples/**/assets/*.zip训练资源包保持可追踪，只有宿主配置按机器忽略
 .gitmodules[FV7T]: F:声明六个依赖子模块的来源与跟踪分支 | R:code:CMakeLists.txt | A:- | S:adaptagrams使用用户派生仓库的visionrt分支；实际检出版本由父仓gitlink固定
 AGENTS.md[SG8S]: F:定义项目工程纪律、任务账本规则及AOCI认知使用边界 | R:code:WORKLOG.md,code:aoci.meta.txt | A:- | S:索引语义须依据真实证据由模型创作，专项流程以实时Guide和机器契约为准
 CMakeLists.txt[FV9S]: F:编排模块、桌面入口、原生枚举生成器、校验器、部署和测试的根构建 | R:code:cmake/AddModule.cmake,code:tools/export_ui_enums.cpp,code:tests/CMakeLists.txt,code:cmake/Deploy.cmake.in | A:VisionRT,visionrt_enum_export,visionrt_validate_tool,visionrt_examples,deploy | S:启用C与CXX以支持Contracts内置miniz；版本只由project声明；桥接仅作构建依赖不进启动链接；CTest先于Contracts启用；示例清空后复制
