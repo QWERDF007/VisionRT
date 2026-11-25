@@ -76,6 +76,19 @@ std::size_t estimatedNestedBytes(const Vector &values)
         return size;
     }
 }
+
+QVariantList relationVariants(const std::vector<OutputRelation> &relations)
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(relations.size()));
+    for (const auto &relation : relations)
+        result.push_back(QVariantMap{
+            { "node",                    relation.node},
+            { "port", static_cast<uint>(relation.port)},
+            {"label",                   relation.label}
+        });
+    return result;
+}
 } // namespace
 
 QString typeText(const TypeSpec &type)
@@ -108,7 +121,7 @@ void OutputModel::clear()
 }
 
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
-                            const std::map<PortId, std::size_t> &references,
+                            const std::map<PortId, std::vector<OutputRelation>> &relations,
                             const std::map<PortId, bool> *connectable,
                             const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle,
                             std::optional<NodeDiagnostic> status)
@@ -131,7 +144,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
         else if (snapshot)
             if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
                 value = found->second;
-        const auto count = references.find(id);
+        const auto relIt = relations.find(id);
         Captured   captured{std::move(value), type, snapshot ? snapshot->publication : 0, id};
         if (system)
         {
@@ -149,7 +162,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        typeText(type),
                        {},
                        {},
-                       count == references.end() ? 0 : count->second,
+                       relIt == relations.end() ? std::vector<OutputRelation>{} : relIt->second,
                        system,
                        canConnect,
                        std::move(captured)};
@@ -272,7 +285,8 @@ QVariantMap OutputModel::get(int row) const
         {"typeDisplay", !item.resolved ? QStringLiteral("未绑定") : displayTypeName(item.captured.type)},
         {   "preview",                                                           item.preview},
         {   "tooltip",                                                           item.tooltip},
-        {     "count",                                    static_cast<qulonglong>(item.count)},
+        {     "count",                             static_cast<qulonglong>(item.relations.size())},
+        { "relations",                                           relationVariants(item.relations)},
         {    "system",                                                            item.system},
         {"connectable",                                                        item.connectable},
         {"diagnostic", static_cast<bool>(item.captured.diagnostic || item.captured.lifecycle)},
@@ -301,13 +315,18 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
         switch (index.column())
         {
         case 0:
-            return row.name + QStringLiteral(" (%1)").arg(row.count);
+            return row.name;
         case 1:
             return row.type;
         case 2:
             return row.preview;
         case 3:
-            return static_cast<qulonglong>(row.count);
+        {
+            QStringList labels;
+            labels.reserve(static_cast<qsizetype>(row.relations.size()));
+            for (const auto &relation : row.relations) labels.push_back(relation.label);
+            return labels.join(QStringLiteral(", "));
+        }
         default:
             return {};
         }
@@ -325,7 +344,9 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
     case PreviewRole:
         return row.preview;
     case CountRole:
-        return static_cast<qulonglong>(row.count);
+        return static_cast<qulonglong>(row.relations.size());
+    case RelationsRole:
+        return relationVariants(row.relations);
     case ConnectableRole:
         return rows_.at(static_cast<std::size_t>(index.row())).connectable;
     case SystemRole:
@@ -359,6 +380,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
         {    PreviewRole,     "preview"},
         {    TooltipRole,    "tooltip"},
         {      CountRole,      "count"},
+        {  RelationsRole,  "relations"},
         {     SystemRole,     "system"},
         { ConnectableRole, "connectable"},
         { DiagnosticRole, "diagnostic"},

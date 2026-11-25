@@ -206,38 +206,25 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
     std::map<NodeId, QVariantList> nodeInputsMap;
     for (const auto &candidate : cached->second)
     {
-        // Only a free or already-connected input is a legal target for this output. An input owned
-        // by another source is not a candidate at all, so the menu never offers a disabled row for
-        // a connection that cannot be made.
-        if (candidate.occupied)
+        // Only free, unconnected inputs are offered for binding; disconnecting lives in the relations view.
+        if (candidate.occupied || candidate.connected)
             continue;
         const auto *target = impl_->findNode(candidate.node);
         if (!target)
             continue;
-        const auto *definition = impl_->registry.find(target->toolId);
-        std::optional<ToolDefinition> contract;
-        try
-        {
-            if (definition)
-                contract = nodeContract(*target, *definition);
-        }
-        catch (const ContractError &)
-        {
-        }
-        const auto *portDef   = contract ? workbench::port(contract->inputs, candidate.port) : nullptr;
-        const auto  typeFound = target->signatures.inputs.find(candidate.port);
+        const auto typeFound = target->signatures.inputs.find(candidate.port);
         if (typeFound == target->signatures.inputs.end())
             continue;
         const auto &inputType = typeFound->second;
+        const auto  portName  = impl_->inputPortName(*target, candidate.port);
 
         nodeInputsMap[candidate.node].push_back(QVariantMap{
-            {"port", static_cast<uint>(candidate.port)},
-            {"name", portDef ? q(portDef->nameZh) : q(portLabel(candidate.port))},
-            {"title", portDef ? q(portDef->nameZh) : q(portLabel(candidate.port))},
-            {"type", displayTypeName(inputType)},
-            {"typeText", displayTypeName(inputType)},
-            {"connected", candidate.connected},
-            {"occupied", candidate.occupied}
+            {    "port", static_cast<uint>(candidate.port)},
+            {    "name",                          portName},
+            {   "title",                          portName},
+            {    "type",       displayTypeName(inputType)},
+            {"typeText",       displayTypeName(inputType)},
+            {"occupied",                candidate.occupied}
         });
     }
 

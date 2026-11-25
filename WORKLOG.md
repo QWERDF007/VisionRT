@@ -30,6 +30,26 @@
 - ...
 -->
 
+### 2026-11-25 — 训练视图 ROI 修复、输出关系面板重做与部署
+
+**目标**
+- 修复训练视图及训练中运行节点时 ROI 不显示问题；完成输出面板“数据/关系”列宽对齐与右贴边、“输出参数”更名、右键仅显示空闲可连接目标、“关系”页下游节点列表与断开按钮、参数区统一边距与贴边滚动条，并部署至 `E:/Softwares/VisionRT`。
+
+**当前状态**
+- 已修复 ROI 显示：`src/ui/TrainingSession.cpp`、`src/ui/AppController.cpp`、`src/ui/ResultPresentation.cpp`。
+- 已完成输出面板与连接菜单改造：`src/ui/include/ui/OutputModel.h`、`src/ui/OutputModel.cpp`、`src/ui/ResultPresentation.h/.cpp`、`src/ui/AppController_p.h`、`src/ui/AppController.cpp`、`src/ui/AppControllerBindings.cpp`、`src/ui/AppControllerMetadata.cpp`（标题改为“输出参数”）、`src/ui/qml/OutputPanel.qml`（“数据/关系”切换保持 `rightMargin: 5`，表格通过统一 `columnWidthFor` 右缘贴齐窗口、`valueColumnWidth` 移除 `- 2` 边距，关系列表支持下游节点与单条 `ChromeClose` 断开）。
+- 已统一参数面板布局：`src/ui/qml/ParameterPage.qml` 外层以 `Item` 包裹 `Flickable` 与贴右边 `WorkbenchScrollBar`，`groupColumn` 统一左右 10 / 组间距 5，`groupBody` 取消内部左右边距并保持上下 5 边距，覆盖初始化、训练及输入各参数页。
+- 已同步更新 `build/tools-package` 夹具包，并更新 `tests/workbench_training_contract.cpp`、`tests/workbench_popups.cpp`、`tests/workbench_contract.cpp`、`tests/output_value_contract.cpp`、`tests/workbench_training_publish_contract.cpp`。
+
+**验证证据**
+- `ctest --test-dir build -C Release -R "^(viewport_contract|workbench_assist_contract|workbench_training_contract|workbench_roi_persistence_contract)$" --output-on-failure` → 4/4 通过。
+- `ctest --test-dir build -C Release -R "^(workbench_popups_contract|workbench_output_contract|output_value_contract|workbench_startup_contract)$" --output-on-failure` → 4/4 通过。
+- 最后一次代码修改后复跑 `ctest --test-dir build -C Release -R "^(workbench_training_contract|workbench_output_contract|workbench_parameters_contract|workbench_startup_contract|workbench_popups_contract)$" --output-on-failure` → 5/5 通过。
+- `package_app.py --install-dir E:\Softwares\VisionRT --allow-dirty --force-clean` → 1580 文件校验通过；以 `E:\Softwares\VisionRT\VisionRT.exe` 实机运行 `识别线缆颜色.vrtapp`（常规运行态与 `--demo-training` 训练态）并截图目检均正常（退出码 0）。
+
+**下一步**
+- 所有开发与部署验证已完成，等待用户验收或指示后续提交。
+
 ### 2026-11-25 — 提交参数、具体形状与标定示例
 
 **目标**

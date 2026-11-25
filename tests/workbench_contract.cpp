@@ -136,7 +136,7 @@ void outputContract()
     OutputModel model;
     model.setResult(&tool, snapshot,
                     {
-                        {2, 2}
+                        {2, {{"3", 1, "下游-3-输入"}, {"4", 1, "下游-4-输入"}}}
     });
     require(model.get(0).value("portId").toUInt() == 0, "status code is not first");
     require(model.get(1).value("portId").toUInt() == 1, "status message is not second");

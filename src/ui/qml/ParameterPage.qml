@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import quickui
 import VisionRT.Ui 1.0
 
-Flickable {
+Item {
     id: root
     function isSameGroups(a, b) {
         if (a === b)
@@ -42,76 +42,85 @@ Flickable {
         if (!isSameGroups(result, parameterGroups)) parameterGroups = result;
     }
     visible: app.selectedNode.length > 0
-    contentWidth: width
-    contentHeight: groupColumn.height
-    clip: true
-    boundsBehavior: Flickable.StopAtBounds
-    boundsMovement: Flickable.StopAtBounds
-    ScrollBar.vertical: WorkbenchScrollBar {
-        id: parameterScrollBar
-    }
-    Column {
-        id: groupColumn
-        width: root.width - parameterScrollBar.width
-        spacing: 5
-        Repeater {
-            model: root.parameterGroups
-            QuiExpander {
-                id: parameterGroup
-                required property var modelData
-                width: groupColumn.width
-                headerText: modelData.name
-                headerHeight: VisionRTSize.BarSize
-                headerPadding: 5
-                headerDelegate: Component {
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: 5
-                        WorkbenchActionButton {
-                            iconSource: parameterGroup.expand ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
-                            onClicked: parameterGroup.toggle()
-                        }
-                        QuiText {
-                            text: parameterGroup.headerText
-                        }
-                        Item {
-                            Layout.fillWidth: true
+    Flickable {
+        id: parameterFlickable
+        anchors.fill: parent
+        anchors.topMargin: VisionRTSize.Spacing
+        anchors.bottomMargin: VisionRTSize.Spacing
+        contentWidth: width
+        contentHeight: groupColumn.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        boundsMovement: Flickable.StopAtBounds
+        ScrollBar.vertical: WorkbenchScrollBar {
+            id: parameterScrollBar
+            parent: root
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+        }
+        Column {
+            id: groupColumn
+            x: 10
+            width: parameterFlickable.width - 20
+            spacing: 5
+            Repeater {
+                model: root.parameterGroups
+                QuiExpander {
+                    id: parameterGroup
+                    required property var modelData
+                    width: groupColumn.width
+                    headerText: modelData.name
+                    headerHeight: VisionRTSize.BarSize
+                    headerPadding: 5
+                    headerDelegate: Component {
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 5
+                            WorkbenchActionButton {
+                                iconSource: parameterGroup.expand ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
+                                onClicked: parameterGroup.toggle()
+                            }
+                            QuiText {
+                                text: parameterGroup.headerText
+                            }
+                            Item {
+                                Layout.fillWidth: true
+                            }
                         }
                     }
-                }
 
-                expand: root.collapsedGroups[headerText] !== true
-                contentHeight: groupBody.implicitHeight + 2 * groupBody.anchors.topMargin
-                onExpandChanged: {
-                    root.collapsedGroups[headerText] = !expand;
-                }
-                ColumnLayout {
-                    id: groupBody
-                    anchors.top: parent.top
-                    anchors.topMargin: 5
-                    anchors.left: parent.left
-                    anchors.leftMargin: 5
-                    anchors.right: parent.right
-                    anchors.rightMargin: 5
-                    spacing: 5
-                    Repeater {
-                        model: modelData.parameters
-                        Loader {
-                            id: parameterRow
-                            required property var modelData
-                            readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
-                                return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId && !!parameter.recordScoped === !!parameterRow.modelData.recordScoped && parameter.datasetId === parameterRow.modelData.datasetId;
-                            }) : undefined
-                            Layout.fillWidth: true
-                            active: currentParameter !== undefined
-                            sourceComponent: ParameterEditor {
-                                nodeId: parameterGroup.modelData.nodeId
-                                parameter: parameterRow.currentParameter
-                                onExpressionEditorRequested: function (node, draft, hasDraft) {
-                                    root.expressionEditorRequested(node, draft, hasDraft);
-                                }
-                                onSelectTypeEditorRequested: function (node) {
-                                    root.selectTypeEditorRequested(node);
+                    expand: root.collapsedGroups[headerText] !== true
+                    contentHeight: groupBody.implicitHeight + 2 * groupBody.anchors.topMargin
+                    onExpandChanged: {
+                        root.collapsedGroups[headerText] = !expand;
+                    }
+                    ColumnLayout {
+                        id: groupBody
+                        anchors.top: parent.top
+                        anchors.topMargin: 5
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        spacing: 5
+                        Repeater {
+                            model: modelData.parameters
+                            Loader {
+                                id: parameterRow
+                                required property var modelData
+                                readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
+                                    return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId && !!parameter.recordScoped === !!parameterRow.modelData.recordScoped && parameter.datasetId === parameterRow.modelData.datasetId;
+                                }) : undefined
+                                Layout.fillWidth: true
+                                active: currentParameter !== undefined
+                                sourceComponent: ParameterEditor {
+                                    nodeId: parameterGroup.modelData.nodeId
+                                    parameter: parameterRow.currentParameter
+                                    onExpressionEditorRequested: function (node, draft, hasDraft) {
+                                        root.expressionEditorRequested(node, draft, hasDraft);
+                                    }
+                                    onSelectTypeEditorRequested: function (node) {
+                                        root.selectTypeEditorRequested(node);
+                                    }
                                 }
                             }
                         }

@@ -357,18 +357,51 @@ void ResultPresentation::updateResults()
     }
     else
     {
-        const auto                    snapshot = displaySnapshot(*node);
-        std::map<PortId, std::size_t> references;
+        const auto                                    snapshot = displaySnapshot(*node);
+        std::map<PortId, std::vector<OutputRelation>> relations;
         if (const auto *current = host_.currentFlow())
+        {
+            struct Entry
+            {
+                const NodeDefinition *target = nullptr;
+                PortId                port   = 0;
+            };
+            std::map<PortId, std::vector<Entry>> grouped;
             for (const auto &relation : portRelations(*current).active)
-                if (relation.source.node == node->id)
-                    ++references[relation.source.port];
+            {
+                if (relation.source.node != node->id)
+                    continue;
+                const auto found = std::ranges::find(current->nodes, relation.target.node, &NodeDefinition::id);
+                if (found != current->nodes.end())
+                    grouped[relation.source.port].push_back({&*found, relation.target.port});
+            }
+            for (auto &[sourcePort, entries] : grouped)
+            {
+                std::sort(entries.begin(), entries.end(),
+                          [](const Entry &a, const Entry &b)
+                          {
+                              if (a.target->position.y != b.target->position.y)
+                                  return a.target->position.y < b.target->position.y;
+                              if (a.target->position.x != b.target->position.x)
+                                  return a.target->position.x < b.target->position.x;
+                              if (a.target->id != b.target->id)
+                                  return a.target->id < b.target->id;
+                              return a.port < b.port;
+                          });
+                auto &list = relations[sourcePort];
+                list.reserve(entries.size());
+                for (const auto &entry : entries)
+                    list.push_back({QString::number(entry.target->id), entry.port,
+                                    text(entry.target->title()) + QLatin1Char('-')
+                                        + host_.inputPortName(*entry.target, entry.port)});
+            }
+        }
         // An output name may only look actionable when a legal and still free downstream input
         // exists. The answer comes from the same candidate/validate rule the binding menu uses.
         const std::map<PortId, bool> *connectable = nullptr;
         if (const auto *flow = host_.currentFlow())
             connectable = host_.refreshConnectable(*flow, *node);
-        outputs_.setResult(tool, snapshot, references, connectable, &node->signatures.outputs,
+        outputs_.setResult(tool, snapshot, relations, connectable, &node->signatures.outputs,
                            lifecycleShared(node->id), status(*node));
         // A node opens on a real image rather than an empty canvas; an explicit choice survives
         // while its port is still offered.
@@ -471,6 +504,7 @@ void ResultPresentation::updateDisplay()
     displayInputTargets_.clear();
     displayInputs_.clear();
     displayOutputs_.clear();
+    displayGeometry_.clear();
     displayRoiTarget_.reset();
     int selectedIndex = index_;
     if (node)

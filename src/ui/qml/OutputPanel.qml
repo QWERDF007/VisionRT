@@ -10,6 +10,15 @@ Rectangle {
     color: QuiColor.Primary
     border.width: 0
     property bool relations: false
+    readonly property int nameColumnWidth: Math.max(130, Math.round(table.width * 0.35))
+    readonly property int valueColumnWidth: Math.max(180, table.width - nameColumnWidth)
+    function columnWidthFor(column) {
+        if (column === 0)
+            return root.nameColumnWidth;
+        if ((root.relations && column === 3) || (!root.relations && column === 2))
+            return root.valueColumnWidth;
+        return 0;
+    }
     property var selectedContext: ({})
     // The copy request is released only after the menu has actually closed, so the popup teardown
     // can never race the bounded readback that is about to capture the same publication.
@@ -152,6 +161,7 @@ Rectangle {
                     typeMachine: data.type || "",
                     tooltip: data.tooltip || "",
                     count: data.count || 0,
+                    relations: data.relations || [],
                     connectable: data.connectable === true,
                     system: data.system === true
                 };
@@ -173,16 +183,18 @@ Rectangle {
                     readOnly: true
                 },
                 {
-                    title: "引用数",
-                    dataIndex: "count",
+                    title: "关系",
+                    dataIndex: "relations",
                     readOnly: true
                 }
             ]
-            view.columnWidthProvider: function (column) {
-                if (root.relations)
-                    return column === 0 ? Math.max(140, Math.round(table.width * 0.65)) : column === 3 ? Math.max(80, table.width - Math.max(140, Math.round(table.width * 0.65)) - 2) : 0;
-                let col0 = Math.max(130, Math.round(table.width * 0.35));
-                return column === 0 ? col0 : column === 2 ? Math.max(180, table.width - col0 - 2) : 0;
+            view.columnWidthProvider: root.columnWidthFor
+            rowHeightProvider: function (row) {
+                if (!root.relations || !app.outputModel)
+                    return VisionRTSize.ContentSize;
+                let item = app.outputModel.get(row);
+                let rels = item && item.relations ? item.relations : [];
+                return Math.max(1, rels.length) * VisionRTSize.ContentSize;
             }
             resizableRows: false
             resizableColumns: false
@@ -192,7 +204,7 @@ Rectangle {
             horizontalHeader.delegate: Rectangle {
                 id: headerCell
                 required property int column
-                implicitWidth: table.columnWidth(column)
+                implicitWidth: root.columnWidthFor(column)
                 implicitHeight: table.headerHeight
                 color: table.headerColor
                 QuiText {
@@ -237,18 +249,6 @@ Rectangle {
         Item {
             id: cell
             property var options: ({})
-            QuiText {
-                anchors.fill: parent
-                anchors.leftMargin: 5
-                anchors.rightMargin: 5
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                font: QuiFont.Body
-                // Only a port with a legal, still free downstream input looks actionable. An existing
-                // connection keeps its reference count but never stands in for a new target.
-                color: cell.options.column === 0 && cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
-                text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
-            }
             MouseArea {
                 id: cellPointer
                 anchors.fill: parent
@@ -258,8 +258,99 @@ Rectangle {
                     // Column 0 is the connection menu; the data column only ever offers copy.
                     if (cell.options.column === 0)
                         root.showNameMenu(cell.options, cell, Qt.point(mouse.x, mouse.y));
-                    else
+                    else if (cell.options.column === 2)
                         root.showDataMenu(cell.options, cell, Qt.point(mouse.x, mouse.y));
+                }
+            }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                spacing: 4
+                visible: cell.options.column === 0
+                QuiText {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    font: QuiFont.Body
+                    // Only a port with a legal, still free downstream input looks actionable.
+                    color: cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
+                    text: cell.options.name || cell.options.display || ""
+                }
+                QuiText {
+                    visible: !cell.options.system && root.relations && (cell.options.count || 0) > 0
+                    Layout.fillHeight: true
+                    verticalAlignment: Text.AlignVCenter
+                    font: QuiFont.Body
+                    color: QuiColor.Highlight
+                    text: "(" + (cell.options.count || 0) + ")"
+                }
+            }
+            QuiText {
+                anchors.fill: parent
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                visible: cell.options.column !== 0 && cell.options.column !== 3
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                font: QuiFont.Body
+                color: QuiColor.FontPrimary
+                text: cell.options.display || ""
+            }
+            Column {
+                anchors.fill: parent
+                visible: cell.options.column === 3
+                Repeater {
+                    model: cell.options.relations || []
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        width: parent ? parent.width : 0
+                        height: VisionRTSize.ContentSize
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 5
+                            anchors.rightMargin: 5
+                            spacing: 4
+                            QuiText {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                font: QuiFont.Body
+                                color: QuiColor.FontPrimary
+                                text: modelData.label || ""
+                            }
+                            WorkbenchActionButton {
+                                objectName: "disconnectRelationButton_" + cell.options.portId + "_" + modelData.node + "_" + modelData.port
+                                Layout.preferredWidth: VisionRTSize.SmallIconButtonSize
+                                Layout.preferredHeight: VisionRTSize.SmallIconButtonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                iconSize: VisionRTSize.SmallIconSize
+                                normalColor: QuiColor.Transparent
+                                hoverColor: QuiColor.Transparent
+                                pressedColor: QuiColor.Transparent
+                                iconColor: !enabled ? QuiColor.FontDark : hovered ? QuiColor.Highlight : QuiColor.FontCaption
+                                text: "断开连接"
+                                iconSource: QuiFontIcon.ChromeClose
+                                enabled: app.workspaceEnabled
+                                onClicked: {
+                                    let ctx = app.portDeclarationContext(cell.options.portId, true);
+                                    if (app.portContextCurrent(ctx))
+                                        app.unbindOutputFrom(ctx, modelData.node, modelData.port);
+                                }
+                            }
+                        }
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: table.borderColor
+                            visible: index < ((cell.options.relations && cell.options.relations.length) ? cell.options.relations.length : 0) - 1
+                        }
+                    }
                 }
             }
             QuiToolTip {
@@ -274,8 +365,10 @@ Rectangle {
                         return cell.options.tooltip || cell.options.display || "";
                     if (cell.options.column === 1)
                         return cell.options.type || cell.options.display || "";
-                    if (cell.options.column === 3)
-                        return String(cell.options.count || 0);
+                    if (cell.options.column === 3) {
+                        let rels = cell.options.relations || [];
+                        return rels.map(function (r) { return r.label || ""; }).filter(function (s) { return s.length > 0; }).join("\n");
+                    }
                     return cell.options.display || "";
                 }
                 delay: 500
@@ -358,15 +451,9 @@ Rectangle {
                     model: toolSubMenu.modelData.inputs
                     delegate: QuiMenuItem {
                         required property var modelData
-                        text: modelData.connected ? ("✓ " + (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")") : ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
+                        text: (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")"
                         enabled: app.workspaceEnabled
-                        onTriggered: {
-                            if (modelData.connected) {
-                                app.unbindOutputFrom(root.selectedContext, toolSubMenu.targetNode, modelData.port);
-                            } else {
-                                app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port);
-                            }
-                        }
+                        onTriggered: app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port)
                     }
                     onObjectAdded: function (index, object) {
                         toolSubMenu.insertItem(index, object);
@@ -409,6 +496,18 @@ Rectangle {
         target: app.outputModel
         function onModelAboutToBeReset() {
             root.invalidateMenu();
+        }
+        function onModelReset() {
+            Qt.callLater(table.forceLayout);
+        }
+        function onRowsInserted() {
+            Qt.callLater(table.forceLayout);
+        }
+        function onRowsRemoved() {
+            Qt.callLater(table.forceLayout);
+        }
+        function onLayoutChanged() {
+            Qt.callLater(table.forceLayout);
         }
     }
     Connections {

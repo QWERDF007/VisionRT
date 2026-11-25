@@ -9,6 +9,13 @@
 #include <optional>
 
 namespace visionrt {
+struct OutputRelation
+{
+    QString node;
+    PortId  port = 0;
+    QString label;
+};
+
 class VISIONRT_UI_API OutputModel final : public QAbstractTableModel
 {
     Q_OBJECT
@@ -22,6 +29,7 @@ public:
         PreviewRole,
         TooltipRole,
         CountRole,
+        RelationsRole,
         SystemRole,
         ConnectableRole,
         DiagnosticRole,
@@ -44,7 +52,7 @@ public:
     // It comes from the same candidate/validate rule the binding menu uses, so the name highlight
     // can never promise a connection the backend would refuse.
     void                    setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
-                                      const std::map<PortId, std::size_t> &references,
+                                      const std::map<PortId, std::vector<OutputRelation>> &relations = {},
                                       const std::map<PortId, bool> *connectable = nullptr,
                                       const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {},
                                       std::optional<NodeDiagnostic> status = {});
@@ -64,13 +72,13 @@ public:
 private:
     struct Row
     {
-        PortId      id = 0;
-        QString     name, type, preview, tooltip;
-        std::size_t count  = 0;
-        bool        system = false;
-        bool        connectable = false;
-        Captured    captured;
-        bool        resolved = true;
+        PortId                      id = 0;
+        QString                     name, type, preview, tooltip;
+        std::vector<OutputRelation> relations;
+        bool                        system = false;
+        bool                        connectable = false;
+        Captured                    captured;
+        bool                        resolved = true;
     };
 
     std::vector<Row> rows_;

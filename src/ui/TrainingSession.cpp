@@ -41,11 +41,16 @@ void TrainingSession::begin(Begin start)
     start_.parameters = parameters_;
     for (const auto &spec : start_.spec.datasets)
     {
-        datasets_.emplace(spec.parameter, Dataset{});
-        if (!dataset_) dataset_ = spec.parameter;
+        Dataset d;
         if (const auto found = parameters_.find(spec.parameter); found != parameters_.end())
             if (const auto *set = std::get_if<DataRef<TrainingSet>>(&found->second))
-                datasets_.at(spec.parameter) = draft(set->get());
+                d = draft(set->get());
+        const auto roi = std::ranges::find_if(spec.fields, [](const PortDefinition &field) {
+            return isShapeType(field.type.type);
+        });
+        if (roi != spec.fields.end()) d.roi = roi->id;
+        datasets_.emplace(spec.parameter, std::move(d));
+        if (!dataset_) dataset_ = spec.parameter;
     }
 }
 

@@ -33,6 +33,7 @@ public:
     virtual const FlowDefinition         *currentFlow() const                   = 0;
     virtual const ToolDefinition         *effectiveTool() const                 = 0;
     virtual const PortDefinition         *parameter(PortId id, bool init) const = 0;
+    virtual QString                       inputPortName(const NodeDefinition &node, PortId port) const = 0;
     // Same candidate/validate rule the binding menu uses, cached by the controller. The returned map
     // is the cache itself, not a copy.
     virtual const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,

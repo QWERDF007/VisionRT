@@ -84,7 +84,7 @@ try
             "switching image modes restored a historical run result");
     app.runNode();
     settle();
-    require(app.outputTitle() == QStringLiteral("运行输出") && !isMissing(outputs->capture(PortId{2})->value),
+    require(app.outputTitle() == QStringLiteral("输出参数") && !isMissing(outputs->capture(PortId{2})->value),
             "execution did not replace the training result");
     app.selectNode("3");
     settle();

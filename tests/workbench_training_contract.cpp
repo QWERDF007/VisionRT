@@ -33,6 +33,18 @@ QQuickItem *button(QQuickItem *parent, const QString &text)
     }
     return nullptr;
 }
+
+bool hasColorNear(const QImage &rendered, QPointF point, QColor color)
+{
+    for (int y = std::max(0, qRound(point.y()) - 4); y < std::min(rendered.height(), qRound(point.y()) + 5); ++y)
+        for (int x = std::max(0, qRound(point.x()) - 4); x < std::min(rendered.width(), qRound(point.x()) + 5); ++x)
+        {
+            const auto pixel = rendered.pixelColor(x, y);
+            if (std::abs(pixel.red() - color.red()) < 35 && std::abs(pixel.green() - color.green()) < 35
+                && std::abs(pixel.blue() - color.blue()) < 35) return true;
+        }
+    return false;
+}
 }
 
 int main(int argc, char **argv)
@@ -54,9 +66,9 @@ try
     app.requestOpen(project);
     app.resolveUnsaved(UnsavedDecision::Discard);
     settle();
-    app.runOnce();
-    settle();
     app.selectNode("2");
+    settle();
+    app.runOnce();
     settle();
     QStringList tabs;
     for (const auto &tab : app.parameterTabs()) tabs.append(tab.toMap().value("name").toString());
@@ -99,7 +111,32 @@ try
             "choosing the training image changed the parameter tab");
     const auto record = app.selectedTrainingDraftRecord();
     require(!record.isEmpty() && app.trainingSavable(), "reference record did not load");
+    require(viewport->editing() && app.activeRoiParameter() == 2, "entering training mode did not seat the training ROI");
+    app.setEasyTouchEnabled(true);
+    require(app.assistAvailable(), "smart point selection is unavailable in training mode");
     const auto before = app.project().flows.front().nodes[1].inputs.at(6).literal;
+    const auto inputRoiVisible = [&]
+    {
+        auto capture = viewport->grabToImage();
+        require(capture && QTest::qWaitFor([&] { return !capture->image().isNull(); }, 3000),
+                "viewport could not be captured");
+        const auto rendered = capture->image();
+        const auto &firstRect = std::get<Rectangle>(before).get().front().front();
+        const auto edgePoint = viewport->imageToItem({firstRect[1], firstRect[2] - firstRect[4] / 2})
+                             * (rendered.width() / viewport->width());
+        return hasColorNear(rendered, edgePoint, VisionRTColor::getInstance()->ROIInput());
+    };
+    require(inputRoiVisible(), "training ROI rectangle is not visible on the training canvas");
+    app.setEasyTouchEnabled(false);
+    app.runNode();
+    settle();
+    require(viewport->editing() && app.activeRoiParameter() == 2,
+            "running a node while in training mode cleared the training ROI");
+    app.setTrainingMode(false);
+    settle();
+    require(inputRoiVisible(), "input ROI rectangle is not visible after returning to normal mode");
+    app.setTrainingMode(true);
+    settle();
     require(app.setTrainingField(record, 2, "[[[1200, 1570, 300, 90, 0], [1880, 1000, 300, 90, 90]]]"),
             "training search regions could not be edited");
     require(equalValues(app.project().flows.front().nodes[1].inputs.at(6).literal, before),
@@ -117,16 +154,8 @@ try
     require(capture && QTest::qWaitFor([&] { return !capture->image().isNull(); }, 3000), "training viewport could not be captured");
     const auto rendered = capture->image();
     const auto point = viewport->imageToItem({(line[1] + line[3]) / 2, (line[2] + line[4]) / 2}) * (rendered.width() / viewport->width());
-    const auto color = VisionRTColor::getInstance()->ROIOutput();
-    bool measuredLineVisible = false;
-    for (int y = std::max(0, qRound(point.y()) - 4); y < std::min(rendered.height(), qRound(point.y()) + 5); ++y)
-        for (int x = std::max(0, qRound(point.x()) - 4); x < std::min(rendered.width(), qRound(point.x()) + 5); ++x)
-        {
-            const auto pixel = rendered.pixelColor(x, y);
-            if (std::abs(pixel.red() - color.red()) < 35 && std::abs(pixel.green() - color.green()) < 35
-                && std::abs(pixel.blue() - color.blue()) < 35) measuredLineVisible = true;
-        }
-    require(measuredLineVisible, "the purple measured edge does not match the shared output coordinates");
+    require(hasColorNear(rendered, point, VisionRTColor::getInstance()->ROIOutput()),
+            "the purple measured edge does not match the shared output coordinates");
     QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
     window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/training-shared-output.png"));
     app.selectNode("1");

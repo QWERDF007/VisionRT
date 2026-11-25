@@ -43,6 +43,16 @@ QQuickItem *visibleText(QQuickItem *item, const QString &text)
     return nullptr;
 }
 
+QQuickItem *childByObjectName(QQuickItem *item, const QString &name)
+{
+    if (item->objectName() == name)
+        return item;
+    for (auto *child : item->childItems())
+        if (auto *found = childByObjectName(child, name))
+            return found;
+    return nullptr;
+}
+
 // Output cells are pooled delegates that carry the row/column they currently represent. Looking a
 // cell up by identity instead of by its visible text keeps this contract independent of formatting.
 QQuickItem *outputCell(QQuickItem *item, visionrt::PortId portId, int column)
@@ -220,9 +230,13 @@ void popupSessionsContract()
     app.selectNode(QStringLiteral("1"));
     auto *imageName = waitForCell(panel, 2, 0);
     require(imageName != nullptr, "image name cell is missing");
+    const auto dataNameWidth = imageName->width();
     rightClick(window, imageName);
     require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
             "name column did not open the connection menu");
+    for (auto *child : nameMenu->findChildren<QObject *>())
+        require(!child->property("text").toString().startsWith(QStringLiteral("✓")),
+                "connection menu must not display already-connected inputs");
     auto *targetMenu = findByProperty(nameMenu, "targetNode", target);
     require(targetMenu != nullptr, "connection menu does not group the compatible node");
     auto *imageInput = findByTextPrefix(targetMenu, QStringLiteral("图像"));
@@ -234,16 +248,41 @@ void popupSessionsContract()
     require(QTest::qWaitFor([&] { return !nameMenu->property("visible").toBool(); }, 1000),
             "the connection menu stayed open after committing a relation");
     rightClick(window, waitForCell(panel, 2, 0));
-    require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
-            "connection menu did not reopen for the connected output");
-    targetMenu = findByProperty(nameMenu, "targetNode", target);
-    require(targetMenu != nullptr, "connected target disappeared from the connection menu");
-    auto *connected = findByTextPrefix(targetMenu, QStringLiteral("✓"));
-    require(connected != nullptr && connected->property("enabled").toBool(),
-            "connected input is not offered for explicit disconnection");
-    require(QMetaObject::invokeMethod(connected, "triggered", Qt::DirectConnection), "cannot trigger the connected entry");
+    QTest::qWait(200);
+    require(!nameMenu->property("opened").toBool(),
+            "connection menu opened even though only already-connected inputs remain");
+    auto *relationsToggle = visibleText(panel, QStringLiteral("关系"));
+    require(relationsToggle != nullptr, "relations mode toggle is missing");
+    leftClick(window, relationsToggle);
+    auto *relationsNameCell = waitForCell(panel, 2, 0);
+    auto *relationsValueCell = waitForCell(panel, 2, 3);
+    require(relationsNameCell != nullptr && relationsValueCell != nullptr,
+            "relations mode did not render name and relation cells");
+    require(qFuzzyCompare(relationsNameCell->width(), dataNameWidth),
+            "name column width changed between data and relations modes");
+    auto *outputTable = panel->findChild<QQuickItem *>(QStringLiteral("outputTable"));
+    require(outputTable != nullptr
+                && qFuzzyCompare(relationsNameCell->width() + relationsValueCell->width(), outputTable->width()),
+            "output table right edge is not aligned flush with the table width");
+    require(app.outputTitle() == QStringLiteral("输出参数"),
+            "output title must default to 输出参数");
+    require(visibleText(panel, QStringLiteral("引用数")) == nullptr
+                && visibleText(panel, QStringLiteral("关系")) != nullptr,
+            "relations header must display 关系 instead of 引用数");
+    QPointer<QQuickItem> disconnectBtn;
+    require(QTest::qWaitFor([&] {
+        auto *cell = outputCell(panel, 2, 3);
+        disconnectBtn = cell ? childByObjectName(cell, QStringLiteral("disconnectRelationButton_2_%1_1").arg(target)) : nullptr;
+        return !disconnectBtn.isNull() && disconnectBtn->isVisible();
+    }, 3000),
+            "connected relation row is missing its close button");
+    leftClick(window, disconnectBtn.data());
     require(QTest::qWaitFor([&] { return !hasWire(app, QStringLiteral("1"), target); }, 1000),
-            "triggering the connected entry did not disconnect it");
+            "clicking the relation close button did not disconnect the wire");
+    auto *dataToggle = visibleText(panel, QStringLiteral("数据"));
+    require(dataToggle != nullptr, "data mode toggle is missing");
+    leftClick(window, dataToggle);
+    require(waitForCell(panel, 2, 2) != nullptr, "switching back to data mode failed");
 
     // An output context stays bound to its node even when the same port id exists elsewhere.
     const auto oldOutput = app.portContext(2, true);

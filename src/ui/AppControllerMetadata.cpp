@@ -599,7 +599,7 @@ QString AppController::outputTitle() const
 {
     const auto *node = impl_->currentNode();
     const auto result = node ? impl_->presentation.displaySnapshot(*node) : ResultSlot::Snapshot{};
-    return result && result->invocation == ProducedBy::Train ? QStringLiteral("训练输出") : QStringLiteral("运行输出");
+    return result && result->invocation == ProducedBy::Train ? QStringLiteral("训练输出") : QStringLiteral("输出参数");
 }
 
 } // namespace visionrt

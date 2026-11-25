@@ -409,6 +409,22 @@ const PortDefinition *AppController::Impl::parameter(PortId id, bool initializat
     return tool ? workbench::port(initialization ? tool->initParams : tool->inputs, id) : nullptr;
 }
 
+QString AppController::Impl::inputPortName(const NodeDefinition &node, PortId port) const
+{
+    const auto *definition = registry.find(node.toolId);
+    std::optional<ToolDefinition> contract;
+    try
+    {
+        if (definition)
+            contract = nodeContract(node, *definition);
+    }
+    catch (const ContractError &)
+    {
+    }
+    const auto *portDef = contract ? workbench::port(contract->inputs, port) : nullptr;
+    return portDef ? workbench::q(portDef->nameZh) : workbench::q(portLabel(port));
+}
+
 bool AppController::Impl::editingAllowed() const
 {
     return state == RuntimeState::Idle && !pendingTraining && !presentation.draining() && !operations.active()
@@ -734,7 +750,7 @@ void AppController::Impl::poll()
             state = runtime->state();
             editor.setBusy(false);
             if (auto *viewport = presentation.viewport())
-                viewport->setReadOnly(state != RuntimeState::Idle || !roiSession.active());
+                viewport->setReadOnly(state != RuntimeState::Idle || (!roiSession.active() && !trainingMode));
             updateReadback();
             if (refreshResult)
                 refreshFinished();
@@ -757,7 +773,8 @@ void AppController::Impl::start(RunMode mode)
     // continuation, so the newest management intent is the one that executes.
     if (operations.isClosing() || state != RuntimeState::Idle || operations.active())
         return;
-    finishRoi();
+    if (!trainingMode)
+        finishRoi();
     q->parameters();
     const auto configuredProject = editor.project();
     for (const auto &sourceFlow : configuredProject.flows)
