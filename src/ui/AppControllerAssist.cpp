@@ -17,7 +17,7 @@ namespace {
 // a distant ROI hijack a click on empty space, which is exactly what point-and-click must avoid.
 // Seeds are stored in reference coordinates while the cursor lives in the current image, so the
 // comparison happens in one frame: the record is mapped through the per-image alignment first.
-bool nearCursor(std::span<const double> record, const std::array<double, 9> &referenceToImage, const QPointF &cursor,
+bool nearCursor(std::span<const double> record, const Affine2D &referenceToImage, const QPointF &cursor,
                 double margin)
 {
     if (record.size() < 3)
@@ -40,7 +40,7 @@ bool nearCursor(std::span<const double> record, const std::array<double, 9> &ref
     if (RegionView(record).kind() == RoiKind::Circle)
     {
         const auto        circle      = RegionView(record).circle();
-        const auto       &m           = referenceToImage;
+        const auto       &m           = referenceToImage.m;
         const double      determinant = m[0] * m[4] - m[1] * m[3];
         const double      dx = cursor.x() - m[2], dy = cursor.y() - m[5];
         const cv::Point2d reference{(m[4] * dx - m[1] * dy) / determinant, (-m[3] * dx + m[0] * dy) / determinant};
@@ -50,35 +50,12 @@ bool nearCursor(std::span<const double> record, const std::array<double, 9> &ref
         && cursor.y() >= bounds[0].y - margin && cursor.y() <= bounds[1].y + margin;
 }
 
-// Identity in the current frame: a reference ROI already lives in the image the user sees.
-constexpr std::array<double, 9> kNoAlignment{1, 0, 0, 0, 1, 0, 0, 0, 1};
-
-std::array<double, 9> alignmentFor(std::span<const double> matrix)
-{
-    if (matrix.empty())
-        return kNoAlignment;
-    std::array<double, 9> result;
-    std::copy_n(matrix.begin(), result.size(), result.begin());
-    return result;
-}
-
-// An empty alignment is the declared identity; nonempty batches are one broadcast matrix or one
-// matrix per source image. Missing and malformed bindings are rejected before a locator is called.
-std::optional<PortValue> alignmentSlice(const PortValue &value, int index, size_t imageCount)
+std::optional<Affine2D> alignmentSlice(const PortValue &value, int index, std::size_t imageCount)
 {
     const auto *array = std::get_if<Array>(&value);
-    if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
-        return {};
-    if (array->elementCount() == 0)
-        return value;
-    const auto shape = array->shape();
-    if (shape[1] != 3 || shape[2] != 3 || (shape[0] != 1 && shape[0] != imageCount))
-        return {};
-    const auto          selected = shape[0] == 1 ? 0 : index;
-    const auto          values   = array->elements<double>();
-    std::vector<double> slice(values.begin() + static_cast<std::ptrdiff_t>(selected) * 9,
-                              values.begin() + static_cast<std::ptrdiff_t>(selected) * 9 + 9);
-    return Array::dense(DType::Float64, {1, 3, 3}, std::move(slice));
+    if (!array) return std::nullopt;
+    try { return alignmentsFromArray(*array, imageCount).at(static_cast<std::size_t>(index)); }
+    catch (const ContractError &) { return std::nullopt; }
 }
 
 } // namespace
@@ -119,27 +96,27 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     };
     for (auto [id, type] : {
              std::pair{ locator->frameInput, Type::Image},
-             {locator->searchInput,   Type::ROI}
+             {locator->searchInput,   Type::Circle}
     })
         if (!verify(algorithm->inputs, id, type))
             return reject(
                 QStringLiteral("算法 %1 inputs.%2 缺失或类型不匹配").arg(workbench::q(locator->algorithm)).arg(id));
-    for (auto [id, type] : {
-             std::pair{  locator->previewOutput,  Type::ROI},
-             {locator->candidateOutput,  Type::ROI},
-             {    locator->validOutput, Type::Bool}
-    })
+    const auto *candidate = workbench::port(algorithm->outputs, locator->candidateOutput);
+    const auto *preview = workbench::port(algorithm->outputs, locator->previewOutput);
+    if (!candidate || !preview || !isShapeType(candidate->type.type) || preview->type != candidate->type)
+        return reject(QStringLiteral("定位器必须声明匹配的具体形状输出"));
+    for (auto [id, type] : {std::pair{locator->validOutput, Type::Bool}})
         if (!verify(algorithm->outputs, id, type))
             return reject(
                 QStringLiteral("算法 %1 outputs.%2 缺失或类型不匹配").arg(workbench::q(locator->algorithm)).arg(id));
-    if (locator->seedInput && !verify(algorithm->inputs, *locator->seedInput, Type::ROI))
+    if (locator->seedInput && !verify(algorithm->inputs, *locator->seedInput, candidate->type.type))
         return reject(QStringLiteral("算法 %1 inputs.%2 缺失或类型不匹配")
                           .arg(workbench::q(locator->algorithm))
                           .arg(*locator->seedInput));
     if (locator->alignmentInput)
     {
         const auto *port = workbench::port(algorithm->inputs, *locator->alignmentInput);
-        if (!port || port->type != TypeSpec{Type::Array, DType::Float64, 3})
+        if (!port || port->type != kAlignmentType)
             return reject(QStringLiteral("算法 %1 inputs.%2 对齐类型不匹配")
                               .arg(workbench::q(locator->algorithm))
                               .arg(*locator->alignmentInput));
@@ -170,8 +147,11 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (trainingMode)
     {
         const auto *spec = trainingSpec();
-        if (!spec || (training ? training->roiParameter() : 0) != locator->regionTarget)
+        if (!spec || !training || !locator->datasetParameter || training->datasetParameter() != locator->datasetParameter
+            || training->roiParameter() != locator->regionTarget)
             return reject(QStringLiteral("训练画布字段不存在"));
+        const auto *field = workbench::port(training->recordParameters(), locator->regionTarget);
+        if (!field || field->type != candidate->type) return reject(QStringLiteral("训练字段与定位器形状类型不匹配"));
         if (!training || !training->active() || training->selected() < 0 || trainingAssistImage.empty())
             return reject(QStringLiteral("请先加入训练参考图"));
         context.trainingSerial = trainingSerial;
@@ -179,7 +159,7 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     }
     else
     {
-        if (!verify(tool->inputs, locator->regionTarget, Type::ROI))
+        if (!verify(tool->inputs, locator->regionTarget, candidate->type.type))
             return reject(QStringLiteral("ROI 目标 inputs.%1 无效").arg(locator->regionTarget));
         const auto binding = node->inputs.find(locator->imageSource);
         if (binding == node->inputs.end() || !effectiveSource(binding->second))
@@ -215,8 +195,8 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     request.learn   = learn;
     request.append  = append;
     request.inputs.emplace(locator.searchInput,
-                           DataRef<ROI>(ROI{{makeCircle({point.x(), point.y()}, locator.searchRadius)}}));
-    PortValue   alignment = Array::empty(DType::Float64, 3);
+                           Circle::fromEncoded(ROI{{makeCircle({point.x(), point.y()}, locator.searchRadius)}}));
+    Affine2D alignment;
     RegionGroup seeds;
     if (trainingMode)
     {
@@ -260,23 +240,21 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         if (!append && locator.seedInput)
         {
             const auto  value = resolvedInput(node, locator.regionTarget);
-            const auto *all   = std::get_if<DataRef<ROI>>(&value);
-            if (all && !all->get().empty()
-                && (all->get().size() == 1 || static_cast<size_t>(context->imageIndex) < all->get().size()))
+            const auto *all   = shapeRegions(value);
+            if (all && !all->empty()
+                && (all->size() == 1 || static_cast<size_t>(context->imageIndex) < all->size()))
             {
-                const auto &matrix    = std::get<Array>(alignment);
-                const auto  transform = alignmentFor(matrix.elements<double>());
-                const auto  index     = all->get().size() == 1 ? 0 : static_cast<size_t>(context->imageIndex);
-                for (const auto &region : all->get().at(index))
-                    if (nearCursor(region, transform, point, 8.0))
+                const auto  index     = all->size() == 1 ? 0 : static_cast<size_t>(context->imageIndex);
+                for (const auto &region : all->at(index))
+                    if (nearCursor(region, alignment, point, 8.0))
                         seeds.push_back(region);
             }
         }
     }
     if (locator.alignmentInput)
-        request.inputs.emplace(*locator.alignmentInput, std::move(alignment));
+        request.inputs.emplace(*locator.alignmentInput, alignmentArray(alignment));
     if (locator.seedInput)
-        request.inputs.emplace(*locator.seedInput, DataRef<ROI>(ROI{std::move(seeds)}));
+        request.inputs.emplace(*locator.seedInput, shapeValue(workbench::port(registry.find(locator.algorithm)->inputs, *locator.seedInput)->type.type, ROI{std::move(seeds)}));
     return request;
 }
 
@@ -303,8 +281,8 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
     const auto  index   = static_cast<size_t>(outcome.context.imageIndex);
     const auto &old     = node.inputs.at(locator.regionTarget).literal;
     ROI         placed;
-    if (const auto *existing = std::get_if<DataRef<ROI>>(&old))
-        placed = existing->get();
+    if (const auto *existing = shapeRegions(old))
+        placed = *existing;
     if (placed.size() == 1 && index > 0)
     {
         const auto &input = node.inputs.at(locator.imageSource);
@@ -319,7 +297,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
     const auto &newRegions = outcome.proposal.front();
     placed[index].insert(placed[index].end(), newRegions.begin(), newRegions.end());
     std::vector<LiteralWrite> writes{
-        {PortStage::Inputs, locator.regionTarget, DataRef<ROI>(std::move(placed))}
+        {PortStage::Inputs, locator.regionTarget, shapeValue(node.signatures.inputs.at(locator.regionTarget).type, std::move(placed))}
     };
     for (const auto &mapping : locator.parameters)
     {

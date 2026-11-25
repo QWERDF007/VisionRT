@@ -22,7 +22,9 @@ namespace visionrt {
 enum class RoiTargetKind
 {
     Input,
-    Training
+    Training,
+    Initialization,
+    TrainingParameter
 };
 
 struct RoiEditTarget
@@ -34,6 +36,16 @@ struct RoiEditTarget
     std::uint64_t session     = 0;
     RoiTargetKind kind        = RoiTargetKind::Input;
     bool          operator==(const RoiEditTarget &) const = default;
+};
+
+struct VISIONRT_UI_API GeometryOverlay
+{
+    std::variant<Direction, CoordinateFrame2D> value;
+    std::size_t image = 0;
+    bool input = false;
+    Affine2D alignment;
+    static std::optional<GeometryOverlay> fromValue(const PortValue &value, int image, bool input,
+                                                     Affine2D alignment = {});
 };
 
 class VISIONRT_UI_API ImageViewport : public QQuickItem
@@ -61,6 +73,16 @@ public:
         DrawPoint     = 5
     };
     Q_ENUM(DrawShape)
+    static DrawShape drawShapeForType(Type type) noexcept
+    {
+        switch (type)
+        {
+#define VRT_SHAPE(name, kind, view, code, wire, label) case Type::name: return Draw##name;
+#include <visionrt/contracts/ShapeKinds.def>
+#undef VRT_SHAPE
+        default: return DrawNone;
+        }
+    }
 
     enum ViewMode
     {
@@ -100,6 +122,7 @@ public:
 
     void setGeneration(quint64 generation);
     void setOverlays(RegionGroup inputs, RegionGroup outputs, std::vector<RoiEditTarget> targets = {});
+    void setGeometryOverlays(std::vector<GeometryOverlay> values);
     void selectRegion(int index);
     void previewGeometry(const RegionGroup &regions);
     void inspectInputRegion(const EncodedRegion &region);
@@ -287,6 +310,7 @@ private:
     QPointF                      center_;
     RegionGroup                  inputs_;
     RegionGroup                  outputs_;
+    std::vector<GeometryOverlay> geometry_;
     RegionGroup                  editable_;
     ROI                          assistPreview_;
     bool                         assistActive_ = false;

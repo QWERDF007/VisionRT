@@ -68,7 +68,7 @@ try
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                         root / "tools/custom/concurrent_shutdown.json",
                                                         {
@@ -148,7 +148,7 @@ try
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                         root / "tools/custom/inflight_shutdown.json",
                                                         {
@@ -214,7 +214,7 @@ def execute(inputs):
       "type": "string"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                     root / "tools/custom/memory.json",
                                                     {

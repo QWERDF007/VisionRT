@@ -97,7 +97,7 @@ void nativeGraphSharing(std::size_t batchSize)
     Values values{
         {2, DataRef<Image>(std::move(initialImages))},
         {3, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
-        {4, DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
+        {4, Circle::fromEncoded(ROI{{{3., 1., 2., 3.}}})}
     };
     ToolDefinition source;
     source.nameEn          = "test.shared.source";
@@ -107,7 +107,7 @@ void nativeGraphSharing(std::size_t batchSize)
     source.outputs     = {
         {2, "图像",                  {Type::Image}},
         {3, "数值", {Type::Array, DType::Int64, 2}},
-        {4, "区域",                    {Type::ROI}}
+        {4, "区域",                    {Type::Circle}}
     };
     auto mutator        = source;
     mutator.nameEn          = "test.shared.mutator";
@@ -128,7 +128,7 @@ void nativeGraphSharing(std::size_t batchSize)
                 {
                     auto &images  = std::get<DataRef<Image>>(inputs.at(2)).get();
                     auto  numbers = std::get<Array>(inputs.at(3));
-                    auto &regions = std::get<DataRef<ROI>>(inputs.at(4)).get();
+                    auto &regions = std::get<Circle>(inputs.at(4)).get();
                     require(&images == &std::get<DataRef<Image>>(values.at(2)).get(),
                             "runtime copied Image collection");
                     for (std::size_t batch = 0; batch < batchSize; ++batch)
@@ -137,14 +137,11 @@ void nativeGraphSharing(std::size_t batchSize)
                                 "runtime copied padded pixels");
                     require(numbers.data() == std::get<Array>(values.at(3)).data(),
                             "runtime copied Array buffer");
-                    require(&regions == &std::get<DataRef<ROI>>(values.at(4)).get(),
+                    require(&regions == &std::get<Circle>(values.at(4)).get(),
                             "runtime copied ROI container");
                     ++images[0].at<std::uint8_t>(0, 0);
                     images.push_back(cv::Mat::ones(1, 1, CV_8UC1));
                     numbers.elements<std::int64_t>()[0] = 42;
-                    regions.push_back({
-                        {0., 1., 2.}
-                    });
                     return toolResult(businessOutputs(inputs), {});
                 });
         });
@@ -181,9 +178,9 @@ void nativeGraphSharing(std::size_t batchSize)
     require(parent.at<std::uint8_t>(1, 1) == 9, "second tool mutation did not share producer storage");
     require(std::get<DataRef<Image>>(oldSource->outputs.at(2)).get().size() == batchSize + 2,
             "old publication incorrectly claims frozen payloads");
-    require(std::get<DataRef<ROI>>(oldSource->outputs.at(4)).get().size() == 3, "ROI shared mutation lost");
+    require(std::get<Circle>(oldSource->outputs.at(4)).get().size() == 1, "circle payload changed during forwarding");
     std::cout << "Runtime forwards " << batchSize
-              << " writable images, Array/ROI storage, padded pixels and publication provenance\n";
+              << " writable images, Array and circle storage, padded pixels and publication provenance\n";
 }
 
 void explicitToolStoragePolicies()
@@ -393,23 +390,23 @@ void toolCoordinatedBranches()
 void assistSeedFrame()
 {
     const std::vector<double> rectangle{2.0, 10.0, 20.0, 4.0, 4.0, 0.0};
-    const std::array<double, 9> identity{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    const Affine2D identity{{1, 0, 0, 0, 1, 0}};
     const auto                 same = transformedRoiBounds(rectangle, identity);
     require(same[0] == cv::Point2d(10.0, 20.0) && same[1] == cv::Point2d(14.0, 24.0),
             "identity alignment changed the reference geometry");
 
-    const std::array<double, 9> translated{1, 0, 100, 0, 1, -50, 0, 0, 1};
+    const Affine2D translated{{1, 0, 100, 0, 1, -50}};
     const auto                 moved = transformedRoiBounds(rectangle, translated);
     require(moved[0] == cv::Point2d(110.0, -30.0) && moved[1] == cv::Point2d(114.0, -26.0),
             "translated alignment did not move the seed into the image frame");
 
-    const std::array<double, 9> scaled{2, 0, 0, 0, 2, 0, 0, 0, 1};
+    const Affine2D scaled{{2, 0, 0, 0, 2, 0}};
     const auto                 grown = transformedRoiBounds(rectangle, scaled);
     require(grown[0] == cv::Point2d(20.0, 40.0) && grown[1] == cv::Point2d(28.0, 48.0),
             "scaled alignment did not scale the seed");
 
     // A quarter turn keeps the size and moves the box: the pointer must still hit it where it is.
-    const std::array<double, 9> rotated{0, -1, 0, 1, 0, 0, 0, 0, 1};
+    const Affine2D rotated{{0, -1, 0, 1, 0, 0}};
     const auto                 turned = transformedRoiBounds(rectangle, rotated);
     require(std::abs(turned[0].x + 24.0) < 1e-9 && std::abs(turned[0].y - 10.0) < 1e-9
                 && std::abs(turned[1].x + 20.0) < 1e-9 && std::abs(turned[1].y - 14.0) < 1e-9,
@@ -423,45 +420,34 @@ void assistSeedFrame()
 
     // A non-uniform alignment turns the seed into an ellipse: the hit area must follow the axis
     // that was actually scaled instead of reporting a circle of the larger radius.
-    const std::array<double, 9> stretched{2, 0, 0, 0, 1, 0, 0, 0, 1};
+    const Affine2D stretched{{2, 0, 0, 0, 1, 0}};
     const auto                  oval = transformedRoiBounds(circle, stretched);
     require(oval[0] == cv::Point2d(-10.0, -5.0) && oval[1] == cv::Point2d(10.0, 5.0),
             "non-uniform alignment reported a circle instead of the true ellipse bounds");
 
     // A shear and a mirror stay inside the supported range: the box follows the mapped shape.
-    const std::array<double, 9> sheared{1, 0.5, 0, 0, 1, 0, 0, 0, 1};
+    const Affine2D sheared{{1, 0.5, 0, 0, 1, 0}};
     const auto                  skewed = transformedRoiBounds(rectangle, sheared);
     require(skewed[0] == cv::Point2d(20.0, 20.0) && skewed[1] == cv::Point2d(26.0, 24.0),
             "sheared alignment reported the wrong box");
-    const std::array<double, 9> mirrored{-1, 0, 0, 0, 1, 0, 0, 0, 1};
+    const Affine2D mirrored{{-1, 0, 0, 0, 1, 0}};
     const auto                  flipped = transformedRoiBounds(rectangle, mirrored);
     require(flipped[0] == cv::Point2d(-14.0, 20.0) && flipped[1] == cv::Point2d(-10.0, 24.0),
             "mirrored alignment did not report the mirrored box");
 
     // A singular alignment has no image for the seed. The contract must name it, so the assist path
     // can treat it as "not under the cursor" instead of hitting a coordinate that does not exist.
-    const std::array<double, 9> singular{1, 0, 0, 0, 0, 0, 0, 0, 1};
+    const Affine2D singular{{1, 0, 0, 0, 0, 0}};
     bool                        diagnosed = false;
     try { transformedRoiBounds(circle, singular); }
     catch (const ContractError &error)
     {
-        diagnosed = std::string_view(error.what()).find("singular") != std::string_view::npos;
+        diagnosed = std::string_view(error.what()).find("invertible") != std::string_view::npos;
     }
     require(diagnosed, "a singular affine alignment was not diagnosed");
 
-    // A projective map is outside the supported range: part of the region has no finite image, so
-    // the helper refuses it instead of returning a box that misses the region's real extent.
-    const std::array<double, 9> projective{1, 0, 0, 0, 1, 0, 0.1, 0, 1};
-    bool                        refused = false;
-    try { transformedRoiBounds(rectangle, projective); }
-    catch (const ContractError &error)
-    {
-        refused = std::string_view(error.what()).find("affine") != std::string_view::npos;
-    }
-    require(refused, "a projective alignment was not refused");
-
     // A non-finite matrix is refused before any geometry runs.
-    const std::array<double, 9> infinite{1, 0, 0, 0, 1, 0, 0, 0, std::numeric_limits<double>::infinity()};
+    const Affine2D infinite{{1, 0, 0, 0, 1, std::numeric_limits<double>::infinity()}};
     bool                        finiteRefused = false;
     try { transformedRoiBounds(rectangle, infinite); }
     catch (const ContractError &error)

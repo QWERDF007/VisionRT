@@ -12,7 +12,7 @@ ParameterLocator readLocator(const QJsonValue &value)
     json::fields(item,
                  {"algorithm", "image_source", "region_target", "frame_input", "search_input", "search_radius",
                   "candidate_output", "preview_output", "valid_output", "message_output", "seed_input",
-                  "alignment_input", "parameters"},
+                  "alignment_input", "parameters", "dataset_parameter"},
                  "locator");
     const auto id = [](const QJsonObject &owner, const char *key) -> PortId
     {
@@ -36,6 +36,7 @@ ParameterLocator readLocator(const QJsonValue &value)
     result.validOutput     = id(item, "valid_output");
     if (item.contains("seed_input"))
         result.seedInput = id(item, "seed_input");
+    if (item.contains("dataset_parameter")) result.datasetParameter = id(item, "dataset_parameter");
     if (item.contains("alignment_input"))
         result.alignmentInput = id(item, "alignment_input");
     if (item.contains("message_output"))
@@ -85,6 +86,7 @@ QJsonObject writeLocator(const ParameterLocator &locator)
         result.insert("seed_input", static_cast<qint64>(*locator.seedInput));
     if (locator.alignmentInput)
         result.insert("alignment_input", static_cast<qint64>(*locator.alignmentInput));
+    if (locator.datasetParameter) result.insert("dataset_parameter", static_cast<qint64>(*locator.datasetParameter));
     QJsonArray parameters;
     for (const auto &parameter : locator.parameters)
     {

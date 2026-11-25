@@ -335,11 +335,7 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
             throw ContractError("TypeSpec 包含未知字段：" + field.key().toStdString());
     TypeSpec type;
     const auto code = integer(json.value("type"));
-    // Type::TrainingSet is declaration-only: a trainer port names it, while project values never
-    // carry one. Decoding stays the single place that converts the published number.
-    if (code < 0 || code > static_cast<int>(Type::TrainingSet))
-        throw ContractError("未知类型编码");
-    type.type = static_cast<Type>(code);
+    type.type = typeFromCode(code);
     if (json.contains("dtype")) {
         const auto dtype = integer(json.value("dtype"));
         if (dtype < 0 || dtype > static_cast<int>(DType::String)) throw ContractError("未知元素类型编码");
@@ -391,15 +387,23 @@ PortValue ValueJson::decode(const QJsonValue &json, const TypeSpec &type)
         result = string(json);
         break;
     case Type::Image:
-        if (!array(json).isEmpty())
-            throw ContractError("图像字面量只能是 null 或空数组");
-        result = DataRef<Image>(Image{});
+    case Type::TrainingSet:
+    {
+        const auto document = json.isArray() ? QJsonDocument(json.toArray()) : QJsonDocument(json.toObject());
+        result = readValueJson(document.toJson(QJsonDocument::Compact).toStdString(), type);
         break;
+    }
     case Type::Array:
         result = decodeArray(json, *type.dtype, type.rank);
         break;
-    case Type::ROI:
-        result = DataRef<ROI>(decodeNested<ROI>(json));
+#define VRT_SHAPE(name, kind, view, code, wire, label) case Type::name: result = name::fromNested(decodeNested<ROI>(json)); break;
+#include <visionrt/contracts/ShapeKinds.def>
+#undef VRT_SHAPE
+    case Type::Direction:
+        result = Direction(decodeArray(json, *Direction::storageType().dtype, Direction::storageType().rank));
+        break;
+    case Type::CoordinateFrame2D:
+        result = CoordinateFrame2D(decodeArray(json, *CoordinateFrame2D::storageType().dtype, CoordinateFrame2D::storageType().rank));
         break;
     }
     validateValue(type, result);
@@ -425,25 +429,21 @@ QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpo
                 return utf8(item);
             else if constexpr (std::is_same_v<Item, Array>)
                 return arrayJson(item, purpose);
-            else if constexpr (std::is_same_v<Item, DataRef<ROI>>)
-                return encodeNested(item.get(), purpose, "float64");
+            else if constexpr (std::is_same_v<Item, Direction> || std::is_same_v<Item, CoordinateFrame2D>)
+                return arrayJson(item.array(), purpose);
+            else if constexpr (isShapeValue<Item>)
+                return encodeNested(item.nested(), purpose, "float64");
             else if constexpr (std::is_same_v<Item, DataRef<TrainingSet>>)
             {
-                // A training set belongs to one call and to the assets a successful training
-                // publishes; it is never a project value a document could carry.
-                throw ContractError("训练集不能写入工程或声明");
+                if (purpose == Purpose::Display)
+                    return QJsonObject{{"images", static_cast<qint64>(item.get().images.size())},
+                                       {"records", static_cast<qint64>(item.get().records.size())}};
+                return QJsonDocument::fromJson(QByteArray::fromStdString(writeValueJson(value, type))).object();
             }
             else
             {
-                // Pixels are runtime data and never enter a document: a literal or a stored value
-                // keeps the declared empty batch and rejects a non-empty one. A display description
-                // carries geometry only, so a reader can show what the value was without pixels.
                 if (purpose != Purpose::Display)
-                {
-                    if (!item.get().empty())
-                        throw ContractError("图像字面量只能是 null 或空数组");
-                    return QJsonArray{};
-                }
+                    return QJsonDocument::fromJson(QByteArray::fromStdString(writeValueJson(value, type))).array();
                 QJsonArray images;
                 for (const auto &image : item.get())
                     images.append(QJsonObject{

@@ -43,7 +43,7 @@ const QByteArray declaration = R"json({
   "implementation": {
     "kind": "cpp"
   },
-  "schema_version": 2
+  "schema_version": 4
 })json";
 
 QJsonObject index()

@@ -55,7 +55,7 @@ void parameterStatesContract(visionrt::AppController &app)
     };
     QQuickItem *panel = findItem(findItem, window->contentItem(), "parameter_" + QString::number(testing::parameters::Ratio));
     require(panel != nullptr, "actual main window has no parameter rows");
-    while (panel && !panel->property("parameterGroups").isValid()) panel = panel->parentItem();
+    while (panel && panel->objectName() != "parameterPanel") panel = panel->parentItem();
     require(panel != nullptr, "parameter rows do not belong to a parameter panel");
     const auto divider = panel->mapToScene(QPointF(panel->width() / 2, -1)).toPoint();
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, divider);

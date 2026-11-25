@@ -58,7 +58,7 @@ struct NodeSnapshot
     // exactly the node's own total.
     std::int64_t  startedNs = 0;
     std::int64_t  endedNs   = 0;
-    Values        roiInputs;
+    Values        geometryInputs;
     std::vector<InputUse> inputUses;
 };
 

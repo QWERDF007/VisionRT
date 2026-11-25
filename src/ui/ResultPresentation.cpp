@@ -1,4 +1,5 @@
 #include "ResultPresentation.h"
+#include "core/ProjectEditor.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -9,12 +10,12 @@ namespace visionrt {
 namespace {
 RegionGroup imageRois(const PortValue &value, int index, bool singleRectangle = false)
 {
-    const auto *regions = std::get_if<DataRef<ROI>>(&value);
+    const auto *regions = shapeRegions(value);
     if (singleRectangle)
         index = 0;
-    if (!regions || index < 0 || static_cast<std::size_t>(index) >= regions->get().size())
+    if (!regions || index < 0 || static_cast<std::size_t>(index) >= (*regions).size())
         return {};
-    return regions->get()[index];
+    return (*regions)[index];
 }
 
 const DataRef<Image> *images(const ResultSlot::Snapshot &snapshot, PortId port)
@@ -47,7 +48,7 @@ const PortDefinition *findPort(const std::vector<PortDefinition> &ports, PortId 
 QString imageKey(const PortRef &ref)
 {
     return QStringLiteral("%1:%2")
-        .arg(ref.stage == PortStage::Inputs ? QStringLiteral("inputs") : QStringLiteral("outputs"))
+        .arg(QString::fromLatin1(stageName(ref.stage)))
         .arg(ref.id);
 }
 
@@ -58,12 +59,10 @@ std::optional<PortRef> parseImageKey(const QString &key)
         return std::nullopt;
     bool       ok = false;
     const auto id = parts[1].toUInt(&ok);
-    if (!ok || id == 0)
+    if (!ok)
         return std::nullopt;
-    if (parts[0] == QStringLiteral("inputs"))
-        return PortRef{PortStage::Inputs, id};
-    if (parts[0] == QStringLiteral("outputs"))
-        return PortRef{PortStage::Outputs, id};
+    for (const auto stage : {PortStage::Init, PortStage::Train, PortStage::Inputs, PortStage::Outputs})
+        if (parts[0] == QString::fromLatin1(stageName(stage))) return PortRef{stage, id};
     return std::nullopt;
 }
 } // namespace
@@ -116,6 +115,7 @@ void ResultPresentation::setSuspended(bool value)
         if (viewport_)
         {
             viewport_->setOverlays({}, {});
+            viewport_->setGeometryOverlays({});
             viewport_->endRoiEdit();
         }
     }
@@ -295,6 +295,7 @@ void ResultPresentation::clearDisplay()
     displayInputTargets_.clear();
     displayInputs_.clear();
     displayOutputs_.clear();
+    displayGeometry_.clear();
     displayRoiTarget_.reset();
     displayTargets_.clear();
     outputs_.clear();
@@ -387,6 +388,7 @@ void ResultPresentation::applyOverlays()
     if (!viewport_ || suspended_)
         return;
     viewport_->setOverlays(displayInputs_, displayOutputs_, displayInputTargets_);
+    viewport_->setGeometryOverlays(displayGeometry_);
     if (displayRoiTarget_)
         viewport_->beginRoiEdit(*displayRoiTarget_,
                                 imageRois(roi_.draft(), roi_.displayIndex(), roi_.singleRectangle()),
@@ -411,6 +413,33 @@ const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, P
     return output == (*snapshot)->outputs.end() ? nullptr : &output->second;
 }
 
+PortValue ResultPresentation::resolvedValue(const NodeDefinition &node, PortRef ref) const
+{
+    if (ref.stage == PortStage::Inputs)
+    {
+        const auto *value = resolvedInput(node, ref.id);
+        return value ? *value : PortValue{Missing{}};
+    }
+    if (ref.stage == PortStage::Outputs)
+    {
+        const auto result = displaySnapshot(node);
+        if (result)
+            if (const auto found = result->outputs.find(ref.id); found != result->outputs.end()) return found->second;
+        return Missing{};
+    }
+    const auto &values = ref.stage == PortStage::Init ? node.initParams : node.trainParams;
+    const auto found = values.find(ref.id);
+    return found == values.end() ? PortValue{Missing{}} : found->second;
+}
+
+const PortDefinition *ResultPresentation::roiDeclaration() const
+{
+    const auto *tool = host_.effectiveTool();
+    if (!tool) return nullptr;
+    const auto stage = roi_.parameterStage();
+    return findPort(stage == PortStage::Init ? tool->initParams : stage == PortStage::Train ? tool->trainParams : tool->inputs, roi_.input());
+}
+
 void ResultPresentation::updateDisplay()
 {
     if (suspended_ || !readsAllowed())
@@ -418,14 +447,13 @@ void ResultPresentation::updateDisplay()
     if (roi_.active())
     {
         const auto     *node        = host_.selectedNode();
-        const auto     *declaration = host_.parameter(roi_.input(), false);
+        const auto     *declaration = roiDeclaration();
         // An image-free editor freezes a Missing background; a missing port must compare equal to it
         // instead of ending the session that just started.
         const PortValue missing{Missing{}};
-        const auto     *background
-            = node && declaration && declaration->image ? resolvedInput(*node, declaration->image->id) : nullptr;
-        const PortValue &current = background ? *background : missing;
-        if (!node || node->id != roi_.node() || !declaration || !equalValues(roi_.background(), current))
+        const auto current = node && declaration && declaration->image ? resolvedValue(*node, *declaration->image) : missing;
+        if (!node || node->id != roi_.node() || !declaration
+            || (roi_.parameterStage() != PortStage::Train && !equalValues(roi_.background(), current)))
         {
             host_.endRoiEdit();
             if (!readsAllowed())
@@ -436,6 +464,7 @@ void ResultPresentation::updateDisplay()
     const auto           *node  = host_.selectedNode();
     const auto           *tool  = host_.effectiveTool();
     const DataRef<Image> *batch = nullptr;
+    PortValue selectedValue = Missing{};
     ResultSlot::Snapshot  snapshot;
     ColorOrder            color         = ColorOrder::Automatic;
     PortId                roiImageInput = 0;
@@ -453,7 +482,8 @@ void ResultPresentation::updateDisplay()
     const PortDefinition *selectedPort = nullptr;
     if (!roi_.active() && imageSelection_ && tool)
     {
-        const auto &ports = imageSelection_->stage == PortStage::Inputs ? tool->inputs : tool->outputs;
+        const auto &ports = imageSelection_->stage == PortStage::Inputs ? tool->inputs : imageSelection_->stage == PortStage::Outputs ? tool->outputs
+                          : imageSelection_->stage == PortStage::Init ? tool->initParams : tool->trainParams;
         selectedPort      = findPort(ports, imageSelection_->id);
         if (!selectedPort)
             imageSelection_.reset();
@@ -461,8 +491,8 @@ void ResultPresentation::updateDisplay()
             batch = images(snapshot, selectedPort->id);
         else if (node)
         {
-            const auto *value = resolvedInput(*node, selectedPort->id);
-            batch             = value ? std::get_if<DataRef<Image>>(value) : nullptr;
+            selectedValue = resolvedValue(*node, *imageSelection_);
+            batch = std::get_if<DataRef<Image>>(&selectedValue);
         }
         if (batch && batch->get().empty())
             batch = nullptr;
@@ -476,16 +506,14 @@ void ResultPresentation::updateDisplay()
     {
         batch             = std::get_if<DataRef<Image>>(&roi_.background());
         selectedIndex     = roi_.displayIndex();
-        displayRoiTarget_ = RoiEditTarget{
-            roi_.node(), roi_.input(), selectedIndex,
-            roi_.singleRectangle() && !std::get<DataRef<ROI>>(roi_.draft()).get().empty() ? 0 : -1, roi_.id()};
-        const auto *declaration = host_.parameter(roi_.input(), false);
+        displayRoiTarget_ = roi_.target(roi_.singleRectangle() && !shapeRegions(roi_.draft())->empty() ? 0 : -1);
+        const auto *declaration = roiDeclaration();
         if (declaration && node)
         {
             roiImageInput = declaration->image ? declaration->image->id : 0;
-            if (tool)
+            if (tool && roi_.parameterStage() == PortStage::Inputs)
                 for (const auto &port : tool->inputs)
-                    if (port.id != roi_.input() && port.type.type == Type::ROI && port.image
+                    if (port.id != roi_.input() && isShapeType(port.type.type) && port.image
                         && *port.image == PortRef{PortStage::Inputs, roiImageInput})
                     {
                         const auto *value = resolvedInput(*node, port.id);
@@ -509,7 +537,7 @@ void ResultPresentation::updateDisplay()
         // Geometry declared on the displayed image itself.
         for (const auto &port : tool->inputs)
         {
-            if (port.type.type != Type::ROI || !port.image || *port.image != *imageSelection_)
+            if (!isShapeType(port.type.type) || !port.image || *port.image != *imageSelection_)
                 continue;
             const auto *value = resolvedInput(*node, port.id);
             if (value)
@@ -524,10 +552,10 @@ void ResultPresentation::updateDisplay()
         // input contributes overlays; equal pixels or a first-non-empty input never do.
         if (snapshot && imageSelection_->stage == PortStage::Outputs && selectedPort && selectedPort->sameGeometryAs)
             for (const auto &port : tool->inputs)
-                if (port.type.type == Type::ROI && port.image && *port.image == *selectedPort->sameGeometryAs)
+                if (isShapeType(port.type.type) && port.image && *port.image == *selectedPort->sameGeometryAs)
                 {
-                    const auto value = snapshot->roiInputs.find(port.id);
-                    if (value != snapshot->roiInputs.end())
+                    const auto value = snapshot->geometryInputs.find(port.id);
+                    if (value != snapshot->geometryInputs.end())
                     {
                         auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
                         for (std::size_t i = 0; i < values.size(); ++i)
@@ -540,7 +568,7 @@ void ResultPresentation::updateDisplay()
     if (tool && snapshot)
         for (const auto &port : tool->outputs)
         {
-            if (port.type.type != Type::ROI || !port.image)
+            if (!isShapeType(port.type.type) || !port.image)
                 continue;
             const auto *imagePort = port.image->stage == PortStage::Inputs ? findPort(tool->inputs, port.image->id)
                                                                            : findPort(tool->outputs, port.image->id);
@@ -562,6 +590,36 @@ void ResultPresentation::updateDisplay()
                 displayOutputs_.insert(displayOutputs_.end(), values.begin(), values.end());
             }
         }
+
+    if (node && tool && batch && imageSelection_)
+    {
+        for (const auto &[stage, ports] : {std::pair{PortStage::Init, &tool->initParams}, {PortStage::Train, &tool->trainParams},
+                                          {PortStage::Inputs, &tool->inputs}, {PortStage::Outputs, &tool->outputs}})
+            for (const auto &port : *ports)
+            {
+                if ((port.type.type != Type::Direction && port.type.type != Type::CoordinateFrame2D) || !port.image) continue;
+                const bool sameImage = *port.image == *imageSelection_
+                    || (selectedPort && selectedPort->sameGeometryAs && *port.image == *selectedPort->sameGeometryAs);
+                if (!sameImage) continue;
+                auto value = resolvedValue(*node, {stage, port.id});
+                if (stage == PortStage::Inputs && snapshot && selectedPort && selectedPort->sameGeometryAs)
+                {
+                    const auto found = snapshot->geometryInputs.find(port.id);
+                    value = found == snapshot->geometryInputs.end() ? PortValue{Missing{}} : found->second;
+                }
+                Affine2D alignment;
+                if (port.alignment)
+                {
+                    const auto raw = resolvedValue(*node, *port.alignment);
+                    const auto *array = std::get_if<Array>(&raw);
+                    if (!array) continue;
+                    try { alignment = alignmentsFromArray(*array, batch->get().size()).at(selectedIndex); }
+                    catch (const ContractError &) { continue; }
+                }
+                if (auto overlay = GeometryOverlay::fromValue(value, selectedIndex, stage != PortStage::Outputs, alignment))
+                    displayGeometry_.push_back(std::move(*overlay));
+            }
+    }
 
     Image                                requestedImages;
     std::vector<QPointer<ImageViewport>> targets;
@@ -595,6 +653,7 @@ void ResultPresentation::updateDisplay()
     {
         target->clearImage(displayRequest_);
         target->setOverlays({}, {});
+        target->setGeometryOverlays({});
         target->endRoiEdit();
     }
     if (requestedImages.empty())
@@ -658,6 +717,8 @@ std::vector<ResultPresentation::ImageChoice> ResultPresentation::imageChoices() 
 
     add(tool->outputs, PortStage::Outputs, node->signatures.outputs, true);
     add(tool->inputs, PortStage::Inputs, node->signatures.inputs, true);
+    add(tool->initParams, PortStage::Init, node->signatures.initParams, true);
+    add(tool->trainParams, PortStage::Train, node->signatures.trainParams, true);
 
     // An ROI session edits its declared input image, which the visible-only pass above already
     // listed when the author offers it. Nothing hidden is added here: the session owns the
@@ -687,8 +748,8 @@ void ResultPresentation::ensureImageSelection(const NodeDefinition &node, const 
             const auto *batch = images(snapshot, choice.ref.id);
             return batch && !batch->get().empty();
         }
-        const auto *value = resolvedInput(node, choice.ref.id);
-        const auto *batch = value ? std::get_if<DataRef<Image>>(value) : nullptr;
+        const auto value = resolvedValue(node, choice.ref);
+        const auto *batch = std::get_if<DataRef<Image>>(&value);
         return batch && !batch->get().empty();
     };
     const auto available = std::find_if(choices.begin(), choices.end(), carriesImages);
@@ -727,7 +788,7 @@ QString ResultPresentation::selectedImageOutput() const
     // choice, so an image the author hid can never be read back as the user's selection.
     if (roi_.active())
     {
-        const auto *declaration = host_.parameter(roi_.input(), false);
+        const auto *declaration = roiDeclaration();
         if (!declaration || !declaration->image)
             return {};
         const auto key     = imageKey(*declaration->image);

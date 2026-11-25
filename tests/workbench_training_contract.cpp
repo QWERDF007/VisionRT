@@ -60,7 +60,7 @@ try
     settle();
     QStringList tabs;
     for (const auto &tab : app.parameterTabs()) tabs.append(tab.toMap().value("name").toString());
-    require(tabs == QStringList{"基本输入", "预处理", "训练", "检测", "结果处理"}, "parameter tab order differs from the contract");
+    require(tabs == QStringList{"基本输入", "训练", "预处理", "检测", "结果处理"}, "parameter tab order differs from the contract");
     QQmlEngine engine;
     QStringList warnings;
     QObject::connect(&engine, &QQmlEngine::warnings, &engine, [&](const QList<QQmlError> &errors)
@@ -100,18 +100,18 @@ try
     const auto record = app.selectedTrainingDraftRecord();
     require(!record.isEmpty() && app.trainingSavable(), "reference record did not load");
     const auto before = app.project().flows.front().nodes[1].inputs.at(6).literal;
-    require(app.setTrainingField(record, 2, "[[[2, 1200, 1570, 300, 90, 0], [2, 1880, 1000, 300, 90, 90]]]"),
+    require(app.setTrainingField(record, 2, "[[[1200, 1570, 300, 90, 0], [1880, 1000, 300, 90, 90]]]"),
             "training search regions could not be edited");
     require(equalValues(app.project().flows.front().nodes[1].inputs.at(6).literal, before),
             "editing training regions changed the detection regions");
     // Restore the known reference regions, then fit with the real tool.
-    require(app.setTrainingField(record, 2, ValueJson::text(before, {Type::ROI})), "reference regions could not be restored");
+    require(app.setTrainingField(record, 2, ValueJson::text(before, {Type::Rectangle})), "reference regions could not be restored");
     require(app.setTrainingParameter(1, ""), "default model location could not be chosen");
     app.applyTraining();
     settle();
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs && app.outputTitle() == QStringLiteral("训练输出"), "training did not replace the visible result");
-    const auto found = std::get<DataRef<ROI>>(outputs->capture(PortId{3})->value).get();
+    const auto found = std::get<Line>(outputs->capture(PortId{3})->value).get();
     const auto &line = found.front().front();
     auto capture = viewport->grabToImage();
     require(capture && QTest::qWaitFor([&] { return !capture->image().isNull(); }, 3000), "training viewport could not be captured");
@@ -133,6 +133,30 @@ try
     settle();
     require(!app.trainingAvailable() && app.parameterTabs().size() == 4 && !app.trainingMode(),
             "an ordinary tool retained training tabs");
+    const auto calibration = testing::copyExample(VISIONRT_SOURCE_DIR, installation.directory(),
+        std::filesystem::path(u8"examples/03_综合示例/03_变距尺子标定测量"), std::filesystem::path(u8"变距尺子标定测量.json"));
+    app.requestOpen(calibration);
+    app.resolveUnsaved(UnsavedDecision::Discard);
+    settle();
+    app.selectNode("2");
+    settle();
+    app.setTrainingMode(true);
+    require(app.trainingSavable() && viewport->hasImage(), "calibration training needs a frame and no canvas ROI");
+    require(app.setTrainingParameter(2, ""), "calibration model uses the training publication path");
+    app.applyTraining();
+    settle();
+    require(app.outputTitle() == QStringLiteral("训练输出"), "calibration uses the shared training output");
+    require(std::get<double>(outputs->capture(PortId{5})->value) < 0.5, "real plate satisfies the declared quality threshold");
+    require(std::get<CoordinateFrame2D>(outputs->capture(PortId{6})->value).count(0) == 1, "training publishes the reusable coordinate frame");
+    require(std::get<Circle>(outputs->capture(PortId{4})->value).get().front().size() > 500, "training locates the real plate marks");
+    const auto modelPath = std::filesystem::weakly_canonical(app.project().path.parent_path()
+        / std::filesystem::u8path(std::get<std::string>(app.project().flows.front().nodes.at(1).trainParams.at(2))));
+    const auto relativeModel = modelPath.lexically_relative(std::filesystem::path(installation.directory().toStdWString()));
+    require(!relativeModel.empty() && *relativeModel.begin() != "..", "training assets belong to the controller installation");
+    trainingTab = button(panel, "训练");
+    QTest::mouseClick(window, Qt::LeftButton, {}, trainingTab->mapToScene(trainingTab->boundingRect().center()).toPoint());
+    QTest::qWait(100);
+    window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/calibration-training-workbench.png"));
     require(warnings.isEmpty(), qPrintable(warnings.join('\n')));
     std::cout << "Real workbench tabs, grouping, independent training parameters, and measured-edge rendering agree\n";
     return 0;

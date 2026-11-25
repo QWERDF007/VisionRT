@@ -88,7 +88,7 @@ try
     {
       "id": 5,
       "name_zh": "区域",
-      "type": "roi",
+      "type": "circle",
       "relations": {
         "image": {
           "stage": "outputs",
@@ -97,7 +97,7 @@ try
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     write("tools/custom/fixture/editor.json", R"({
   "name_en": "test.ui.editor",
@@ -121,7 +121,7 @@ try
     {
       "id": 2,
       "name_zh": "裁剪区域",
-      "type": "roi",
+      "type": "rectangle",
       "default": [],
       "ui": {
         "editor": "rect"
@@ -136,7 +136,7 @@ try
     {
       "id": 3,
       "name_zh": "区域",
-      "type": "roi",
+      "type": "circle",
       "default": [],
       "ui": {
         "editor": "roi"
@@ -148,9 +148,30 @@ try
         }
       }
     },
-    {"id":4,"name_zh":"小数","type":"float","default":0,"ui":{"decimals":2}},
-    {"id":5,"name_zh":"小数数组","type":{"type":"array","dtype":"float64","rank":2},"default":[]},
-    {"id":6,"name_zh":"大整数","type":"int","default":0
+    {
+      "id": 4,
+      "name_zh": "小数",
+      "type": "float",
+      "default": 0,
+      "ui": {
+        "decimals": 2
+      }
+    },
+    {
+      "id": 5,
+      "name_zh": "小数数组",
+      "type": {
+        "type": "array",
+        "dtype": "float64",
+        "rank": 2
+      },
+      "default": []
+    },
+    {
+      "id": 6,
+      "name_zh": "大整数",
+      "type": "int",
+      "default": 0
     }
   ],
   "outputs": [
@@ -169,14 +190,14 @@ try
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
           "def source(inputs):\n"
           " global epoch\n epoch += 1\n pixels[:40] = epoch\n time.sleep(0.12)\n pixels[40:] = epoch\n"
           " return {'outputs':{2:[pixels, pixels[:40,:60]], "
-          "4:epoch, 3:[[9007199254740993],[],[4,5]], 5:[[[3.,20.,20.,5.]],[]], "
+          "4:epoch, 3:[[9007199254740993],[],[4,5]], 5:[[[20.,20.,5.]],[]], "
           "0:0, 1:''}, 'detail':''}\n"
           "def edit(inputs):\n"
           " return {'outputs':{2:inputs[1], 0:0, 1:''}, 'detail':''}\n");
@@ -296,7 +317,7 @@ try
     require(app.editRoi(kRectInput, false), "rectangle metadata did not select the existing editor");
     require(viewport.editTarget() && viewport.singleRectangle(), "ROI editor is not a single rectangle");
     app.endRoiPreview();
-    require(app.setParameter(kRectInput, false, "[[[2,100000000.125,2.5,20.5,10.75,17.5]]]"),
+    require(app.setParameter(kRectInput, false, "[[[100000000.125,2.5,20.5,10.75,17.5]]]"),
             "native double rectangle parameter was rejected");
     idle();
     const auto parameter = [&](PortId id)
@@ -307,25 +328,25 @@ try
         return QVariantMap{};
     };
     const auto rectangle = parameter(kRectInput);
-    require(rectangle["displayText"].toString() == "[2,100000000.125,2.5,20.5,10.75,17.5]",
+    require(rectangle["displayText"].toString() == "[[[100000000.125,2.5,20.5,10.75,17.5]]]",
             "rectangle parameters must omit trailing decimal zeros");
-    require(rectangle["type"].toInt() == static_cast<int>(Type::ROI) && rectangle["editor"].toInt() == static_cast<int>(EditorKind::Rect) && rectangle["hasRect"].toBool(),
+    require(rectangle["type"].toInt() == static_cast<int>(Type::Rectangle) && rectangle["editor"].toInt() == static_cast<int>(EditorKind::Rect) && rectangle["hasRect"].toBool(),
             "rectangle editor reintroduced a separate value type");
     const auto encoded = QJsonDocument::fromJson(rectangle["literal"].toString().toUtf8()).array();
-    require(QJsonDocument::fromJson(rectangle["displayText"].toString().toUtf8()).array()[1].toDouble()
+    require(QJsonDocument::fromJson(rectangle["displayText"].toString().toUtf8()).array()[0].toArray()[0].toArray()[0].toDouble()
                 == 100000000.125,
             "rectangle display rounded the editable coordinate");
     require(encoded.size() == 1 && encoded[0].toArray().size() == 1
-                && encoded[0].toArray()[0].toArray()[1].toDouble() == 100000000.125,
+                && encoded[0].toArray()[0].toArray()[0].toDouble() == 100000000.125,
             "rectangle is not one group containing one native ROI record");
     require(app.clearRoi(kRectInput), "rectangle clearing failed");
     const auto cleared = QJsonDocument::fromJson(parameter(kRectInput)["literal"].toString().toUtf8());
     require(cleared.isArray() && cleared.array().isEmpty(), "rectangle clearing did not produce empty ROI");
     require(app.setParameter(kRegionsInput, false,
-                "[[[0,1,2,3,4],[1,0,0,10,10],[2,1,2,3,4,0],[3,5,6,2],[4,0,0,4,0,4,3]]]"),
-            "mixed geometry parameter was rejected");
+                "[[[5,6,2],[10,20,4]]]"),
+            "circle batch parameter was rejected");
     const auto geometryParameter = parameter(kRegionsInput);
-    require(geometryParameter["typeDisplay"].toString() == QStringLiteral("点、线、矩形、圆、多边形"),
+    require(geometryParameter["typeDisplay"].toString() == QStringLiteral("圆"),
             "geometry parameter lost concrete kinds");
     require(geometryParameter["displayText"].toString().contains("10")
                 && geometryParameter["valueText"].toString().contains("10"),
@@ -352,9 +373,9 @@ try
     idle();
     require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000), "workbench did not convert cached image");
     require(app.imageCount() == 2, "native image list lost its batch size");
-    require(app.editRoi(kRegionsInput, false), "generic ROI editor failed to open");
+    require(app.editRoi(kRegionsInput, false), "circle editor failed to open");
     require(QTest::qWaitFor([&] { return viewport.editing() && !viewport.singleRectangle(); }, 3000),
-            "generic ROI editor became rectangle-only");
+            "circle editor became rectangle-only");
     app.endRoiPreview();
     app.selectNode(source);
     // Returning to a node does not reopen a port for the user; the test opens the source image.

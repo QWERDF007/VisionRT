@@ -249,6 +249,22 @@ QString AppController::typeDescription(int type, int dtype, int rank) const
     return displayTypeName(spec);
 }
 
+QVariantList AppController::parameterTypes() const
+{
+    QVariantList result;
+    for (const auto type : kTypeValues)
+        result.push_back(QVariantMap{{"name", static_cast<int>(type)}, {"label", QString::fromUtf8(typeLabel(type))}});
+    return result;
+}
+
+QVariantList AppController::arrayElementTypes() const
+{
+    QVariantList result;
+    for (const auto type : kDTypeValues)
+        result.push_back(QVariantMap{{"name", static_cast<int>(type)}, {"label", displayDtypeName(type)}});
+    return result;
+}
+
 QString AppController::dtypeDescription(int dtype) const
 {
     return displayDtypeName(static_cast<DType>(dtype));

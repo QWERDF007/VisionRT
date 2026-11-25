@@ -30,27 +30,13 @@ QString floatingJsonText(const QJsonValue &value)
 }
 } // namespace
 
-QString displayRegionText(const EncodedRegion &region)
-{
-    QStringList values{QString::number(static_cast<int>(region.front()))};
-    for (std::size_t i = 1; i < region.size(); ++i) values.append(numberText(region[i]));
-    return '[' + values.join(',') + ']';
-}
-
 QString displayValueText(const PortValue &value, const TypeSpec &type)
 {
-    if (const auto *regions = std::get_if<DataRef<ROI>>(&value))
-    {
-        QStringList groups;
-        for (const auto &group : regions->get())
-        {
-            QStringList records;
-            for (const auto &region : group) records.append(displayRegionText(region));
-            groups.append('[' + records.join(',') + ']');
-        }
-        return '[' + groups.join(',') + ']';
-    }
+    if (isShapeType(type.type))
+        return floatingJsonText(ValueJson::encode(value, type, ValueJson::Purpose::Display));
     const auto *array = std::get_if<Array>(&value);
+    if (std::holds_alternative<Direction>(value) || std::holds_alternative<CoordinateFrame2D>(value))
+        return floatingJsonText(ValueJson::encode(value, type, ValueJson::Purpose::Display));
     if (std::holds_alternative<double>(value)
         || (array && (array->dtype() == DType::Float32 || array->dtype() == DType::Float64)))
         return floatingJsonText(ValueJson::encode(value, type, ValueJson::Purpose::Display));

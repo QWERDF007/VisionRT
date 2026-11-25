@@ -85,7 +85,7 @@ try
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     write("tools/custom/storage/probe.json", R"({
   "name_en": "test.storage.probe",
@@ -118,7 +118,7 @@ try
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref

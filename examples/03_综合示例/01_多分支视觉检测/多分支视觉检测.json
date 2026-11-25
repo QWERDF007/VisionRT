@@ -113,7 +113,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/03_综合示例/01_多分支视觉检测/images"
+              "literal": "examples/images/多分支视觉检测"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "定位高反光条",
           "pos": [
             0,
@@ -221,7 +221,7 @@
               {
                 "port_id": 3,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ]
@@ -277,7 +277,7 @@
           "node_seq": "3",
           "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "分支一：裁剪定位结果",
           "pos": [
             0,
@@ -296,7 +296,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ],
@@ -430,7 +430,7 @@
           "node_seq": "5",
           "tool_id": "MeasureCircle",
           "tool_name_snapshot": "测量圆",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "3.0.0",
           "alias": "分支二：测量圆",
           "pos": [
             2,
@@ -449,7 +449,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 13
                 }
               },
               {
@@ -457,7 +457,7 @@
                 "type": {
                   "type": 5,
                   "dtype": 4,
-                  "rank": 3
+                  "rank": 2
                 }
               },
               {
@@ -593,7 +593,7 @@
               {
                 "port_id": 7,
                 "type": {
-                  "type": 6
+                  "type": 13
                 }
               },
               {
@@ -639,7 +639,7 @@
               {
                 "port_id": 13,
                 "type": {
-                  "type": 6
+                  "type": 10
                 }
               },
               {
@@ -666,7 +666,6 @@
               "literal": [
                 [
                   [
-                    3,
                     260,
                     150,
                     50
@@ -677,7 +676,16 @@
             {
               "port_id": 3,
               "mode": 0,
-              "literal": []
+              "literal": [
+                [
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0
+                ]
+              ]
             },
             {
               "port_id": 4,

@@ -66,7 +66,7 @@ void geometryCreators(ToolRegistry &registry)
     for (const auto &[id, region] : cases)
     {
         const auto node = editor.addNode("flow_1", *registry.find(id), {0, 0});
-        editor.setLiteral("flow_1", node, 1, DataRef<ROI>(ROI{{region}}));
+        editor.setLiteral("flow_1", node, 1, shapeValue(std::ranges::find(registry.find(id)->inputs, PortId{1}, &PortDefinition::id)->type.type, ROI{{region}}));
     }
     auto          project = editor.project();
     QTemporaryDir directory;
@@ -84,7 +84,7 @@ void geometryCreators(ToolRegistry &registry)
                                         {1, node.inputs.at(1).literal}
         });
         success(result);
-        assert(std::get<DataRef<ROI>>(result.outputs.at(2)).get() == ROI({{cases[i].second}}));
+        assert(*shapeRegions(result.outputs.at(2)) == ROI({{cases[i].second}}));
     }
 }
 
@@ -241,7 +241,7 @@ void projection(ToolRegistry &registry)
                               {1, images}
     });
     success(result);
-    const auto &rois = std::get<DataRef<ROI>>(result.outputs.at(3));
+    const auto &rois = std::get<visionrt::Rectangle>(result.outputs.at(3));
     assert((rois.get().size() == 2 && rois.get()[0].empty()));
     assert((rois.get()[1].size() == 2));
     const std::array<float, 6> first{2, 10, 0, 20, 64, 0};
@@ -257,7 +257,7 @@ void projection(ToolRegistry &registry)
                          {8, std::int64_t{12}}
     });
     success(result);
-    const auto merged = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
+    const auto merged = std::get<visionrt::Rectangle>(result.outputs.at(3)).get()[1][0];
     assert((merged[1] == 0 && merged[3] == 87));
     result = execute(registry, "ProjectRoi",
                      {
@@ -267,7 +267,7 @@ void projection(ToolRegistry &registry)
                          {4,     std::int64_t{0}}
     });
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
+    assert((std::get<visionrt::Rectangle>(result.outputs.at(3)).get()[1].empty()));
     result = execute(registry, "ProjectRoi",
                      {
                          {1,            images},
@@ -276,7 +276,7 @@ void projection(ToolRegistry &registry)
                          {5,  std::int64_t{40}}
     });
     success(result);
-    const auto vertical = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
+    const auto vertical = std::get<visionrt::Rectangle>(result.outputs.at(3)).get()[1][0];
     assert((vertical[1] == 0 && vertical[2] == 0 && vertical[3] == 96 && vertical[4] == 64));
     result = execute(registry, "ProjectRoi",
                      {
@@ -284,7 +284,7 @@ void projection(ToolRegistry &registry)
                          {5, std::int64_t{65}}
     });
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
+    assert((std::get<visionrt::Rectangle>(result.outputs.at(3)).get()[1].empty()));
     failure(execute(registry, "ProjectRoi",
                     {
                         {1, Missing{}}
@@ -302,7 +302,7 @@ void crop(ToolRegistry &registry)
     auto       result = execute(registry, "CropImage",
                                 {
                               {1,                                     images},
-                              {2, DataRef<ROI>(ROI{{{2, 10, 0, 20, 64, 0}}})}
+                              {2, Rectangle::fromEncoded(ROI{{{2, 10, 0, 20, 64, 0}}})}
     });
     success(result);
     const auto &crops = std::get<DataRef<Image>>(result.outputs.at(2));
@@ -328,7 +328,7 @@ void crop(ToolRegistry &registry)
     result = execute(registry, "CropImage",
                      {
                          {1,                                   mixed},
-                         {2, DataRef<ROI>(ROI{{{2, 4, 3, 4, 4, 0}}})}
+                         {2, Rectangle::fromEncoded(ROI{{{2, 4, 3, 4, 4, 0}}})}
     });
     success(result);
     const auto &mixedCrops = std::get<DataRef<Image>>(result.outputs.at(2)).get();
@@ -349,7 +349,7 @@ void crop(ToolRegistry &registry)
     failure(execute(registry, "CropImage",
                     {
                         {1,                                   mixed},
-                        {2, DataRef<ROI>(ROI{{{2, 7, 6, 2, 2, 0}}})}
+                        {2, Rectangle::fromEncoded(ROI{{{2, 7, 6, 2, 2, 0}}})}
     }));
     const DataRef<Image> solid(Image{(cv::Mat(5, 5, CV_8UC1, cv::Scalar(17)))});
     const auto           run = [&](PortValue rectangle)
@@ -360,28 +360,28 @@ void crop(ToolRegistry &registry)
                            {2, std::move(rectangle)}
         });
     };
-    result = run(DataRef<ROI>(ROI{{{2, 1, 1, 2, 2, 45}}}));
+    result = run(Rectangle::fromEncoded(ROI{{{2, 1, 1, 2, 2, 45}}}));
     success(result);
     const auto &rotated = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((rotated.rows == 4 && rotated.cols == 4));
     assert((cv::countNonZero(rotated) == 4));
     assert((rotated.at<unsigned char>(1, 1) == 17 && rotated.at<unsigned char>(0, 0) == 0));
-    result = run(DataRef<ROI>(ROI{{{2, -1, -1, 3, 3, 0}}}));
+    result = run(Rectangle::fromEncoded(ROI{{{2, -1, -1, 3, 3, 0}}}));
     success(result);
     const auto &clipped = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((clipped.rows == 2 && clipped.cols == 2));
     assert((cv::countNonZero(solid.get()[0] != 17) == 0));
-    failure(run(DataRef<ROI>(ROI{{{2, 6, 0, 2, 2, 0}}})));
-    failure(run(DataRef<ROI>(ROI{{{3, 2.5F, 2.5F, 1}}})));
-    failure(run(DataRef<ROI>(ROI{{{1, 0, 0, 3, 3}}})));
+    failure(run(Rectangle::fromEncoded(ROI{{{2, 6, 0, 2, 2, 0}}})));
+    failure(run(Circle::fromEncoded(ROI{{{3, 2.5F, 2.5F, 1}}})));
+    failure(run(Line::fromEncoded(ROI{{{1, 0, 0, 3, 3}}})));
     failure(run(Missing{}));
-    failure(run(DataRef<ROI>(ROI{
+    failure(run(Rectangle::fromEncoded(ROI{
         {{2, 0, 0, 2, 2, 0}, {2, 2, 2, 2, 2, 0}}
     })));
     result = execute(registry, "CropImage",
                      {
                          {1,                 DataRef<Image>(Image{})},
-                         {2, DataRef<ROI>(ROI{{{2, 0, 0, 2, 2, 0}}})}
+                         {2, Rectangle::fromEncoded(ROI{{{2, 0, 0, 2, 2, 0}}})}
     });
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at(2)).get().empty()));
@@ -448,7 +448,7 @@ void preprocess(ToolRegistry &registry)
 void filter(ToolRegistry &registry)
 {
     const auto         images = fixtureImages();
-    const DataRef<ROI> rois(ROI{
+    const auto rois = Rectangle::fromEncoded(ROI{
         {},
         {std::vector<double>{2, 0, 0, 10, 10, 0}, std::vector<double>{2, 15, 0, 4, 4, 0},
          std::vector<double>{2, 25, 0, 8, 8, 15}}
@@ -480,7 +480,7 @@ void filter(ToolRegistry &registry)
     success(result);
     const auto counts = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)));
     assert((counts.size() == 2 && counts[0] == 0 && counts[1] == 2));
-    const auto &keptRois = std::get<DataRef<ROI>>(result.outputs.at(3));
+    const auto &keptRois = std::get<visionrt::Rectangle>(result.outputs.at(3));
     assert((keptRois.get()[0].empty()));
     assert((keptRois.get()[1][0][1] == 0 && keptRois.get()[1][1][1] == 25));
     const auto keptScores = nestedOf<NestedVector<float, 2>>(std::get<Array>(result.outputs.at(4)))[1];
@@ -511,7 +511,7 @@ void filter(ToolRegistry &registry)
     inputs[6] = 0.9;
     result    = execute(registry, "FilterDetections", inputs);
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
+    assert((std::get<visionrt::Rectangle>(result.outputs.at(3)).get()[1].empty()));
     assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1].size() == 0));
     inputs[3] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
@@ -531,10 +531,7 @@ void filter(ToolRegistry &registry)
     });
     failure(execute(registry, "FilterDetections", inputs));
     inputs[4] = classes;
-    inputs[2] = DataRef<ROI>(ROI{
-        {},
-        {std::vector<double>{3, 2, 2, 1}, rois.get()[1][1], rois.get()[1][2]}
-    });
+    inputs[2] = Circle::fromNested({{}, {{2, 2, 1}, {4, 4, 1}, {6, 6, 1}}});
     failure(execute(registry, "FilterDetections", inputs));
 }
 

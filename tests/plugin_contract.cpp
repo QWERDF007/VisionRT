@@ -264,7 +264,7 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         const auto definition = parseToolDefinitionJson(declaration);
         auto       loader     = std::make_shared<PluginLoader>();
@@ -469,7 +469,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     writeText(declarationDir / "function.json", R"json({
   "name_en": "test.plugin.function",
@@ -494,7 +494,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
@@ -512,7 +512,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     writeText(pkgDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -583,7 +583,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
@@ -614,7 +614,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *counter = registry.find("test.plugin.counter");
@@ -671,7 +671,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     writeText(otherDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -774,7 +774,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
         f.write(jsonContent);
     }
@@ -868,7 +868,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
         f.write(funcJsonContent);
     }
@@ -1068,7 +1068,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "implementation": {
     "kind": "cpp"
   },
-  "schema_version": 2
+  "schema_version": 4
 })");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -1290,7 +1290,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     writeText(unicodeDir / "module_index.json", R"json({
   "schema_version": 1,

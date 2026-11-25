@@ -113,7 +113,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/02_工具示例/01_ROI定位与裁剪/images"
+              "literal": "examples/images/ROI定位与裁剪"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "投影定位亮条",
           "pos": [
             0,
@@ -221,7 +221,7 @@
               {
                 "port_id": 3,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ]
@@ -277,7 +277,7 @@
           "node_seq": "3",
           "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "按定位结果裁剪",
           "pos": [
             0,
@@ -296,7 +296,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ],

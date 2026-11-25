@@ -88,8 +88,7 @@ int main()
              {1, -1, 2, 3, 4},
              rectangle,
              {3, 2, 3, 4},
-             {4, 0, 0, 2, 0, 1, 1},
-             {5, 1, 2}
+             {4, 0, 0, 2, 0, 1, 1}
     })
         validateRoi(record);
     for (const auto &record : std::vector<std::vector<double>>{
@@ -107,16 +106,15 @@ int main()
              {3, 0, 0, std::numeric_limits<double>::infinity()}
     })
         rejects([&] { validateRoi(record); });
-    const DataRef<ROI> detections(ROI{
+    const auto detections = Rectangle::fromEncoded(ROI{
         {},
         {{2, 0, 0, 10, 10, 0}, {2, 15, 0, 4, 4, 0}}
     });
     assert((detections.get()[0].empty()));
-    validateValue({Type::ROI}, detections);
+    validateValue({Type::Rectangle}, detections);
     const auto roiAlias     = detections;
-    roiAlias.get()[1][1][3] = 8;
-    assert((detections.get()[1][1][3] == 8));
-    assert((equalValues(detections, DataRef<ROI>(detections.get()))));
+    assert((&roiAlias.get() == &detections.get()));
+    assert((equalValues(detections, Rectangle::fromEncoded(detections.get()))));
 
     cv::Mat              source(4, 5, CV_16UC1, cv::Scalar(123));
     const DataRef<Image> image(Image{source(cv::Rect(1, 1, 2, 2))});

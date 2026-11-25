@@ -291,13 +291,12 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         if (request.training)
         {
             declarations = session.helper.trainParams;
-            std::erase_if(declarations, [](const PortDefinition &p) { return p.scope == ParameterScope::Record; });
         }
         const auto inputs = normalizeInputs(declarations, request.inputs);
         validateToolValues(declarations, inputs);
 
         phase = Phase::Execute;
-        auto result = request.training ? instance_->train(request.training->get(), inputs) : instance_->execute(inputs);
+        auto result = request.training ? instance_->train(inputs) : instance_->execute(inputs);
         // The helper is a tool like any other: its status is published into the same two ports the
         // node runtime uses, so the preview shows what a real run would.
         outcome.status = validateToolExecution(session.helper.outputs, result.outputs, result.detail,
@@ -329,10 +328,10 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
                     return true;
                 const auto  found = outcome.outputs.find(port);
                 const auto *groups
-                    = found == outcome.outputs.end() ? nullptr : std::get_if<DataRef<ROI>>(&found->second);
-                if (!groups || groups->get().empty())
+                    = found == outcome.outputs.end() ? nullptr : shapeRegions(found->second);
+                if (!groups || (*groups).empty())
                     return false;
-                target = groups->get();
+                target = (*groups);
                 return true;
             };
             if (!readRois(session.outputs.preview, outcome.preview)

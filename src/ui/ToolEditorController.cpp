@@ -23,40 +23,9 @@ namespace visionrt {
 
 namespace {
 
-bool sameReference(const std::optional<PortRef> &left, const std::optional<PortRef> &right)
-{
-    if (left.has_value() != right.has_value())
-        return false;
-    return !left || (left->stage == right->stage && left->id == right->id);
-}
-
-bool sameOptionalValue(const std::optional<PortValue> &left, const std::optional<PortValue> &right)
-{
-    if (left.has_value() != right.has_value())
-        return false;
-    return !left || equalValues(*left, *right);
-}
-
-bool samePort(const PortDefinition &left, const PortDefinition &right)
-{
-    return left.id == right.id && left.nameZh == right.nameZh && left.nameEn == right.nameEn
-           && left.type == right.type && left.tab == right.tab && left.group == right.group
-           && left.editor == right.editor && left.optionsProvider == right.optionsProvider
-           && left.colorOrder == right.colorOrder && left.imageVisible == right.imageVisible
-           && left.decimals == right.decimals && equalValues(left.defaultValue, right.defaultValue)
-           && sameOptionalValue(left.minimum, right.minimum)
-           && sameOptionalValue(left.maximum, right.maximum)
-           && sameOptionalValue(left.step, right.step)
-           && sameReference(left.image, right.image) && sameReference(left.alignment, right.alignment)
-           && sameReference(left.sameGeometryAs, right.sameGeometryAs)
-           && left.typeFrom == right.typeFrom
-           && left.options.size() == right.options.size()
-           && std::equal(left.options.begin(), left.options.end(), right.options.begin(), equalValues);
-}
-
 bool samePorts(const std::vector<PortDefinition> &a, const std::vector<PortDefinition> &b)
 {
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(), samePort);
+    return std::equal(a.begin(), a.end(), b.begin(), b.end());
 }
 
 bool sameTool(const ToolDefinition &a, const ToolDefinition &b)
@@ -65,7 +34,8 @@ bool sameTool(const ToolDefinition &a, const ToolDefinition &b)
            && a.nodeModel == b.nodeModel && a.categories == b.categories && a.entry.package == b.entry.package
            && a.entry.file == b.entry.file && a.entry.symbol == b.entry.symbol
            && a.hostBinding == b.hostBinding && samePorts(a.inputs, b.inputs)
-           && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
+           && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams)
+           && samePorts(a.trainParams, b.trainParams) && a.training == b.training;
 }
 
 QStringList splitCategory(const std::string &path)
@@ -835,35 +805,27 @@ QVariantList ToolEditorController::supportedTypes() const
 {
     QVariantList list;
 
-    // 6 base types
-    const std::array<Type, 6> baseTypes{Type::Int, Type::Float, Type::Bool, Type::String, Type::Image, Type::ROI};
-    for (const auto t : baseTypes)
+    for (const auto t : kTypeValues)
     {
+        if (t == Type::Array) continue;
         const TypeSpec spec{.type = t};
         QVariantMap item;
         item.insert("token", ValueJson::encodeType(spec).toVariantMap());
         item.insert("label", displayTypeName(spec));
+        item.insert("isShape", isShapeType(t));
         item.insert("rank", 0);
         item.insert("dtype", QString());
         list.append(item);
     }
 
-    // 28 vector types: 4 ranks x 7 dtypes
-    const std::array<DType, 7> dtypes{
-        DType::UInt8, DType::Int32, DType::Int64, DType::Float32, DType::Float64, DType::Bool, DType::String
-    };
-    for (int rank = 1; rank <= 4; ++rank)
+    for (const auto &spec : Array::supportedTypes())
     {
-        for (const auto dt : dtypes)
-        {
-            const TypeSpec spec{.type = Type::Array, .dtype = dt, .rank = rank};
             QVariantMap item;
             item.insert("token", ValueJson::encodeType(spec).toVariantMap());
             item.insert("label", displayTypeName(spec));
-            item.insert("rank", rank);
-            item.insert("dtype", static_cast<int>(dt));
+            item.insert("rank", spec.rank);
+            item.insert("dtype", static_cast<int>(*spec.dtype));
             list.append(item);
-        }
     }
 
     return list;

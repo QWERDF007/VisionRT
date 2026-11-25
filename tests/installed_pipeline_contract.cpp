@@ -2,6 +2,7 @@
 #include "ToolResultAssertions.h"
 
 #include "core/DefinitionJson.h"
+#include <visionrt/contracts/Affine2D.h>
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
@@ -101,18 +102,18 @@ try
     relay.entry            = {"examples/image_sizes", "tool.py", "execute"};
     relay.inputs           = {
         PortDefinition{.id = 1, .nameZh = "Images", .type = {Type::Image}, .nameEn = "images"},
-        PortDefinition{.id = 2, .nameZh = "Regions", .type = {Type::ROI}, .nameEn = "rois"},
+        PortDefinition{.id = 2, .nameZh = "Regions", .type = {Type::Rectangle}, .nameEn = "rois"},
         PortDefinition{.id = 3, .nameZh = "Scores", .type = {Type::Array, DType::Float32, 2}, .nameEn = "scores"},
         PortDefinition{.id = 4, .nameZh = "Classes", .type = {Type::Array, DType::Int64, 2}, .nameEn = "classes"},
         PortDefinition{.id = 5, .nameZh = "Names", .type = {Type::Array, DType::String, 2}, .nameEn = "class_names"}
     };
     relay.outputs = {
         PortDefinition{.id = 2, .nameZh = "Images", .type = {Type::Image}, .nameEn = "images"},
-        PortDefinition{.id = 3, .nameZh = "Regions", .type = {Type::ROI}, .nameEn = "rois"},
+        PortDefinition{.id = 3, .nameZh = "Regions", .type = {Type::Rectangle}, .nameEn = "rois"},
         PortDefinition{.id = 4, .nameZh = "Scores", .type = {Type::Array, DType::Float32, 2}, .nameEn = "scores"},
         PortDefinition{.id = 5, .nameZh = "Classes", .type = {Type::Array, DType::Int64, 2}, .nameEn = "classes"},
         PortDefinition{.id = 6, .nameZh = "Names", .type = {Type::Array, DType::String, 2}, .nameEn = "class_names"},
-        PortDefinition{.id = 7, .nameZh = "Rectangle", .type = {Type::ROI}, .nameEn = "rect"}
+        PortDefinition{.id = 7, .nameZh = "Rectangle", .type = {Type::Rectangle}, .nameEn = "rect"}
     };
     write(root / "tools/custom/relay.json", emitNormalizedToolJson(relay));
     write(root / "python/custom/examples/image_sizes/tool.py", R"(
@@ -125,14 +126,14 @@ def execute(inputs):
         assert image.flags.writeable and image.shape == (8, 10)
         image += 3
     # Rectangular numeric arrays arrive as writable NumPy views; text arrays keep the nested list
-    # form, and a ROI is always the three-level list plus its own geometry encoding.
+    # form, and rectangles use headerless three-level coordinate lists.
     assert isinstance(inputs[3], np.ndarray) and inputs[3].flags.writeable
     assert isinstance(inputs[4], np.ndarray) and inputs[4].dtype == np.int64
     assert isinstance(inputs[5], list) and isinstance(inputs[5][0], list)
     assert isinstance(inputs[2], list) and isinstance(inputs[2][0][0][0], float)
     assert int(inputs[4][0][0]) == 9007199254740993
     for regions in inputs[2]:
-        regions[0][1] += 1.0
+        regions[0][0] += 1.0
     inputs[3] += 0.125
     inputs[4] += 1
     for names in inputs[5]:
@@ -255,13 +256,13 @@ def execute(inputs):
     editor.setLiteral(flow, reader, 6, true);
     editor.setLiteral(flow, brightness, 2, 1.0);
     editor.setLiteral(flow, brightness, 3, 1.0);
-    editor.setLiteral(flow, brightness, 4, DataRef<ROI>(ROI{}));
-    editor.setLiteral(flow, brightness, 6, Array::fromNested(NestedVector<double, 3>{}));
+    editor.setLiteral(flow, brightness, 4, Rectangle::fromEncoded(ROI{}));
+    editor.setLiteral(flow, brightness, 6, alignmentArray(Affine2D::identity()));
     editor.bindFreeInput(flow, {reader, 2}, {before, 1});
     // A second consumer keeps the primary reader -> relay -> crop storage chain intact while still
     // executing the function-registered tool through the real runtime.
     editor.bindFreeInput(flow, {reader, 2}, {brightness, 1});
-    editor.setLiteral(flow, before, 2, DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}, {{2., 1., 2., 3., 4., 0.}}}));
+    editor.setLiteral(flow, before, 2, Rectangle::fromEncoded(ROI{{{2., 1., 2., 3., 4., 0.}}, {{2., 1., 2., 3., 4., 0.}}}));
     editor.setLiteral(flow, before, 3, Array::fromNested(NestedVector<float, 2>{{0.75F}, {0.5F}}));
     editor.setLiteral(flow, before, 4, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {2}}));
     editor.setLiteral(flow, before, 5, Array::fromNested(NestedVector<std::string, 2>{{"first"}, {"second"}}));
@@ -321,7 +322,7 @@ def execute(inputs):
         require((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(filtered->outputs.at(6)))
                  == NestedVector<std::string, 2>{{"first中文"}, {"second中文"}}),
                 "String array roundtrip differs");
-        require((std::get<DataRef<ROI>>(filtered->outputs.at(3)).get()
+        require((std::get<visionrt::Rectangle>(filtered->outputs.at(3)).get()
                  == ROI{{{2., 2., 2., 3., 4., 0.}}, {{2., 2., 2., 3., 4., 0.}}}),
                 "ROI roundtrip differs");
         require((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(sizes->outputs.at(2)))
@@ -347,7 +348,7 @@ def execute(inputs):
         const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.nameEn), {0, 0});
         const auto    child         = ownership.addNode(ownershipFlow, *registry.find("CropImage"), {0, 2});
         ownership.bindFreeInput(ownershipFlow, {parent, 2}, {child, 1});
-        ownership.setLiteral(ownershipFlow, child, 2, DataRef<ROI>(ROI{{{2., 1., 2., 4., 3., 0.}}}));
+        ownership.setLiteral(ownershipFlow, child, 2, Rectangle::fromEncoded(ROI{{{2., 1., 2., 4., 3., 0.}}}));
         ownership.setMode(ownershipFlow, child, 2, BindingMode::Literal);
         RuntimeEngine ownerRuntime(2);
         require(ownerRuntime.start(ownership.project(), registry, RunMode::Once).code == 0,

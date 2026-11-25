@@ -3,6 +3,7 @@
 #include "core/Export.h"
 
 #include <visionrt/contracts/Value.h>
+#include <visionrt/contracts/ValueJson.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -38,7 +39,7 @@ public:
 
     private:
         QJsonDocument values_;
-        QJsonDocument numberText_;
+        ValueJsonDocument typed_;
     };
 
     static TypeSpec    decodeType(const QJsonObject &object);

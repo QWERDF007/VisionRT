@@ -59,7 +59,7 @@ try
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs):\n"
                   "    return {'outputs': {2: 7,\n"
-                  "                        3: [[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]],\n"
+                  "                        3: [[[10.5, 20.5, 30.0, 40.0, 15.0]]],\n"
                   "                        0: 0, 1: '运行成功'},\n"
                   "            'detail': ''}\n";
     }
@@ -84,10 +84,10 @@ try
       "id": 3,
       "name_en": "rois",
       "name_zh": "ROIs",
-      "type": "roi"
+      "type": "rectangle"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
@@ -107,7 +107,7 @@ try
     node.toolNameSnapshot = definition.nameZh;
     node.signatures.outputs = {
         {2,                  {Type::Int}},
-        {3,                  {Type::ROI}},
+        {3,                  {Type::Rectangle}},
         {kStatusCodePort,    {Type::Int}},
         {kStatusMessagePort, {Type::String}}
     };
@@ -130,7 +130,7 @@ try
                       << (value ? value->status.detail : "") << '\n';
         assert(value && value->status.code == 0);
         assert(std::get<std::int64_t>(value->outputs.at(2)) == 7);
-        const auto &rois = std::get<DataRef<ROI>>(value->outputs.at(3)).get();
+        const auto &rois = std::get<visionrt::Rectangle>(value->outputs.at(3)).get();
         assert(rois.size() == 1 && rois.front().size() == 1);
         assert((rois.front().front() == std::vector<double>{2, 10.5, 20.5, 30.0, 40.0, 15.0}));
         assert(value->timing.initMs > 0.0);

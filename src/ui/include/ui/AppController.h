@@ -31,6 +31,8 @@ class VISIONRT_UI_API AppController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString title READ title NOTIFY projectChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY runtimeChanged)
+    Q_PROPERTY(QVariantList parameterTypes READ parameterTypes CONSTANT)
+    Q_PROPERTY(QVariantList arrayElementTypes READ arrayElementTypes CONSTANT)
     Q_PROPERTY(bool runtimeBusy READ runtimeBusy NOTIFY runtimeChanged)
     // Single interaction predicate derived from the runtime state: everything except stop and close
     // is unavailable while a run owns the runtime. No second writable "UI locked" flag exists.
@@ -130,6 +132,10 @@ public:
     QVariantList        parameters() const;
     QVariantList        parameterTabs() const;
     Q_INVOKABLE bool startTrainingRoi(int parameter, int shape);
+    Q_INVOKABLE bool startParameterRoi(int parameter, int stage, int shape, bool recordScoped = false);
+    Q_INVOKABLE bool loadParameterImage(int parameter, int stage, const QUrl &url, const QString &record = {});
+    Q_INVOKABLE bool selectTrainingDataset(int parameter);
+    Q_INVOKABLE bool addTrainingRecord(int parameter);
     Q_INVOKABLE bool setTrainingParameterPath(int parameter, const QUrl &url);
     QVariantList        parameterGroups() const;
     QString             outputTitle() const;
@@ -215,7 +221,7 @@ public:
     Q_INVOKABLE bool         setParameter(int port, bool initialization, const QString &text, bool jsonInput = false);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
-    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage = -1);
+    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage = -1, const QString &record = {});
     Q_INVOKABLE bool         setParameterMode(int port, bool upstream);
     Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false) const;
     Q_INVOKABLE QVariantMap  portResultContext(PortId port) const;
@@ -268,6 +274,8 @@ public:
     Q_INVOKABLE bool         applySelectType(const QString &node, int type, int dtype, int rank);
     // Chinese description of a type row, reusing the parameter panel's display mapping.
     Q_INVOKABLE QString      typeDescription(int type, int dtype, int rank) const;
+    QVariantList parameterTypes() const;
+    QVariantList arrayElementTypes() const;
     Q_INVOKABLE QString      dtypeDescription(int dtype) const;
     QAbstractListModel      *nodeListModel() const;
     // Single-row lookups by id: canvas helpers use these instead of scanning a list of maps.

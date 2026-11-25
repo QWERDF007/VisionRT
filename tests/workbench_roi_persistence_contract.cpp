@@ -125,7 +125,7 @@ try
         const auto row = value.toMap();
         if (row.value("init").toBool() || row.value("id").toInt() != 1)
             continue;
-        const auto roi = std::get<DataRef<ROI>>(ValueJson::parse(row.value("literal").toString(), {Type::ROI}));
+        const auto roi = std::get<Circle>(ValueJson::parse(row.value("literal").toString(), {Type::Circle}));
         require(roi.get().size() == 1 && roi.get().front().size() == 1,
                 "drawn ROI was not committed to the actual input");
     }
@@ -163,7 +163,7 @@ try
         {
             const auto row = value.toMap();
             if (!row.value("init").toBool() && row.value("id").toUInt() == 1)
-                return std::get<DataRef<ROI>>(ValueJson::parse(row.value("literal").toString(), {Type::ROI})).get().at(0).at(0);
+                return std::get<Circle>(ValueJson::parse(row.value("literal").toString(), {Type::Circle})).get().at(0).at(0);
         }
         throw std::runtime_error("circle parameter is missing");
     };

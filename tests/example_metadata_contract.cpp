@@ -47,7 +47,7 @@ int main(int argc, char **argv)
                         if (parameter.options.empty() || visionrt::isMissing(value))
                             return;
                         if (std::none_of(parameter.options.begin(), parameter.options.end(),
-                                         [&](const auto &option) { return visionrt::equalValues(option, value); }))
+                                         [&](const auto &option) { return visionrt::equalValues(option.value, value); }))
                             throw std::runtime_error(file->path().filename().string() + ": " + node.toolId + "."
                                                      + visionrt::portLabel(parameter.id) + " is not a declared option");
                         ++checked;

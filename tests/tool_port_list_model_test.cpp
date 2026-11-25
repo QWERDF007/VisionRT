@@ -120,9 +120,9 @@ int main(int argc, char **argv)
     retypeModel.setDraft(&retype, PortStage::Inputs, true);
     assert(retypeModel.addPort("阈值", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "128"));
     assert(retypeModel.updatePort(1, {{"min", QStringLiteral("0")}, {"max", QStringLiteral("255")}}));
-    assert(retypeModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));
+    assert(retypeModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::Rectangle)}})));
     assert(retypeModel.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
-    assert(retypeModel.addPort("参考区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));
+    assert(retypeModel.addPort("参考区域", (QVariantMap{{"type", static_cast<int>(Type::Rectangle)}})));
     // Both ROI inputs reference the same image port, so retyping it must clear both references.
     retype.inputs[1].image = PortRef{PortStage::Inputs, 3};
     retype.inputs[3].image = PortRef{PortStage::Inputs, 3};
@@ -161,8 +161,8 @@ int main(int argc, char **argv)
     ToolPortListModel relModel;
     relModel.setDraft(&rel, PortStage::Inputs, true);
     assert(relModel.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));                  // id 1
-    assert(relModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));                    // id 2
-    assert(relModel.addPort("对位数据", ValueJson::encodeType({Type::Array, DType::Float64, 3}).toVariantMap()));    // id 3
+    assert(relModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::Rectangle)}})));                    // id 2
+    assert(relModel.addPort("对位数据", ValueJson::encodeType(kAlignmentType).toVariantMap()));    // id 3
     assert(relModel.addPort("根目录", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                   // id 4
     assert(relModel.addPort("模式", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                     // id 5
 
@@ -191,7 +191,13 @@ int main(int argc, char **argv)
     assert(equalValues(rel.inputs[4].defaultValue, PortValue{std::string{"自动"}}));
     assert(relModel.updatePort(5, {{"options", QStringLiteral("自动\n手动")}}));
     assert(rel.inputs[4].options.size() == 2);
-    assert(equalValues(rel.inputs[4].options[0], PortValue{std::string{"自动"}}));
+    assert(equalValues(rel.inputs[4].options[0].value, PortValue{std::string{"自动"}}));
+    assert(relModel.updatePort(5, {{"options", QStringLiteral("{\"value\":\"dark_to_light\",\"label\":\"暗到亮\"}")}}));
+    assert(rel.inputs[4].options.front().label == "暗到亮");
+    const auto labeled = relModel.portAt(5).value("optionsText").toString();
+    assert(labeled.contains("dark_to_light") && labeled.contains("暗到亮"));
+    assert(relModel.updatePort(5, {{"options", labeled}}));
+    assert(rel.inputs[4].options.front().label == "暗到亮");
     assert(relModel.updatePort(5, {{"options", QString()}}));
     assert(rel.inputs[4].options.empty());
 

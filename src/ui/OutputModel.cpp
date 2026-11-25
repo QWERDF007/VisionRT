@@ -251,7 +251,7 @@ std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
                 return estimatedArrayBytes(value);
             else if constexpr (std::is_same_v<Element, std::string>)
                 return estimatedStringBytes(value);
-            else if constexpr (std::is_same_v<Element, DataRef<ROI>>)
+            else if constexpr (isShapeValue<Element>)
                 return estimatedNestedBytes(value.get());
             else
                 return 128;
@@ -269,7 +269,7 @@ QVariantMap OutputModel::get(int row) const
         {   "port_id",                                                                item.id},
         {      "name",                                                              item.name},
         {      "type",                                                              item.type},
-        {"typeDisplay", !item.resolved ? QStringLiteral("未绑定") : displayTypeName(item.captured.type, item.captured.value)},
+        {"typeDisplay", !item.resolved ? QStringLiteral("未绑定") : displayTypeName(item.captured.type)},
         {   "preview",                                                           item.preview},
         {   "tooltip",                                                           item.tooltip},
         {     "count",                                    static_cast<qulonglong>(item.count)},
@@ -321,7 +321,7 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
     case TypeRole:
         return row.type;
     case TypeDisplayRole:
-        return displayTypeName(row.captured.type, row.captured.value);
+        return displayTypeName(row.captured.type);
     case PreviewRole:
         return row.preview;
     case CountRole:

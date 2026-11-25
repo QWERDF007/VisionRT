@@ -9,7 +9,9 @@
 
 namespace visionrt {
 
-VISIONRT_CORE_API void validateToolValue(const PortDefinition &port, const PortValue &value);
+enum class ValueCompleteness { Complete, Draft };
+VISIONRT_CORE_API void validateToolValue(const PortDefinition &port, const PortValue &value,
+                                         ValueCompleteness completeness = ValueCompleteness::Complete);
 VISIONRT_CORE_API void validateToolOutput(const PortDefinition &port, const PortValue &value, const ToolStatus &status);
 VISIONRT_CORE_API void validateToolValues(const std::vector<PortDefinition> &ports, const Values &values);
 

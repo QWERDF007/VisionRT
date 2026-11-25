@@ -42,7 +42,7 @@ struct AssistRequest
     AssistContext context;
     // Algorithm inputs resolved by the coordinator into ordinary business values.
     Values inputs;
-    std::optional<DataRef<TrainingSet>> training;
+    bool training = false;
     bool   learn  = false;
     bool   append = false;
 };

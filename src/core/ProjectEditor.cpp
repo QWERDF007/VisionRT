@@ -63,8 +63,6 @@ const InputBinding &inputBinding(const NodeDefinition &node, PortId input)
 void validateLiteral(const TypeSpec &type, const PortValue &value)
 {
     validateValue(type, value);
-    if (const auto *images = std::get_if<DataRef<Image>>(&value); images && !images->get().empty())
-        throw ContractError("图像字面量只能是 Missing 或空批次");
 }
 
 
@@ -700,7 +698,6 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         for (const auto &parameter : contract.initParams)
             node.signatures.initParams.insert_or_assign(parameter.id, parameter.type);
     for (const auto &parameter : contract.trainParams)
-        if (parameter.scope == ParameterScope::Tool)
         {
             node.signatures.trainParams.emplace(parameter.id, parameter.type);
             node.trainParams.emplace(parameter.id, copyProjectLiteral(parameter.defaultValue));
@@ -796,9 +793,6 @@ bool ProjectEditor::setMode(std::string_view flowId, NodeId id, PortId input, Bi
 {
     requireIdle();
     const auto &n = findNode(flow(flowId), id);
-    const auto typeIt = n.signatures.inputs.find(input);
-    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::Image && mode != BindingMode::Upstream)
-        return false;
     auto binding = inputBinding(n, input);
     binding.mode = mode;
     return setBinding(flowId, id, input, std::move(binding));
@@ -858,8 +852,6 @@ bool ProjectEditor::setLiteralWrites(std::string_view flowId, NodeId id, std::sp
         if (binding.mode == BindingMode::Upstream || effectiveSource(binding))
             throw ContractError("该参数由上游提供：" + portLabel(write.port));
         const auto &type = signature(node.signatures.inputs, write.port);
-        if (type.type == Type::Image)
-            throw ContractError("图像输入不能写入字面量：" + portLabel(write.port));
         validateLiteral(type, write.value);
         if (equalValues(binding.literal, write.value))
             continue;

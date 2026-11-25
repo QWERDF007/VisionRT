@@ -123,7 +123,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/04_扩展示例/02_逻辑表达式与条件分支/images"
+              "literal": "examples/images/逻辑表达式与条件分支"
             },
             {
               "port_id": 2,

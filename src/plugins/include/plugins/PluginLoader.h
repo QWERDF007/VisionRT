@@ -65,7 +65,7 @@ public:
 
     ToolStatus initialize(const ToolConfiguration &initParams) override;
     ToolResult execute(const Values &inputs) override;
-    ToolResult train(const TrainingSet &, const Values &) override;
+    ToolResult train(const Values &) override;
     ToolStatus release() override;
     DiagnosticOrigin lifecycleOrigin() const noexcept override { return origin_; }
 

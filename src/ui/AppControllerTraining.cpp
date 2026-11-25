@@ -28,7 +28,7 @@ std::filesystem::path trainingBase(const ProjectDefinition &project, const NodeD
                           .arg(QString::fromStdString(training::assetName(project.name)))
                           .arg(node.id)
                           .arg(QString::fromStdString(tool.nameEn));
-    return softwareDataDir() / std::filesystem::path(name.toStdWString());
+    return applicationDirectory / std::filesystem::path(name.toStdWString());
 }
 
 std::optional<TrainingFieldValue> trainingValue(const TypeSpec &type, const QVariant &value)
@@ -37,7 +37,7 @@ std::optional<TrainingFieldValue> trainingValue(const TypeSpec &type, const QVar
         return value.toString().toStdString();
     try
     {
-        return trainingFieldValueOf(ValueJson::parse(value.toString().toUtf8(), type));
+        return ValueJson::parse(value.toString().toUtf8(), type);
     }
     catch (const ContractError &)
     {
@@ -49,7 +49,8 @@ std::optional<TrainingFieldValue> trainingValue(const TypeSpec &type, const QVar
 const TrainingSpec *AppController::Impl::trainingSpec() const
 {
     const auto *tool = effectiveTool();
-    return tool && tool->training ? &*tool->training : nullptr;
+    static const TrainingSpec parametersOnly;
+    return tool && tool->training ? &*tool->training : tool && !tool->trainParams.empty() ? &parametersOnly : nullptr;
 }
 
 bool AppController::Impl::ensureTrainingSession()
@@ -98,12 +99,11 @@ bool AppController::Impl::requestTraining(const ToolDefinition &tool, const Trai
 
     try
     {
-        Values inputs;
-        for (const auto &[id, value] : training->parameters()) inputs.emplace(id, portValueOf(value));
+        auto inputs = training->parameters();
         AssistRequest request;
         request.context = {projectEpoch, generation, flow.toStdString(), node->id, node->executionRevision};
         request.context.trainingSerial = trainingSerial;
-        request.training               = training->trainingSet();
+        request.training               = true;
         request.learn                  = true;
         request.inputs                 = std::move(inputs);
         if (!assist->request(request, std::make_shared<const ToolRegistry>(registry), tool))
@@ -135,11 +135,11 @@ void AppController::Impl::completeTraining(const AssistOutcome &outcome)
     const auto tool = definition ? std::optional<ToolDefinition>{*definition} : std::nullopt;
     const bool  current = outcome.context == expected && projectEpoch == expected.projectEpoch && node
                       && node->id == expected.node && node->executionRevision == expected.executionRevision
-                      && trainingSerial == expected.trainingSerial && training && tool && tool->training;
+                      && trainingSerial == expected.trainingSerial && training && tool;
     if (current)
     {
         auto result = ToolResult{outcome.outputs, outcome.status.detail, outcome.artifacts};
-        if (outcome.status) publishTraining(*tool, *tool->training, result);
+        if (outcome.status) publishTraining(*tool, training->spec(), result);
         if (result.outputs.empty()) result = toolResult({}, outcome.status);
         auto snapshot = std::make_shared<NodeSnapshot>();
         snapshot->node = expected.node;
@@ -188,9 +188,10 @@ bool AppController::Impl::publishTraining(const ToolDefinition &tool, const Trai
         }
         std::optional<training::Revision> publication;
         // Prepare the complete revision before committing model references to the project.
-        publication.emplace(trainingBase(project, *node, tool, applicationDirectory), *training, result.artifacts, destinations);
+        if (!spec.artifacts.empty())
+            publication.emplace(trainingBase(project, *node, tool, applicationDirectory), *training, result.artifacts, destinations);
         std::vector<LiteralWrite> writes;
-        for (const auto &[id, value] : training->parameters()) writes.push_back({PortStage::Train, id, portValueOf(value)});
+        for (const auto &[id, value] : training->parameters()) writes.push_back({PortStage::Train, id, value});
         for (const auto &artifact : spec.artifacts)
         {
             auto path = destinations.contains(artifact.id) ? destinations.at(artifact.id)
@@ -200,11 +201,12 @@ bool AppController::Impl::publishTraining(const ToolDefinition &tool, const Trai
             std::ranges::find(writes, artifact.target.id, &LiteralWrite::port)->value = text;
             result.outputs.insert_or_assign(artifact.sourcePort, text);
         }
-        if (!editor.setLiteralWrites(flow.toStdString(), node->id, writes, [&] { return publication->directory(); }))
+        if (publication && !editor.setLiteralWrites(flow.toStdString(), node->id, writes, [&] { return publication->directory(); }))
             throw ContractError("训练引用提交失败");
-        publication->accept();
-        for (const auto &write : writes) training->setParameter(write.port, trainingFieldValueOf(write.value));
-        training->adoptAsset(publication->directory() / L"manifest.json");
+        if (!publication) editor.setLiteralWrites(flow.toStdString(), node->id, writes);
+        if (publication) publication->accept();
+        for (const auto &write : writes) training->setParameter(write.port, write.value);
+        training->adoptAsset(publication ? publication->directory() / L"manifest.json" : training->asset());
         emit q->projectChanged();
         emit q->parametersChanged();
         return true;
@@ -224,23 +226,37 @@ void AppController::Impl::showTrainingFit()
 {
     if (!trainingMode) return;
     const auto *node = currentNode();
-    const auto *spec = trainingSpec();
+    const auto *tool = effectiveTool();
     const auto snapshot = node ? presentation.displaySnapshot(*node) : ResultSlot::Snapshot{};
     RegionGroup fit;
-    if (snapshot && snapshot->invocation == ProducedBy::Train && snapshot->status && spec && spec->overlayOutput)
+    std::vector<GeometryOverlay> geometry;
+    if (snapshot && snapshot->invocation == ProducedBy::Train && snapshot->status && tool)
     {
-        const auto found = snapshot->outputs.find(spec->overlayOutput);
-        if (found != snapshot->outputs.end())
-            if (const auto *roi = std::get_if<DataRef<ROI>>(&found->second); roi && !roi->get().empty())
-                fit = roi->get().front();
+        for (const auto &port : tool->outputs)
+        {
+            if (port.image && isShapeType(port.type.type))
+                if (const auto found = snapshot->outputs.find(port.id); found != snapshot->outputs.end())
+                    if (const auto *roi = shapeRegions(found->second); roi && !(*roi).empty())
+                        fit.insert(fit.end(), (*roi).front().begin(), (*roi).front().end());
+            if (const auto found = snapshot->outputs.find(port.id); found != snapshot->outputs.end())
+                if (auto value = GeometryOverlay::fromValue(found->second, 0, false)) geometry.push_back(std::move(*value));
+        }
     }
-    if (auto *viewport = presentation.viewport()) viewport->setOverlays({}, std::move(fit));
+    if (auto *viewport = presentation.viewport())
+    {
+        viewport->setOverlays({}, std::move(fit));
+        viewport->setGeometryOverlays(std::move(geometry));
+    }
 }
 
 void AppController::Impl::clearTrainingFit()
 {
     if (trainingMode)
-        if (auto *viewport = presentation.viewport()) viewport->setOverlays({}, {});
+        if (auto *viewport = presentation.viewport())
+        {
+            viewport->setOverlays({}, {});
+            viewport->setGeometryOverlays({});
+        }
 }
 
 void AppController::Impl::showTrainingDraftRecord()
@@ -273,9 +289,6 @@ void AppController::Impl::showTrainingDraftRecord()
                            : DisplayConverter::convert(stored->pixels, stored->colorOrder);
     if (frame.image.isNull())
     {
-        LogService::write(LogLevel::Error, LogSource::Ui,
-                          QStringLiteral("无法显示训练图：%1")
-                              .arg(frame.error.isEmpty() ? QStringLiteral("草稿中没有这张原图") : frame.error));
         viewport->endRoiEdit();
         viewport->setHostFrame({});
         trainingAssistImage = {};
@@ -296,18 +309,18 @@ void AppController::Impl::showTrainingDraftRecord()
 
 void AppController::Impl::seatTrainingRegions()
 {
+    if (!trainingMode) return;
     auto     *viewport = presentation.viewport();
     const int index    = training->selected();
-    if (!viewport || index < 0 || index >= static_cast<int>(training->records().size()))
+    if (!viewport || !training->roiParameter() || index < 0 || index >= static_cast<int>(training->records().size()))
         return;
     RoiEditSession::Start start;
     start.node       = training->node();
     start.kind       = RoiTargetKind::Training;
-    start.input      = training->roiParameter();
-    start.flow       = flow;
-    start.type       = TypeSpec{Type::ROI};
+    start.input      = *training->roiParameter();
+    start.type       = workbench::port(training->recordParameters(), *training->roiParameter())->type;
     start.background = DataRef<Image>(Image{trainingAssistImage});
-    start.draft      = DataRef<ROI>(ROI{training->regions(index)});
+    start.draft      = shapeValue(start.type.type, ROI{training->regions(index)});
     start.original   = {BindingMode::Literal, start.draft, {}};
     start.view       = viewport->viewState();
     roiSession.begin(std::move(start));
@@ -376,7 +389,7 @@ void AppController::Impl::applyTrainingAssist(const AssistOutcome &outcome)
             LogService::write(LogLevel::Warn, LogSource::Ui, QString::fromUtf8(error.what()));
             return;
         }
-        draft.setParameter(mapping.target.id, trainingFieldValueOf(value));
+        draft.setParameter(mapping.target.id, value);
         writes.push_back({PortStage::Train, mapping.target.id, value});
     }
     try
@@ -513,7 +526,7 @@ QString AppController::selectedTrainingDraftRecord() const
     const auto &records = impl_->training->records();
     if (index < 0 || index >= static_cast<int>(records.size()))
         return {};
-    return records[index].id;
+    return records[index].id();
 }
 
 bool AppController::trainingDirty() const
@@ -528,67 +541,44 @@ bool AppController::trainingSavable() const
 
 bool AppController::addTrainingImage()
 {
-    if (!canAddTrainingImage())
-        return false;
-    const auto *spec = impl_->trainingSpec();
+    if (!canAddTrainingImage() || !impl_->ensureTrainingSession()) return false;
+    const auto *spec = impl_->training->datasetSpec();
+    const auto ref = *spec->image;
     const auto *node = impl_->currentNode();
-    if (!spec || !node)
-        return false;
-    const auto *value = impl_->presentation.resolvedInput(*node, spec->image.id);
-    const auto *batch = value ? std::get_if<DataRef<Image>>(value) : nullptr;
-    const int   index = impl_->presentation.imageIndex();
-    if (!batch || batch->get().empty() || index < 0 || static_cast<std::size_t>(index) >= batch->get().size())
+    const auto value = impl_->presentation.resolvedValue(*node, ref);
+    const auto *batch = std::get_if<DataRef<Image>>(&value);
+    const int index = impl_->presentation.imageIndex();
+    if (!batch || index < 0 || static_cast<std::size_t>(index) >= batch->get().size()) return false;
+    const auto *tool = impl_->effectiveTool();
+    const auto &ports = ref.stage == PortStage::Inputs ? tool->inputs : ref.stage == PortStage::Outputs ? tool->outputs
+                      : ref.stage == PortStage::Init ? tool->initParams : tool->trainParams;
+    const auto *port = workbench::port(ports, ref.id);
+    ColorOrder order = port->colorOrder;
+    auto source = QStringLiteral("%1:%2:%3:%4:%5").arg(node->id).arg(node->executionRevision)
+                      .arg(static_cast<int>(ref.stage)).arg(ref.id).arg(index);
+    if (ref.stage == PortStage::Inputs)
     {
-        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("训练数据：声明的图像端口还没有发布可用的帧"));
-        emit trainingChanged();
-        return false;
+        const auto &binding = node->inputs.at(ref.id);
+        if (effectiveSource(binding))
+        {
+            const auto snapshot = impl_->presentation.sharedSnapshot(binding.source->node);
+            if (!snapshot) return false;
+            source = QStringLiteral("%1:%2:%3:%4:%5:%6:%7").arg(snapshot->generation).arg(snapshot->session)
+                         .arg(snapshot->round).arg(snapshot->publication).arg(binding.source->node).arg(binding.source->port).arg(index);
+            const auto *producerNode = impl_->findNode(binding.source->node);
+            const auto contract = nodeContract(*producerNode, *impl_->registry.find(producerNode->toolId));
+            order = workbench::port(contract.outputs, binding.source->port)->colorOrder;
+        }
     }
-    if (!impl_->ensureTrainingSession())
-    {
-        emit trainingChanged();
-        return false;
-    }
-    const auto &binding = node->inputs.at(spec->image.id);
-    const auto snapshot = effectiveSource(binding) ? impl_->presentation.sharedSnapshot(binding.source->node) : nullptr;
-    if (!snapshot)
-    {
-        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("训练原图缺少发布身份，请运行图像来源"));
-        return false;
-    }
-    const auto source = QStringLiteral("%1:%2:%3:%4:%5:%6:%7")
-                            .arg(snapshot->generation)
-                            .arg(snapshot->session)
-                            .arg(snapshot->round)
-                            .arg(snapshot->publication)
-                            .arg(binding.source->node)
-                            .arg(binding.source->port)
-                            .arg(index);
-    const auto *producerNode = impl_->findNode(binding.source->node);
-    const auto *producer     = producerNode ? impl_->registry.find(producerNode->toolId) : nullptr;
-    if (!producer)
-    {
-        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("训练原图的工具声明缺失"));
-        return false;
-    }
-    const auto  producerContract = nodeContract(*producerNode, *producer);
-    const auto *sourcePort       = workbench::port(producerContract.outputs, binding.source->port);
-    if (!sourcePort)
-    {
-        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("训练原图的输出声明缺失"));
-        return false;
-    }
-    const auto order = sourcePort->colorOrder;
-    const auto added = impl_->training->addImage(batch->get()[static_cast<std::size_t>(index)], order, source);
+    const auto added = impl_->training->addRecord(batch->get()[index], order, source);
     if (!added)
     {
-        LogService::write(LogLevel::Error, LogSource::Ui, QStringLiteral("训练数据：") + impl_->training->error());
-        emit trainingChanged();
+        LogService::write(LogLevel::Error, LogSource::Ui, impl_->training->error());
         return false;
     }
     impl_->presentation.setSuspended(true);
-    impl_->trainingMode                                      = true;
+    impl_->trainingMode = true;
     impl_->trainingViews.at(impl_->training->node()).visible = true;
-    ++impl_->trainingSerial;
     impl_->showTrainingDraftRecord();
     emit trainingChanged();
     emit resultsChanged();
@@ -598,13 +588,11 @@ bool AppController::addTrainingImage()
 bool AppController::canAddTrainingImage() const
 {
     const auto *viewport = impl_->presentation.viewport();
-    const auto *spec     = impl_->trainingSpec();
-    if (!trainingAvailable() || !spec || impl_->trainingMode || !impl_->editingAllowed() || !viewport
-        || !viewport->hasImage())
+    const auto *spec = impl_->training ? impl_->training->datasetSpec() : nullptr;
+    if (!spec || !spec->image || impl_->trainingMode || !impl_->editingAllowed() || !viewport || !viewport->hasImage())
         return false;
-    // "加入训练" copies what the panel is showing, so the selector must be on the declared frame
-    // port; another output would train on pixels the declaration never named.
-    return impl_->presentation.selectedImageOutput() == QStringLiteral("inputs:%1").arg(spec->image.id);
+    return impl_->presentation.selectedImageOutput()
+        == QStringLiteral("%1:%2").arg(QString::fromLatin1(stageName(spec->image->stage))).arg(spec->image->id);
 }
 
 void AppController::selectTrainingDraftRecord(const QString &id)
@@ -613,7 +601,7 @@ void AppController::selectTrainingDraftRecord(const QString &id)
         return;
     const auto &records = impl_->training->records();
     for (std::size_t index = 0; index < records.size(); ++index)
-        if (records[index].id == id)
+        if (records[index].id() == id)
         {
             if (!impl_->training->select(static_cast<int>(index)))
                 return;
@@ -629,7 +617,7 @@ void AppController::removeTrainingDraftRecord(const QString &id)
         return;
     const auto &records = impl_->training->records();
     for (std::size_t index = 0; index < records.size(); ++index)
-        if (records[index].id == id)
+        if (records[index].id() == id)
         {
             if (!impl_->training->remove(static_cast<int>(index)))
                 return;
@@ -652,18 +640,7 @@ bool AppController::setTrainingField(const QString &id, int field, const QVarian
     const auto converted = trainingValue(declared->type, value);
     if (!converted)
         return false;
-    const auto &records = impl_->training->records();
-    for (std::size_t index = 0; index < records.size(); ++index)
-        if (records[index].id == id)
-        {
-            if (impl_->training->setField(static_cast<int>(index), declared->id, *converted))
-            {
-                impl_->trainingEdited();
-                return true;
-            }
-            return false;
-        }
-    return false;
+    return impl_->applyTrainingValue(declared->id, *converted, id);
 }
 
 bool AppController::setTrainingParameter(int id, const QVariant &value)
@@ -677,15 +654,49 @@ bool AppController::setTrainingParameter(int id, const QVariant &value)
     if (!declared)
         return false;
     const auto converted = trainingValue(declared->type, value);
-    if (!converted || !impl_->training->setParameter(declared->id, *converted))
-        return false;
-    impl_->trainingEdited();
+    return converted && impl_->applyTrainingValue(declared->id, *converted);
+}
+
+bool AppController::Impl::applyTrainingValue(PortId id, PortValue value, const QString &record)
+{
+    bool changed = false;
+    if (record.isEmpty()) changed = training->setParameter(id, std::move(value));
+    else
+    {
+        const auto &records = training->records();
+        const auto found = std::find_if(records.begin(), records.end(), [&](const auto &entry) { return entry.id() == record; });
+        if (found != records.end()) changed = training->setField(static_cast<int>(found - records.begin()), id, std::move(value));
+    }
+    if (changed) trainingEdited();
+    return changed;
+}
+
+bool AppController::selectTrainingDataset(int parameter)
+{
+    if (!impl_->idle() || !impl_->ensureTrainingSession() || !impl_->training->selectDataset(static_cast<PortId>(parameter))) return false;
+    impl_->finishRoi();
+    ++impl_->trainingSerial;
+    impl_->clearTrainingFit();
+    if (impl_->trainingMode) impl_->showTrainingDraftRecord();
+    emit trainingChanged();
+    emit parametersChanged();
+    emit resultsChanged();
     return true;
 }
 
 bool AppController::setTrainingParameterPath(int parameter, const QUrl &url)
 {
     return url.isLocalFile() && setTrainingParameter(parameter, url.toLocalFile());
+}
+
+bool AppController::addTrainingRecord(int parameter)
+{
+    if (!selectTrainingDataset(parameter) || !impl_->training->addRecord()) return false;
+    setTrainingMode(true);
+    impl_->showTrainingDraftRecord();
+    impl_->trainingEdited();
+    emit resultsChanged();
+    return true;
 }
 
 void AppController::applyTraining()

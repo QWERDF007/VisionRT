@@ -123,7 +123,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/04_扩展示例/03_GPU目标检测/bus.jpg"
+              "literal": "examples/images/GPU目标检测/bus.jpg"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "DetectObjectsYolo",
           "tool_name_snapshot": "YOLO目标检测",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "YOLO推理",
           "pos": [
             2,
@@ -299,7 +299,7 @@
               {
                 "port_id": 3,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               },
               {
@@ -359,7 +359,7 @@
           "node_seq": "3",
           "tool_id": "FilterDetections",
           "tool_name_snapshot": "缺陷过滤",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "结果过滤",
           "pos": [
             2,
@@ -378,7 +378,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               },
               {
@@ -442,7 +442,7 @@
               {
                 "port_id": 3,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               },
               {

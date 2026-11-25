@@ -123,7 +123,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/04_扩展示例/01_Python图像统计/images"
+              "literal": "examples/images/Python图像统计"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "投影定位",
           "pos": [
             2,
@@ -221,7 +221,7 @@
               {
                 "port_id": 3,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ]
@@ -277,7 +277,7 @@
           "node_seq": "3",
           "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "区域裁剪",
           "pos": [
             0,
@@ -296,7 +296,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               }
             ],
@@ -345,7 +345,6 @@
               "literal": [
                 [
                   [
-                    2,
                     10,
                     10,
                     20,

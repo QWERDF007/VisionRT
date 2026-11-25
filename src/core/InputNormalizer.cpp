@@ -16,9 +16,9 @@ std::string numberText(const PortValue &value)
     return {};
 }
 
-bool inOptions(const std::vector<PortValue> &options, const PortValue &value)
+bool inOptions(const std::vector<PortOption> &options, const PortValue &value)
 {
-    return std::any_of(options.begin(), options.end(), [&](const auto &option) { return equalValues(option, value); });
+    return std::any_of(options.begin(), options.end(), [&](const auto &option) { return equalValues(option.value, value); });
 }
 
 void clampNumeric(const PortDefinition &port, PortValue &value, std::string &adjustment)

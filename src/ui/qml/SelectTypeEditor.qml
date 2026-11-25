@@ -34,39 +34,8 @@ Dialog {
         radius: 6
     }
 
-    readonly property var typeList: [
-        {
-            name: PortType.Int,
-            label: "整数"
-        },
-        {
-            name: PortType.Float,
-            label: "浮点数"
-        },
-        {
-            name: PortType.Bool,
-            label: "布尔"
-        },
-        {
-            name: PortType.String,
-            label: "字符串"
-        },
-        {
-            name: PortType.Array,
-            label: "数组"
-        },
-        {
-            name: PortType.Image,
-            label: "图像"
-        },
-        {
-            name: PortType.ROI,
-            label: "区域 (ROI)"
-        }
-    ]
-    readonly property var dtypeList: [DType.UInt8, DType.Int32, DType.Int64, DType.Float32, DType.Float64, DType.Bool, DType.String].map(function (dtype) {
-        return { name: dtype, label: app.dtypeDescription(dtype) };
-    })
+    readonly property var typeList: app.parameterTypes
+    readonly property var dtypeList: app.arrayElementTypes
 
     function openFor(id) {
         nodeId = id;

@@ -42,7 +42,7 @@ public:
         return toolResult({{kOutputImage, DataRef<Image>(Image{image}, {payload})},
              {kOutputArray, Array::fromNested(NestedVector<std::int64_t, 2>{{17}, {}}).retainedBy(payload)},
              {kOutputGrid, Array::fromNested(NestedVector<std::int64_t, 2>{{17, 18}, {19, 20}}).retainedBy(payload)},
-             {kOutputRoi, DataRef<ROI>(ROI{{{2, 16777217.125, 0, 3, 2, 0}}}, {payload})}}, {});
+             {kOutputRoi, Rectangle::fromEncoded(ROI{{{2, 16777217.125, 0, 3, 2, 0}}}).retainedBy(payload)}}, {});
     }
 
     ToolStatus release() override

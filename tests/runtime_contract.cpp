@@ -1090,7 +1090,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         {{Type::Bool}, true},
         {{Type::String}, std::string("跨流程数据")},
         {{Type::Image}, DataRef<Image>(Image{cv::Mat::ones(2, 3, CV_8UC1)})},
-        {{Type::ROI}, DataRef<ROI>(ROI{{{3., 2., 3., 1.}}})},
+        {{Type::Circle}, Circle::fromEncoded(ROI{{{3., 2., 3., 1.}}})},
         {{Type::Array, DType::String, 1}, Array::fromNested(NestedVector<std::string, 1>{"中文", "text"})},
         {{Type::Array, DType::String, 2}, Array::fromNested(NestedVector<std::string, 2>{{"中文", "text"}, {}})},
         {{Type::Array, DType::Int64, 2}, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL, -17}, {}})},

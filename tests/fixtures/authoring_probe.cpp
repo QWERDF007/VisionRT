@@ -25,7 +25,7 @@ public:
     {
         visionrt::Values outputs;
         outputs.emplace(2, static_cast<std::int64_t>(1));
-        outputs.emplace(36, visionrt::DataRef<visionrt::ROI>(visionrt::ROI{}));
+        outputs.emplace(36, visionrt::Circle::fromEncoded(visionrt::ROI{}));
         return visionrt::toolResult(std::move(outputs), {0, "ok"});
     }
 
@@ -47,7 +47,7 @@ public:
     {
         const auto  found = values.find(2);
         const auto *regions
-            = found == values.end() ? nullptr : std::get_if<visionrt::DataRef<visionrt::ROI>>(&found->second);
+            = found == values.end() ? nullptr : std::get_if<visionrt::Circle>(&found->second);
         if (!regions || regions->get().size() != 1 || regions->get().front().size() != 1)
             return visionrt::toolResult({}, {-2, "搜索区域缺失"});
         const auto center = visionrt::RegionView(regions->get().front().front()).circle().center();
@@ -58,8 +58,8 @@ public:
         const visionrt::EncodedRegion region{static_cast<double>(visionrt::RoiKind::Circle), center.x, center.y,
                                              radius};
         visionrt::Values              outputs;
-        outputs.emplace(30, visionrt::DataRef<visionrt::ROI>(visionrt::ROI{{region}}));
-        outputs.emplace(31, visionrt::DataRef<visionrt::ROI>(visionrt::ROI{{region}}));
+        outputs.emplace(30, visionrt::Circle::fromEncoded(visionrt::ROI{{region}}));
+        outputs.emplace(31, visionrt::Circle::fromEncoded(visionrt::ROI{{region}}));
         outputs.emplace(32, true);
         outputs.emplace(33, std::string("候选"));
         outputs.emplace(34, center.x > 240 ? 5000.0 : 12.5);

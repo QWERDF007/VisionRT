@@ -107,6 +107,36 @@ void RoiOverlay::paint(QPainter *p)
         p->drawLine(b, b - roiui::rotate(head, 28));
         p->drawLine(b, b - roiui::rotate(head, -28));
     };
+    for (const auto &overlay : v.geometry_)
+        std::visit([&](const auto &geometry)
+        {
+            const auto point = [&](cv::Point2d value)
+            {
+                const auto image = overlay.alignment.map(value);
+                return map({image.x, image.y});
+            };
+            for (std::size_t i = 0; i < geometry.count(overlay.image); ++i)
+            {
+                const auto value = geometry.at(overlay.image, i);
+                if constexpr (std::is_same_v<std::decay_t<decltype(geometry)>, Direction>)
+                    arrow(point(value.start()), point(value.end()), overlay.input ? c.ROIInput() : c.ROIOutput());
+                else
+                {
+                    const auto origin = point(value.origin());
+                    const auto xEnd = point(value.xEnd()), yEnd = point(value.yEnd());
+                    arrow(origin, xEnd, c.CoordinateAxisX());
+                    arrow(origin, yEnd, c.CoordinateAxisY());
+                    pen(c.CoordinateAxisX(), s.ROIGuideStrokeWidth());
+                    p->drawText(xEnd + QPointF(s.ROIArrowHeadSize(), 0), QStringLiteral("X"));
+                    pen(c.CoordinateAxisY(), s.ROIGuideStrokeWidth());
+                    p->drawText(yEnd + QPointF(0, s.ROIArrowHeadSize()), QStringLiteral("Y"));
+                    pen(c.CoordinateOrigin(), s.ROIGuideStrokeWidth());
+                    const auto half = s.ROICenterHandleSize() / 2;
+                    p->drawLine(origin - QPointF(half, 0), origin + QPointF(half, 0));
+                    p->drawLine(origin - QPointF(0, half), origin + QPointF(0, half));
+                }
+            }
+        }, overlay.value);
     const auto shape = [&](const EncodedRegion &encoded, QColor color, qreal stroke, qreal fill)
     {
         const auto region = roiui::view(encoded);

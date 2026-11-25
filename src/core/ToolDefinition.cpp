@@ -24,7 +24,7 @@ namespace {
 
 PortId floorId(PortStage stage) noexcept
 {
-    return stage == PortStage::Init ? 0 : stage == PortStage::Inputs ? 1 : 2;
+    return stage == PortStage::Init || stage == PortStage::Train ? 0 : stage == PortStage::Inputs ? 1 : 2;
 }
 
 void validateNumericPortValue(const PortValue &val, Type type, const std::string &fieldName, PortId portId)
@@ -125,12 +125,8 @@ void validatePorts(const std::vector<PortDefinition> &ports, PortStage stage)
                 || !port.options.empty() || port.optionsProvider != OptionsProvider::None || port.alignment)
                 throw ContractError("输出端口不能包含输入编辑配置：" + port.nameZh);
         }
-        else if (port.colorOrder != ColorOrder::Automatic)
-        {
-            throw ContractError("display.color_order 仅属于输出端口：" + port.nameZh);
-        }
         const bool pathEditor = port.editor == EditorKind::Path;
-        if (port.editor == EditorKind::Rect && port.type.type != Type::ROI)
+        if (port.editor == EditorKind::Rect && port.type.type != Type::Rectangle)
             throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.nameZh);
         if (pathEditor && port.type != TypeSpec{Type::String})
             throw ContractError("路径编辑器要求 String 类型端口：" + port.nameZh);
@@ -194,8 +190,9 @@ void validatePorts(const std::vector<PortDefinition> &ports, PortStage stage)
             }
         }
 
-        for (const auto &opt : port.options)
+        for (const auto &option : port.options)
         {
+            const auto &opt = option.value;
             if (numeric)
             {
                 validateNumericPortValue(opt, port.type.type, "option", port.id);
@@ -216,18 +213,18 @@ void validatePorts(const std::vector<PortDefinition> &ports, PortStage stage)
         if (!port.options.empty() && !isMissing(port.defaultValue))
         {
             const bool found = std::any_of(port.options.begin(), port.options.end(),
-                                           [&](const auto &opt) { return equalValues(opt, port.defaultValue); });
+                                           [&](const auto &opt) { return equalValues(opt.value, port.defaultValue); });
             if (!found)
             {
                 throw ContractError("默认值不在可选范围内：" + port.nameZh);
             }
         }
 
-        if (port.image && port.type.type != Type::ROI)
-            throw ContractError("relations.image requires an ROI port: " + port.nameZh);
+        if (port.image && !isGeometryType(port.type.type))
+            throw ContractError("relations.image 需要几何参数：" + port.nameZh);
 
-        if (port.alignment && (stage != PortStage::Inputs || port.type.type != Type::ROI))
-            throw ContractError("relations.alignment requires an ROI input: " + port.nameZh);
+        if (port.alignment && !isGeometryType(port.type.type))
+            throw ContractError("relations.alignment 需要几何参数：" + port.nameZh);
 
         if (port.colorOrder != ColorOrder::Automatic && port.type.type != Type::Image)
             throw ContractError("display.color_order requires an Image output: " + port.nameZh);
@@ -274,6 +271,9 @@ const char *editorLabel(EditorKind editor)
 
 std::vector<EditorKind> editorChoices(const TypeSpec &type)
 {
+    if (isShapeType(type.type))
+        return type.type == Type::Rectangle ? std::vector{EditorKind::Roi, EditorKind::Rect, EditorKind::Array}
+                                           : std::vector{EditorKind::Roi, EditorKind::Array};
     switch (type.type)
     {
     case Type::Int:
@@ -283,9 +283,10 @@ std::vector<EditorKind> editorChoices(const TypeSpec &type)
         return {EditorKind::Bool, EditorKind::Switch};
     case Type::String:
         return {EditorKind::Text, EditorKind::Path};
-    case Type::ROI:
-        return {EditorKind::Roi, EditorKind::Rect, EditorKind::Array};
     case Type::Array:
+    case Type::Direction:
+    case Type::CoordinateFrame2D:
+    case Type::TrainingSet:
         return {EditorKind::Array, EditorKind::Recursive};
     case Type::Image:
         return {};
@@ -304,9 +305,12 @@ void stripHostPorts(ToolDefinition &def)
     }
 }
 
-std::span<const std::string_view> toolTabs() noexcept
+std::span<const ParameterTabDefinition> toolTabs() noexcept
 {
-    static constexpr std::array<std::string_view, 5> tabs{"基本输入", "预处理", "训练", "检测", "结果处理"};
+    static constexpr std::array<ParameterTabDefinition, 6> tabs{{
+        {ParameterTab::BasicInput, "基本输入"}, {ParameterTab::Initialization, "初始化"},
+        {ParameterTab::Training, "训练"}, {ParameterTab::Preprocess, "预处理"},
+        {ParameterTab::Detection, "检测"}, {ParameterTab::Postprocess, "结果处理"}}};
     return tabs;
 }
 
@@ -475,12 +479,12 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
     }
 
     // Relations a port carries describe what its own value is.
-    if (port.image && newType.type != Type::ROI)
+    if (port.image && !isGeometryType(newType.type))
     {
         port.image.reset();
         note("图像关联");
     }
-    if (port.alignment && (stage != PortStage::Inputs || newType.type != Type::ROI))
+    if (port.alignment && !isGeometryType(newType.type))
     {
         port.alignment.reset();
         note("对齐关系");
@@ -523,7 +527,7 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
                 other.sameGeometryAs.reset();
                 note(owner + "同几何关系");
             }
-            if (pointsHere(other.alignment) && newType != TypeSpec{Type::Array, DType::Float64, 3})
+            if (pointsHere(other.alignment) && newType != kAlignmentType)
             {
                 other.alignment.reset();
                 note(owner + "对齐关系");
@@ -606,6 +610,15 @@ std::vector<std::string> erasePort(ToolDefinition &def, PortStage stage, PortId 
 
 void normalizeToolDefinition(ToolDefinition &def)
 {
+    for (auto &port : def.initParams) port.tab = ParameterTab::Initialization;
+    for (auto &port : def.trainParams) port.tab = ParameterTab::Training;
+    if (def.training)
+        for (auto &dataset : def.training->datasets)
+            for (auto &field : dataset.fields)
+            {
+                field.tab = ParameterTab::Training;
+                if (isMissing(field.defaultValue)) field.defaultValue = defaultValue(field.type);
+            }
     // Every contract carries the two status outputs, whatever the node model: the tool writes them
     // like any other port and the host never adds or rewrites one. Materialising here keeps a
     // hand-built contract and a parsed declaration identical.
@@ -706,13 +719,6 @@ void validateToolDefinition(const ToolDefinition &def)
         throw ContractError("非宿主工具不能声明 implementation.binding：" + def.nameEn);
 
     validatePorts(def.initParams, PortStage::Init);
-    if (def.kind == ToolKind::PythonFunction)
-    {
-        if (!def.initParams.empty())
-        {
-            throw ContractError("Function tool cannot have init params: " + def.nameEn);
-        }
-    }
     validatePorts(def.trainParams, PortStage::Train);
     validatePorts(def.inputs, PortStage::Inputs);
     validatePorts(def.outputs, PortStage::Outputs);
@@ -720,30 +726,19 @@ void validateToolDefinition(const ToolDefinition &def)
     if (def.training)
     {
         const auto &spec = *def.training;
-        const auto *frame = findPort(def.inputs, spec.image.id);
-        if (spec.image.stage != PortStage::Inputs || !frame || frame->type.type != Type::Image)
-            throw ContractError("training.image 必须引用 Image 输入");
-        if (spec.maxRecords < 0) throw ContractError("training.max_records 不能为负数");
-        int canvases = 0;
-        for (const auto &port : def.trainParams)
+        std::set<PortId> datasets;
+        for (const auto &dataset : spec.datasets)
         {
-            if (port.id == 0 || port.type.type == Type::Image || port.type.type == Type::TrainingSet)
-                throw ContractError("训练参数必须有正编号且不能包含图像或训练集");
-            if (port.roi)
+            const auto *parameter = findPort(def.trainParams, dataset.parameter);
+            if (!datasets.insert(dataset.parameter).second || !parameter || parameter->type != TypeSpec{Type::TrainingSet})
+                throw ContractError("训练数据编辑必须关联唯一的训练集参数");
+            if (dataset.image)
             {
-                ++canvases;
-                if (port.scope != ParameterScope::Record || port.type.type != Type::ROI
-                    || port.minRegions < 0 || port.maxRegions < 0
-                    || (port.maxRegions && port.minRegions > port.maxRegions))
-                    throw ContractError("训练画布需要有效的记录级 ROI 参数");
+                const auto *image = findPort(def, *dataset.image);
+                if (!image || image->type != TypeSpec{Type::Image}) throw ContractError("训练图像来源必须引用图像参数");
             }
-        }
-        if (canvases != 1) throw ContractError("训练工具需要唯一的记录级画布 ROI");
-        if (spec.overlayOutput)
-        {
-            const auto *output = findPort(def.outputs, spec.overlayOutput);
-            if (!output || output->type.type != Type::ROI || output->producedBy == ProducedBy::Execute)
-                throw ContractError("训练叠加需要共享 ROI 输出");
+            if (dataset.maxRecords < 0) throw ContractError("训练记录上限不能为负数");
+            validatePorts(dataset.fields, PortStage::Train);
         }
         std::set<std::string> artifacts;
         std::set<PortId> targets, sources;
@@ -754,13 +749,11 @@ void validateToolDefinition(const ToolDefinition &def)
             if (!artifacts.insert(artifact.id).second || !targets.insert(artifact.target.id).second
                 || !sources.insert(artifact.sourcePort).second || artifact.id.empty() || artifact.format.empty()
                 || artifact.version < 1 || artifact.target.stage != PortStage::Train
-                || !target || target->type != TypeSpec{Type::String} || target->scope != ParameterScope::Tool
+                || !target || target->type != TypeSpec{Type::String}
                 || !output || output->type != TypeSpec{Type::String} || output->producedBy == ProducedBy::Execute)
                 throw ContractError("模型产物必须关联唯一的训练路径参数与共享路径输出");
         }
     }
-    else if (!def.trainParams.empty())
-        throw ContractError("训练参数需要 training 声明");
 
     const auto requireImage = [&](const PortRef &reference, const char *context)
     {
@@ -808,14 +801,16 @@ void validateToolDefinition(const ToolDefinition &def)
         }
     }
 
-    for (const auto &port : def.inputs)
+    for (const auto &[stage, ports] : {std::pair{PortStage::Init, &def.initParams}, {PortStage::Train, &def.trainParams},
+                                      {PortStage::Inputs, &def.inputs}, {PortStage::Outputs, &def.outputs}})
+      for (const auto &port : *ports)
     {
         if (!port.alignment)
             continue;
         const auto *target = findPort(def, *port.alignment);
-        if (!target || target->id == port.id || target->typeFrom
-            || target->type != TypeSpec{Type::Array, DType::Float64, 3})
-            throw ContractError("relations.alignment 必须引用另一个 Array(float64, rank=3) 输入：" + port.nameZh);
+        if (!target || *port.alignment == PortRef{stage, port.id} || target->typeFrom
+            || target->type != kAlignmentType)
+            throw ContractError("relations.alignment 必须引用另一个二维浮点数数组输入：" + port.nameZh);
     }
 
     const auto requireParameter = [&](PortId id, const char *label)
@@ -842,10 +837,10 @@ void validateToolDefinition(const ToolDefinition &def)
                 = mode && mode->type == TypeSpec{Type::Int} && mode->options.size() == 2
                && std::any_of(
                       mode->options.begin(), mode->options.end(), [](const auto &value)
-                      { return equalValues(value, PortValue{std::int64_t{static_cast<int>(BindingMode::Literal)}}); })
+                      { return equalValues(value.value, PortValue{std::int64_t{static_cast<int>(BindingMode::Literal)}}); })
                && std::any_of(
                       mode->options.begin(), mode->options.end(), [](const auto &value)
-                      { return equalValues(value, PortValue{std::int64_t{static_cast<int>(BindingMode::Upstream)}}); })
+                      { return equalValues(value.value, PortValue{std::int64_t{static_cast<int>(BindingMode::Upstream)}}); })
                && equalValues(mode->defaultValue, PortValue{std::int64_t{static_cast<int>(BindingMode::Literal)}});
             if (!validMode)
                 throw ContractError("条件节点必须声明整数条件来源，选项 Literal/Upstream，默认 Literal：" + def.nameEn);

@@ -1,0 +1,123 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import quickui
+import VisionRT.Ui 1.0
+
+Flickable {
+    id: root
+    function isSameGroups(a, b) {
+        if (a === b)
+            return true;
+        if (!a || !b || a.length !== b.length)
+            return false;
+        for (let i = 0; i < a.length; ++i) {
+            let ga = a[i], gb = b[i];
+            if (ga.nodeId !== gb.nodeId || ga.name !== gb.name || ga.tab !== gb.tab)
+                return false;
+            if (!ga.parameters || !gb.parameters || ga.parameters.length !== gb.parameters.length)
+                return false;
+            for (let j = 0; j < ga.parameters.length; ++j) {
+                if (ga.parameters[j].id !== gb.parameters[j].id || ga.parameters[j].stage !== gb.parameters[j].stage || ga.parameters[j].recordId !== gb.parameters[j].recordId || !!ga.parameters[j].recordScoped !== !!gb.parameters[j].recordScoped || ga.parameters[j].datasetId !== gb.parameters[j].datasetId)
+                    return false;
+            }
+        }
+        return true;
+    }
+    required property int parameterTab
+    property var collapsedGroups: ({})
+    property var parameterGroups: []
+    signal expressionEditorRequested(string node, string draft, bool hasDraft)
+    signal selectTypeEditorRequested(string node)
+    onParameterTabChanged: refreshGroups()
+    Component.onCompleted: refreshGroups()
+    Connections {
+        target: app
+        function onSelectionChanged() { root.refreshGroups(); }
+        function onTrainingChanged() { root.refreshGroups(); }
+        function onParametersChanged() { root.refreshGroups(); }
+    }
+    function refreshGroups() {
+        let result = app.parameterGroups.filter(function (group) { return group.tab === root.parameterTab; });
+        if (!isSameGroups(result, parameterGroups)) parameterGroups = result;
+    }
+    visible: app.selectedNode.length > 0
+    contentWidth: width
+    contentHeight: groupColumn.height
+    clip: true
+    boundsBehavior: Flickable.StopAtBounds
+    boundsMovement: Flickable.StopAtBounds
+    ScrollBar.vertical: WorkbenchScrollBar {
+        id: parameterScrollBar
+    }
+    Column {
+        id: groupColumn
+        width: root.width - parameterScrollBar.width
+        spacing: 5
+        Repeater {
+            model: root.parameterGroups
+            QuiExpander {
+                id: parameterGroup
+                required property var modelData
+                width: groupColumn.width
+                headerText: modelData.name
+                headerHeight: VisionRTSize.BarSize
+                headerPadding: 5
+                headerDelegate: Component {
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 5
+                        WorkbenchActionButton {
+                            iconSource: parameterGroup.expand ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
+                            onClicked: parameterGroup.toggle()
+                        }
+                        QuiText {
+                            text: parameterGroup.headerText
+                        }
+                        Item {
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
+
+                expand: root.collapsedGroups[headerText] !== true
+                contentHeight: groupBody.implicitHeight + 2 * groupBody.anchors.topMargin
+                onExpandChanged: {
+                    root.collapsedGroups[headerText] = !expand;
+                }
+                ColumnLayout {
+                    id: groupBody
+                    anchors.top: parent.top
+                    anchors.topMargin: 5
+                    anchors.left: parent.left
+                    anchors.leftMargin: 5
+                    anchors.right: parent.right
+                    anchors.rightMargin: 5
+                    spacing: 5
+                    Repeater {
+                        model: modelData.parameters
+                        Loader {
+                            id: parameterRow
+                            required property var modelData
+                            readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
+                                return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId && !!parameter.recordScoped === !!parameterRow.modelData.recordScoped && parameter.datasetId === parameterRow.modelData.datasetId;
+                            }) : undefined
+                            Layout.fillWidth: true
+                            active: currentParameter !== undefined
+                            sourceComponent: ParameterEditor {
+                                nodeId: parameterGroup.modelData.nodeId
+                                parameter: parameterRow.currentParameter
+                                onExpressionEditorRequested: function (node, draft, hasDraft) {
+                                    root.expressionEditorRequested(node, draft, hasDraft);
+                                }
+                                onSelectTypeEditorRequested: function (node) {
+                                    root.selectTypeEditorRequested(node);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

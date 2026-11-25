@@ -33,6 +33,7 @@ struct ParameterLocator
     double                           searchRadius{};
     PortId                           candidateOutput{}, previewOutput{}, validOutput{};
     std::optional<PortId>            messageOutput, seedInput, alignmentInput;
+    std::optional<PortId>            datasetParameter;
     std::vector<ParameterSuggestion> parameters;
     bool                             operator==(const ParameterLocator &) const = default;
 };

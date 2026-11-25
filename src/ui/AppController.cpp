@@ -768,7 +768,7 @@ void AppController::Impl::start(RunMode mode)
             std::vector<LiteralWrite> paths;
             for (const auto &artifact : view->second.session.spec().artifacts)
                 if (const auto value = view->second.session.parameter(artifact.target.id))
-                    paths.push_back({PortStage::Train, artifact.target.id, portValueOf(*value)});
+                    paths.push_back({PortStage::Train, artifact.target.id, *value});
             if (!paths.empty()) editor.setLiteralWrites(sourceFlow.id, node.id, paths);
         }
     beginDrain([this, mode] { beginRun(mode); });
@@ -1730,11 +1730,13 @@ QVariantList AppController::flows() const
 QVariantList AppController::parameterTabs() const
 {
     QVariantList result;
-    for (std::size_t index = 0; index < toolTabs().size(); ++index)
+    const auto *tool = impl_->currentTool();
+    for (const auto &tab : toolTabs())
     {
-        if (index == static_cast<std::size_t>(ParameterTab::Training) && !trainingAvailable()) continue;
-        const auto tab = toolTabs()[index];
-        result.append(QVariantMap{{"id", static_cast<int>(index)}, {"name", QString::fromUtf8(tab.data(), static_cast<qsizetype>(tab.size()))}});
+        if (tab.id == ParameterTab::Training && !trainingAvailable()) continue;
+        if (tab.id == ParameterTab::Initialization && (!tool || std::ranges::none_of(tool->initParams,
+                [&](const auto &port) { return !isDerivedInitParam(tool->nodeModel, port.id); }))) continue;
+        result.append(QVariantMap{{"id", static_cast<int>(tab.id)}, {"name", QString::fromUtf8(tab.name.data(), static_cast<qsizetype>(tab.name.size()))}});
     }
     return result;
 }
@@ -2102,15 +2104,6 @@ bool AppController::setParameterMode(int port, bool upstream)
             const auto *node = impl_->currentNode();
             if (!node)
                 throw ContractError("未选择节点");
-            const auto *tool = impl_->currentTool();
-            if (tool)
-            {
-                if (const auto *declaration = workbench::port(tool->inputs, id))
-                {
-                    if (declaration->type.type == Type::Image && !upstream)
-                        return false;
-                }
-            }
             impl_->finishRoi();
             return impl_->editor.setMode(impl_->flow.toStdString(), node->id, id,
                                          upstream ? BindingMode::Upstream : BindingMode::Literal);

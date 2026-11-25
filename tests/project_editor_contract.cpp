@@ -540,7 +540,7 @@ void receiverOutputFollowsItsSource()
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json",
                                                      {}, {ToolOrigin::Builtin, {}});
     ProjectEditor editor;

@@ -66,7 +66,7 @@ try
     require(app.outputTitle() == QStringLiteral("训练输出") && !app.trainingDirty(), "training was not published");
     require(isMissing(outputs->capture(PortId{2})->value), "training retained the old alignment matrix");
     const auto fit = outputs->capture(PortId{3})->value;
-    const auto &edges = std::get<DataRef<ROI>>(fit).get();
+    const auto &edges = std::get<Line>(fit).get();
     require(edges.size() == 1 && edges.front().size() == 2 && edges.front().front().size() == 5,
             "training did not publish complete measured segment endpoints");
     require(equalValues(node(app, 2).inputs.at(6).literal, runRegion)

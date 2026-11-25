@@ -262,7 +262,6 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     Values trainingParameters;
     node.signatures.trainParams.clear();
     for (const auto &port : contract.trainParams)
-        if (port.scope == ParameterScope::Tool)
         {
             const auto found = node.trainParams.find(port.id);
             auto value = found == node.trainParams.end() ? defaultValue(port) : found->second;

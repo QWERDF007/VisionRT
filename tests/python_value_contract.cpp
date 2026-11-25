@@ -94,12 +94,18 @@ void nativeLists(const PythonStorage &storage)
     const auto returned = fromPython({Type::Array, DType::Float64, 2}, converted, storage);
     assert((nestedOf<NestedVector<double, 2>>(std::get<Array>(returned))[0][0] == 99.0));
 
-    const auto roi      = py::eval(R"([[
-        [0.0, 1.25, 2.5], [1.0, 0.0, 0.0, 1.0, 2.0], [2.0, 1.0, 2.0, 3.0, 4.0, 0.0],
-        [3.0, 3.0, 4.0, 2.0], [4.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0], [5.0, 7.0, 8.0]], []])");
-    const auto geometry = fromPython({Type::ROI}, roi, storage);
-    assert(toPython(geometry).equal(roi));
-    assert(std::get<DataRef<ROI>>(geometry).get()[0][0][1] == 1.25);
+    for (const auto &[type, literal] : std::vector<std::pair<Type, const char *>>{
+             {Type::Point, "[[[1.25, 2.5]], []]"},
+             {Type::Line, "[[[0.0, 0.0, 1.0, 2.0]], []]"},
+             {Type::Rectangle, "[[[1.0, 2.0, 3.0, 4.0, 0.0]], []]"},
+             {Type::Circle, "[[[3.0, 4.0, 2.0]], []]"},
+             {Type::Polygon, "[[[0.0, 0.0, 1.0, 0.0, 1.0, 1.0]], []]"}})
+    {
+        const auto coordinates = py::eval(literal);
+        const auto geometry = fromPython({type}, coordinates, storage);
+        assert(typeOf(geometry) == TypeSpec{type});
+        assert(toPython(geometry).equal(coordinates));
+    }
     const TypeSpec bytes{Type::Array, DType::UInt8, 1};
     rejected(bytes, py::eval("[True]"), storage, "port[0]");
     rejected(bytes, py::eval("[-1]"), storage, "port[0]");
@@ -123,7 +129,7 @@ void nativeLists(const PythonStorage &storage)
                  storage, "rank");
     }
     rejected({Type::Array, DType::Float64, 1}, py::eval("[__import__('numpy').float64(0.5)]"), storage, "port[0]");
-    rejected({Type::ROI}, py::eval("[[[0.0, 1.0]]]"), storage, "port[0][0]");
+    rejected({Type::Circle}, py::eval("[[[1.0, 2.0, -1.0]]]"), storage, "port");
     rejected({Type::Array, DType::String, 1}, py::eval("['\\ud800']"), storage, "port[0]");
     assert(isMissing(fromPython({Type::Image}, py::none(), storage)));
     assert(std::get<DataRef<Image>>(fromPython({Type::Image}, py::list(), storage)).get().empty());
@@ -215,14 +221,18 @@ void trainingViews()
     outer.id      = 3;
     outer.imageId = 7;
     outer.fields.emplace(1, std::string("外圈"));
-    outer.fields.emplace(2, DataRef<ROI>(ROI{{{3, 2.0, 2.0, 1.5}}}));
+    outer.fields.emplace(2, Circle::fromEncoded(ROI{{{3, 2.0, 2.0, 1.5}}}));
     outer.fields.emplace(5, 12.5);
+    outer.fields.emplace(6, Direction::fromNested({{{10, 20, 30, 90}}}));
+    outer.fields.emplace(7, CoordinateFrame2D::fromNested({{{10, 20, 30, 0, 0, 40}}}));
+    outer.fields.emplace(8, DataRef<Image>(Image{frame}));
     set.records.emplace(3, outer);
     TrainingRecord inner;
     inner.id      = 4;
     inner.imageId = 7;
     inner.fields.emplace(1, std::string("内圈"));
     set.records.emplace(4, inner);
+    set.records.emplace(9, TrainingRecord{9, std::nullopt, {{0, std::int64_t{12}}}});
 
     auto      source = std::make_unique<DataRef<TrainingSet>>(std::move(set));
     auto      view   = toPython(*source).cast<py::dict>();
@@ -234,13 +244,20 @@ void trainingViews()
     assert(view["records"][py::int_(3)]["image_id"].cast<int>() == 7);
     assert(view["records"][py::int_(4)]["fields"][py::int_(1)].cast<std::string>() == "内圈");
     assert(view["records"][py::int_(3)]["fields"][py::int_(5)].cast<double>() == 12.5);
+    assert(view["records"][py::int_(9)]["image_id"].is_none());
+    PythonStorage storage;
+    const auto returned = std::get<DataRef<TrainingSet>>(fromPython({Type::TrainingSet}, view, storage));
+    assert(!returned.get().records.at(9).imageId);
+    assert(std::get<Direction>(returned.get().records.at(3).fields.at(6)).at(0, 0).end().y == 50);
+    assert(std::get<CoordinateFrame2D>(returned.get().records.at(3).fields.at(7)).at(0, 0).xEnd().x == 40);
+    assert(std::get<DataRef<Image>>(returned.get().records.at(3).fields.at(8)).get().front().at<cv::Vec3b>(0, 0)[2] == 30);
 
-    // A field region uses the same encoded list the ROI port answers.
+    // A circle record carries coordinates without an untyped shape discriminator.
     py::list groups = view["records"][py::int_(3)]["fields"][py::int_(2)].cast<py::list>();
     assert(groups.size() == 1);
     py::list records = groups[0].cast<py::list>();
     py::list encoded = records[0].cast<py::list>();
-    assert(encoded.size() == 4 && encoded[0].cast<double>() == 3.0 && encoded[3].cast<double>() == 1.5);
+    assert(encoded.size() == 3 && encoded[0].cast<double>() == 2.0 && encoded[2].cast<double>() == 1.5);
 
     // The pixels are the stored frame, not a display conversion: channel 0 keeps the value the set
     // wrote, and the colour order travels beside them as metadata.

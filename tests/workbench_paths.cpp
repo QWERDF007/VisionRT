@@ -131,7 +131,7 @@ void pathEditorsContract()
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");

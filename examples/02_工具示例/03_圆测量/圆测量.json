@@ -113,7 +113,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/02_工具示例/03_圆测量/images"
+              "literal": "examples/images/圆测量"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "MeasureCircle",
           "tool_name_snapshot": "测量圆",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "3.0.0",
           "alias": "测量外圆",
           "pos": [
             0,
@@ -165,7 +165,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 13
                 }
               },
               {
@@ -173,7 +173,7 @@
                 "type": {
                   "type": 5,
                   "dtype": 4,
-                  "rank": 3
+                  "rank": 2
                 }
               },
               {
@@ -309,7 +309,7 @@
               {
                 "port_id": 7,
                 "type": {
-                  "type": 6
+                  "type": 13
                 }
               },
               {
@@ -355,7 +355,7 @@
               {
                 "port_id": 13,
                 "type": {
-                  "type": 6
+                  "type": 10
                 }
               },
               {
@@ -382,7 +382,6 @@
               "literal": [
                 [
                   [
-                    3,
                     160,
                     120,
                     60
@@ -393,7 +392,16 @@
             {
               "port_id": 3,
               "mode": 0,
-              "literal": []
+              "literal": [
+                [
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0
+                ]
+              ]
             },
             {
               "port_id": 4,

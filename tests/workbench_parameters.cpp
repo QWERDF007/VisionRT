@@ -172,7 +172,7 @@ void parameterEditorsContract()
     {
       "id": 11,
       "name_zh": "区域",
-      "type": "roi",
+      "type": "rectangle",
       "default": [],
       "relations": {
         "image": {
@@ -194,7 +194,7 @@ void parameterEditorsContract()
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
 
     AppController app(1, directory.path());

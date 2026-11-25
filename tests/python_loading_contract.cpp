@@ -53,7 +53,7 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                        root / "tools" / folder / "tool.json",
                                                        {
@@ -117,6 +117,39 @@ void sharedPackages(PythonRuntime &runtime, const std::filesystem::path &root)
     auto second = runtime.factory(definitions[1])();
     auto built  = runtime.factory(definitions[2])();
     assert(execute(*first) == 1 && execute(*second) == 2 && execute(*built) == 101 && execute(*first) == 3);
+}
+
+void trainingLifecycle(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    write(root / "python/custom/math/trainer.py", R"(
+direction = None
+def initialize(parameters):
+    assert parameters[0][0].shape == (2, 3)
+    return {"code":0, "message":"", "detail":""}
+def execute(inputs):
+    return {"outputs":{0:0, 1:"", 2:1, 3:direction}, "detail":""}
+def train(parameters):
+    global direction
+    direction = parameters[0]
+    assert len(parameters[1]["records"]) == 0
+    return {"outputs":{0:0, 1:"", 2:1, 3:direction}, "detail":"", "artifacts":{"model":b"calibration"}}
+execute.initialize = initialize
+execute.train = train
+)");
+    auto definition = definitionFor(root, "python.trainer", "trainer.py");
+    definition.initParams = {{0, "图像", {Type::Image}}};
+    definition.trainParams = {{0, "方向", {Type::Direction}}, {1, "数据", {Type::TrainingSet}}};
+    definition.outputs.push_back({3, "方向", {Type::Direction}});
+    normalizeToolDefinition(definition);
+    validateToolDefinition(definition);
+    runtime.refresh(std::span(&definition, 1));
+    auto tool = runtime.factory(definition)();
+    const auto direction = Direction::fromNested({{{10, 20, 30, 90}}});
+    const auto trained = tool->train({{0, direction}, {1, DataRef<TrainingSet>(TrainingSet{})}});
+    assert(testview::status(trained) && std::get<Direction>(trained.outputs.at(3)) == direction);
+    assert(std::string(trained.artifacts.at("model").bytes.begin(), trained.artifacts.at("model").bytes.end()) == "calibration");
+    assert(tool->initialize({{0, DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(5))})}}));
+    assert(testview::status(tool->execute({})));
 }
 
 void classInstances(PythonRuntime &runtime, const std::filesystem::path &root)
@@ -537,7 +570,7 @@ try
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })",
                                                        root / "tools/custom/math/tool.json",
                                                        {
@@ -560,7 +593,8 @@ try
                                  assert(std::get<std::int64_t>(result.outputs.at(2)) == 23);
                                  assert(instance->release().code == 0);
                                  instance.reset();
-                                 sharedPackages(runtime, root);
+        sharedPackages(runtime, root);
+        trainingLifecycle(runtime, root);
                                  classInstances(runtime, root);
                                  freshGenerations(runtime, root);
                                  partialFailure(runtime, root);

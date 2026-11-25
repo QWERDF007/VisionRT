@@ -45,7 +45,7 @@ ToolDefinition configuredTool()
         Array::fromNested(NestedVector<std::int64_t, 2>{     {2, 9},           {}, {7}}
         )
     });
-    tool.initParams.push_back({0, "区域", {Type::ROI}, DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}})});
+    tool.initParams.push_back({0, "区域", {Type::Rectangle}, Rectangle::fromEncoded(ROI{{{2., 1., 2., 3., 4., 0.}}})});
     return tool;
 }
 
@@ -59,10 +59,10 @@ void defaultsBelongToEachNode()
     require(numberAt(tool.inputs.front().defaultValue, 0) == 2, "node edit changed declaration default");
     require(numberAt(node(editor, second).inputs.at(1).literal, 0) == 2,
             "node defaults share Array storage");
-    std::get<DataRef<ROI>>(node(editor, first).initParams.at(0)).get()[0][0][1] = 91.;
-    require(std::get<DataRef<ROI>>(tool.initParams.front().defaultValue).get()[0][0][1] == 1.,
+    editor.setInitParam("flow_1", first, 0, Rectangle::fromNested({{{91, 2, 3, 4, 0}}}));
+    require(std::get<visionrt::Rectangle>(tool.initParams.front().defaultValue).get()[0][0][1] == 1.,
             "node edit changed ROI default");
-    require(std::get<DataRef<ROI>>(node(editor, second).initParams.at(0)).get()[0][0][1] == 1.,
+    require(std::get<visionrt::Rectangle>(node(editor, second).initParams.at(0)).get()[0][0][1] == 1.,
             "node defaults share ROI storage");
 }
 
@@ -88,8 +88,8 @@ void copiedConfigurationIsIndependent()
     numberAt(flow.nodes.front().inputs.at(1).literal, 0) = 68;
     require(numberAt(node(editor, source).inputs.at(1).literal, 0) == 83,
             "flow copy shares source configuration storage");
-    std::get<DataRef<ROI>>(flow.nodes.front().initParams.at(0)).get()[0][0][1] = 95.;
-    require(std::get<DataRef<ROI>>(node(editor, source).initParams.at(0)).get()[0][0][1] == 1.,
+    editor.setInitParam(flowId, flow.nodes.front().id, 0, Rectangle::fromNested({{{95, 2, 3, 4, 0}}}));
+    require(std::get<visionrt::Rectangle>(node(editor, source).initParams.at(0)).get()[0][0][1] == 1.,
             "flow copy shares source ROI configuration storage");
 }
 
@@ -102,10 +102,10 @@ void submittedDraftsDoNotRemainLive()
     numberAt(draft, 0) = 84;
     require(numberAt(node(editor, id).inputs.at(1).literal, 0) == 31,
             "later draft edit changed committed literal");
-    PortValue regions = DataRef<ROI>(ROI{{{3., 2., 4., 7.}}});
+    PortValue regions = Rectangle::fromNested({{{2, 4, 7, 8, 0}}});
     require(editor.setInitParam("flow_1", id, 0, regions), "changed ROI draft not submitted");
-    std::get<DataRef<ROI>>(regions).get()[0][0][1] = 97.;
-    require(std::get<DataRef<ROI>>(node(editor, id).initParams.at(0)).get()[0][0][1] == 2.,
+    regions = Rectangle::fromNested({{{97, 2, 3, 4, 0}}});
+    require(std::get<visionrt::Rectangle>(node(editor, id).initParams.at(0)).get()[0][0][1] == 2.,
             "later ROI draft edit changed committed initialization");
     editor.markSaved();
     const auto revision = node(editor, id).executionRevision;
@@ -148,8 +148,9 @@ void reconciledDefaultsAreIndependent()
     require(declared != registered->inputs.end() && numberAt(declared->defaultValue, 0) == 2,
             "reconciliation changed registry defaults");
     require(numberAt(nodes[1].inputs.at(1).literal, 0) == 2, "reconciled nodes share Array defaults");
-    std::get<DataRef<ROI>>(nodes[0].initParams.at(0)).get()[0][0][1] = 79.;
-    require(std::get<DataRef<ROI>>(nodes[1].initParams.at(0)).get()[0][0][1] == 1.,
+    ProjectEditor restoredEditor(restored.project);
+    restoredEditor.setInitParam("flow_1", nodes[0].id, 0, Rectangle::fromNested({{{79, 2, 3, 4, 0}}}));
+    require(std::get<visionrt::Rectangle>(nodes[1].initParams.at(0)).get()[0][0][1] == 1.,
             "reconciled nodes share ROI defaults");
 }
 
@@ -227,13 +228,11 @@ void allValuesSurviveRealProjectFiles()
         tool.inputs.push_back({nextInput, std::string(typeName(type.type)) + " 数组", type, sampleArray(type)});
         ++nextInput;
     }
-    tool.inputs.push_back({nextInput++, "区域",
-        {Type::ROI},
-        DataRef<ROI>(ROI{{{0., 1.5, 2.5}, {1., 1., 2., 3., 4.}, {2., 1., 2., 3., 4., 0.}},
-          {},
-          {{3., 2., 4., 7.}, {4., 0., 0., 3., 0., 3., 2.}, {5., 1., 2., 3., 4.}}}
-        )
-    });
+    tool.inputs.push_back({nextInput++, "点", {Type::Point}, Point::fromNested({{{1.5, 2.5}}, {}, {{3, 4}}})});
+    tool.inputs.push_back({nextInput++, "线", {Type::Line}, Line::fromNested({{{1, 2, 3, 4}}})});
+    tool.inputs.push_back({nextInput++, "矩形", {Type::Rectangle}, Rectangle::fromNested({{{1, 2, 3, 4, 0}}})});
+    tool.inputs.push_back({nextInput++, "圆", {Type::Circle}, Circle::fromNested({{{2, 4, 7}}})});
+    tool.inputs.push_back({nextInput++, "多边形", {Type::Polygon}, Polygon::fromNested({{{0, 0, 3, 0, 3, 2}}})});
     tool.inputs.push_back({nextInput++, "图像", {Type::Image}, DataRef<Image>(Image{})});
     // A declaration without an explicit value is normalised to the type default before a node
     // ever stores it, so the saved project states 0 rather than a null placeholder.
@@ -265,8 +264,8 @@ void allValuesSurviveRealProjectFiles()
     require(literal.contains("values") && (literal.contains("shape") || literal.contains("offsets")),
             "saved Array must state its own shape or ragged offsets");
     require(entry(29)["literal"].toArray().size() == 3, "saved ROI groups lost");
-    require(entry(30)["literal"].toArray().isEmpty(), "empty Image value lost");
-    require(entry(31)["literal"].toInt() == 0, "type default not saved");
+    require(entry(34)["literal"].toArray().isEmpty(), "empty Image value lost");
+    require(entry(35)["literal"].toInt() == 0, "type default not saved");
     const auto  reopened = storage.load(project.path);
     const auto &restored = reopened.project.flows.front().nodes.front();
     for (const auto &port : registry.find(tool.nameEn)->inputs)

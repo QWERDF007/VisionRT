@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/ProjectEditor.h"
+#include "core/Project.h"
 #include "ui/Export.h"
 #include "ui/ImageViewport.h"
 
@@ -11,10 +11,8 @@
 
 namespace visionrt {
 
-// Owns the in-progress ROI edit: which input is being edited, the draft value, the frozen
-// background and the view state the viewport returns to. It produces "target + new ROI value" and
-// writes it through the existing ProjectEditor; the viewport and the controller never write the
-// draft a second time.
+// Owns the ROI draft, frozen background and gesture baseline. The controller commits its value
+// through the parameter's owner, so initialization, training and input values share this editor.
 class VISIONRT_UI_API RoiEditSession
 {
 public:
@@ -23,7 +21,6 @@ public:
         NodeId                   node  = 0;
         RoiTargetKind            kind  = RoiTargetKind::Input;
         PortId                   input = 0;
-        QString                  flow;
         TypeSpec                 type;
         bool                     singleRectangle = false;
         InputBinding             original;
@@ -33,14 +30,6 @@ public:
         int                      resultIndex  = 0;
         ImageViewport::ViewState view{ImageViewport::Contain, 1.0, {}};
     };
-
-    struct Commit
-    {
-        bool accepted       = false;
-        bool changedBinding = false;
-    };
-
-    explicit RoiEditSession(ProjectEditor &editor);
 
     // Starts a new session and returns its id. Any previous session ends first.
     std::uint64_t begin(Start start);
@@ -63,6 +52,12 @@ public:
     }
 
     PortId          input() const noexcept;
+    PortStage parameterStage() const noexcept;
+    const TypeSpec &type() const noexcept
+    {
+        static const TypeSpec empty;
+        return draft_ ? draft_->type : empty;
+    }
 
     bool singleRectangle() const noexcept
     {
@@ -88,9 +83,7 @@ public:
 
     const ImageViewport::ViewState &view() const noexcept;
 
-    // Applies one geometry edit (create, move, resize or delete) and writes
-    // the literal binding. Throws ContractError when the session or the value is no longer valid.
-    Commit commitGeometry(const RoiEditTarget &target, const EncodedRegion *value);
+    bool commitGeometry(const RoiEditTarget &target, const EncodedRegion *value);
     bool   previewGeometry(const RoiEditTarget &target, const EncodedRegion &value);
     void   cancelPreview();
 
@@ -101,7 +94,6 @@ private:
         NodeId                   node;
         RoiTargetKind            kind;
         PortId                   input = 0;
-        QString                  flow;
         TypeSpec                 type;
         bool                     singleRectangle;
         InputBinding             original;
@@ -117,7 +109,6 @@ private:
 
     std::optional<Draft> draft_;
     std::uint64_t        serial_ = 0;
-    ProjectEditor       &editor_;
 };
 
 } // namespace visionrt

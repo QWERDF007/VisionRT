@@ -108,7 +108,7 @@ QJsonArray roiGroups(const QString &project, const QString &node)
 
 QPointF recordCenter(const QJsonArray &record)
 {
-    return {record.at(1).toDouble(), record.at(2).toDouble()};
+    return {record.at(0).toDouble(), record.at(1).toDouble()};
 }
 } // namespace
 
@@ -277,7 +277,7 @@ try
     app.runNode();
     stable();
     const auto  pickedMeasurement = measuredCircle();
-    const auto *measured          = std::get_if<DataRef<ROI>>(&pickedMeasurement);
+    const auto *measured          = std::get_if<Circle>(&pickedMeasurement);
     require(
         measured && !measured->get().empty() && !measured->get().front().empty(),
         "point selection must produce a real formal measurement before comparison: " + app.diagnostic().toStdString()
@@ -343,7 +343,7 @@ try
     // the preview stays in current-image coordinates, the literal stays in reference coordinates.
     app.setImageIndex(0);
     require(app.clearRoi(kRoisInput), "assist ROI could not be cleared");
-    require(app.setParameter(kAlignmentInput, false, "[[[1,0,10],[0,1,5],[0,0,1]]]", true),
+    require(app.setParameter(kAlignmentInput, false, "[[1,0,10,0,1,5]]", true),
             "assist alignment literal was rejected");
     stable();
     require(app.assistHover(160.0, 120.0),
@@ -482,7 +482,7 @@ try
     require(app.save(root + "/assist.json"), "row spacing project could not be saved");
     const auto rowGroups = roiGroups(root + "/assist.json", rowsNode);
     require(rowGroups.size() == 3 && rowGroups.at(2).toArray().size() == 2
-                && static_cast<int>(rowGroups.at(2).toArray().at(0).toArray().at(0).toDouble()) == 2,
+                && rowGroups.at(2).toArray().at(0).toArray().size() == 5,
             "row spacing proposals did not land as rectangles on the selected image");
     app.setImageIndex(0);
     stable();

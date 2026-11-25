@@ -23,7 +23,6 @@ QuiSplitView {
     property int currentTab: ParameterTab.BasicInput
     readonly property var tabs: app.parameterTabs
     property var collapsedGroups: ({})
-    property var parameterGroups: []
     property real inputsRatio: 0.52
     function resetSplit() {
         inputsRatio = 0.52;
@@ -50,29 +49,10 @@ QuiSplitView {
             root.refreshGroups();
         }
     }
-    function isSameGroups(a, b) {
-        if (a === b)
-            return true;
-        if (!a || !b || a.length !== b.length)
-            return false;
-        for (let i = 0; i < a.length; ++i) {
-            let ga = a[i], gb = b[i];
-            if (ga.nodeId !== gb.nodeId || ga.name !== gb.name || ga.tab !== gb.tab)
-                return false;
-            if (!ga.parameters || !gb.parameters || ga.parameters.length !== gb.parameters.length)
-                return false;
-            for (let j = 0; j < ga.parameters.length; ++j) {
-                if (ga.parameters[j].id !== gb.parameters[j].id || ga.parameters[j].stage !== gb.parameters[j].stage || ga.parameters[j].recordId !== gb.parameters[j].recordId)
-                    return false;
-            }
-        }
-        return true;
-    }
     function refreshGroups() {
-        if (currentTab === ParameterTab.Training && !app.trainingAvailable) currentTab = ParameterTab.BasicInput;
-        let result = app.parameterGroups.filter(function (group) { return group.tab === currentTab; });
-        if (!isSameGroups(result, parameterGroups)) parameterGroups = result;
+        if (!tabs.some(function (tab) { return tab.id === currentTab; })) currentTab = ParameterTab.BasicInput;
     }
+    onTabsChanged: refreshGroups()
     Rectangle {
         id: inputs
         color: QuiColor.Primary
@@ -142,87 +122,35 @@ QuiSplitView {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Flickable {
-                    id: scroller
+                Loader {
                     anchors.fill: parent
-                    visible: app.selectedNode.length > 0
-                    contentWidth: width
-                    contentHeight: groupColumn.height
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    boundsMovement: Flickable.StopAtBounds
-                    ScrollBar.vertical: WorkbenchScrollBar {
-                        id: parameterScrollBar
+                    sourceComponent: root.currentTab === ParameterTab.Initialization ? initializationPage
+                                   : root.currentTab === ParameterTab.Training ? trainingPage : inputPage
+                }
+                Component {
+                    id: initializationPage
+                    InitializationParameterPage {
+                        anchors.fill: parent
+                        collapsedGroups: root.collapsedGroups
                     }
-                    Column {
-                        id: groupColumn
-                        width: scroller.width - parameterScrollBar.width
-                        spacing: 5
-                        Repeater {
-                            model: root.parameterGroups
-                            QuiExpander {
-                                id: parameterGroup
-                                required property var modelData
-                                width: groupColumn.width
-                                headerText: modelData.name
-                                headerHeight: VisionRTSize.BarSize
-                                headerPadding: 5
-                                headerDelegate: Component {
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        spacing: 5
-                                        WorkbenchActionButton {
-                                            iconSource: parameterGroup.expand ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
-                                            onClicked: parameterGroup.toggle()
-                                        }
-                                        QuiText {
-                                            text: parameterGroup.headerText
-                                        }
-                                        Item {
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-                                }
-
-                                expand: root.collapsedGroups[headerText] !== true
-                                contentHeight: groupBody.implicitHeight + 2 * groupBody.anchors.topMargin
-                                onExpandChanged: {
-                                    root.collapsedGroups[headerText] = !expand;
-                                }
-                                ColumnLayout {
-                                    id: groupBody
-                                    anchors.top: parent.top
-                                    anchors.topMargin: 5
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: 5
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: 5
-                                    spacing: 5
-                                    Repeater {
-                                        model: modelData.parameters
-                                        Loader {
-                                            id: parameterRow
-                                            required property var modelData
-                                            readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
-                                                return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId;
-                                            }) : undefined
-                                            Layout.fillWidth: true
-                                            active: currentParameter !== undefined
-                                            sourceComponent: ParameterEditor {
-                                                nodeId: parameterGroup.modelData.nodeId
-                                                parameter: parameterRow.currentParameter
-                                                onExpressionEditorRequested: function (node, draft, hasDraft) {
-                                                    root.openExpressionEditor(node, draft, hasDraft);
-                                                }
-                                                onSelectTypeEditorRequested: function (node) {
-                                                    root.openSelectTypeEditor(node);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                }
+                Component {
+                    id: trainingPage
+                    TrainingParameterPage {
+                        anchors.fill: parent
+                        collapsedGroups: root.collapsedGroups
+                    }
+                }
+                Component {
+                    id: inputPage
+                    InputParameterPage {
+                        anchors.fill: parent
+                        parameterTab: root.currentTab
+                        collapsedGroups: root.collapsedGroups
+                        onExpressionEditorRequested: function (node, draft, hasDraft) {
+                            root.openExpressionEditor(node, draft, hasDraft);
                         }
+                        onSelectTypeEditorRequested: function (node) { root.openSelectTypeEditor(node); }
                     }
                 }
             }

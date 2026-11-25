@@ -78,9 +78,9 @@ void AppController::attachViewport(QObject *object)
                              if (binding != node->inputs.end() && binding->second.mode == BindingMode::Upstream)
                              {
                                  const auto value = impl_->resolvedInput(*node, key.inputPortId);
-                                 if (const auto *roi = std::get_if<DataRef<ROI>>(&value); roi && !roi->get().empty())
+                                 if (const auto *roi = shapeRegions(value); roi && !(*roi).empty())
                                  {
-                                     const auto &group = roi->get().at(roi->get().size() == 1 ? 0 : key.imageIndex);
+                                     const auto &group = (*roi).at((*roi).size() == 1 ? 0 : key.imageIndex);
                                      if (key.roiIndex >= 0 && key.roiIndex < static_cast<int>(group.size()))
                                          impl_->presentation.viewport()->inspectInputRegion(group[key.roiIndex]);
                                  }

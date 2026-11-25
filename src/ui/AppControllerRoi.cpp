@@ -28,12 +28,16 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const EncodedRe
         return;
     try
     {
-        const auto outcome = roiSession.commitGeometry(target, value);
-        if (!outcome.accepted)
+        if (!roiSession.commitGeometry(target, value))
             return;
+        const auto stage = roiSession.parameterStage();
+        const bool changed = stage == PortStage::Train
+            ? applyTrainingValue(target.inputPortId, roiSession.draft())
+            : stage == PortStage::Init ? applyParameter(target.inputPortId, true, roiSession.draft())
+            : editor.setBinding(flow.toStdString(), node->id, target.inputPortId, roiSession.original());
         if (roiSession.singleRectangle())
             viewport->setDrawShape(value ? 0 : 2);
-        if (outcome.changedBinding)
+        if (changed)
         {
             if (trainingMode)
             {
@@ -55,53 +59,68 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const EncodedRe
 
 bool AppController::editRoi(int parameter, bool copyUpstream)
 {
-    auto *viewport = impl_->presentation.viewport();
-    if (!impl_->idle() || !viewport)
+    return impl_->beginParameterRoi(static_cast<PortId>(parameter), PortStage::Inputs, copyUpstream);
+}
+
+bool AppController::Impl::beginParameterRoi(PortId port, PortStage stage, bool copyUpstream)
+{
+    auto *viewport = presentation.viewport();
+    if (!idle() || !viewport)
         return false;
     try
     {
-        const auto *node        = impl_->currentNode();
-        const auto  port        = static_cast<PortId>(parameter);
-        const auto *declaration = impl_->parameter(port, false);
-        if (!node || !declaration || declaration->type.type != Type::ROI)
-            throw ContractError("参数不是可编辑的 ROI 输入：" + portLabel(port));
-        if (!declaration->image)
-            throw ContractError("ROI 输入未声明关联图像：" + portLabel(port));
-        const auto imageValue = impl_->resolvedInput(*node, declaration->image->id);
-        auto       roiValue   = impl_->resolvedInput(*node, port);
+        const auto *node = currentNode();
+        if (stage == PortStage::Train && !ensureTrainingSession()) return false;
+        const auto *tool = effectiveTool();
+        const auto *declaration = tool ? workbench::port(stage == PortStage::Init ? tool->initParams : stage == PortStage::Train ? tool->trainParams : tool->inputs, port) : nullptr;
+        if (!node || !declaration || !isShapeType(declaration->type.type))
+            throw ContractError("参数不是 ROI：" + portLabel(port));
+        const auto resolve = [&](PortRef ref) { return ref.stage == PortStage::Train && training
+            ? training->parameter(ref.id).value_or(PortValue{Missing{}}) : presentation.resolvedValue(*node, ref); };
+        const auto imageValue = declaration->image ? resolve(*declaration->image) : PortValue{Missing{}};
+        auto roiValue = resolve({stage, port});
         if (isMissing(roiValue))
-            roiValue = DataRef<ROI>(ROI{});
+            roiValue = defaultValue(declaration->type);
         validateValue(declaration->type, roiValue);
-        const auto binding = node->inputs.find(port);
-        if (binding == node->inputs.end())
-            throw ContractError("找不到 ROI 输入：" + portLabel(port));
-        if (binding->second.mode == BindingMode::Upstream && !copyUpstream)
+        const auto binding = stage == PortStage::Inputs ? node->inputs.at(port) : InputBinding{BindingMode::Literal, roiValue, {}};
+        if (binding.mode == BindingMode::Upstream && !copyUpstream)
             throw ContractError("上游 ROI 输入只读，请先显式复制当前值再编辑：" + portLabel(port));
-        impl_->finishRoi();
+        finishRoi();
+        if (trainingMode) leaveTraining();
         RoiEditSession::Start start;
         start.node            = node->id;
         start.input           = port;
-        start.flow            = impl_->flow;
+        start.kind = stage == PortStage::Init ? RoiTargetKind::Initialization : stage == PortStage::Train ? RoiTargetKind::TrainingParameter : RoiTargetKind::Input;
         start.type            = declaration->type;
         start.singleRectangle = declaration->editor == EditorKind::Rect;
-        start.original        = binding->second;
+        start.original        = binding;
         start.background      = imageValue;
         start.draft           = copyProjectLiteral(roiValue);
         start.displayIndex    = 0;
-        start.resultIndex     = impl_->presentation.imageIndex();
+        start.resultIndex     = presentation.imageIndex();
         start.view            = viewport->viewState();
-        impl_->roiSession.begin(std::move(start));
+        roiSession.begin(std::move(start));
         if (declaration->editor == EditorKind::Rect)
-            viewport->setDrawShape(std::get<DataRef<ROI>>(impl_->roiSession.draft()).get().empty() ? 2 : 0);
-        impl_->updateDisplay();
-        emit resultsChanged();
+            viewport->setDrawShape(shapeRegions(roiSession.draft())->empty() ? ImageViewport::DrawRectangle : ImageViewport::DrawNone);
+        updateDisplay();
+        emit q->resultsChanged();
         return true;
     }
     catch (const std::exception &error)
     {
-        impl_->report(error, QStringLiteral("ROI 编辑启动失败"));
+        report(error, QStringLiteral("ROI 编辑启动失败"));
         return false;
     }
+}
+
+bool AppController::startParameterRoi(int parameter, int stage, int shape, bool recordScoped)
+{
+    const auto owner = static_cast<PortStage>(stage);
+    if (recordScoped) return owner == PortStage::Train && startTrainingRoi(parameter, shape);
+    if (owner != PortStage::Inputs && owner != PortStage::Init && owner != PortStage::Train) return false;
+    if (!impl_->beginParameterRoi(static_cast<PortId>(parameter), owner, true)) return false;
+    setDrawShape(shape);
+    return true;
 }
 
 void AppController::endRoiPreview()
@@ -119,7 +138,7 @@ bool AppController::shapeToolsAvailable() const
 {
     if (!impl_->editingAllowed())
         return false;
-    return impl_->trainingMode ? impl_->training->selected() >= 0 : impl_->roiSession.active();
+    return impl_->roiSession.active();
 }
 
 int AppController::drawShape() const
@@ -134,9 +153,7 @@ void AppController::setDrawShape(int shape)
 {
     if (shape < 0 || shape > 5 || !shapeToolsAvailable())
         return;
-    // A training record is a list of rectangles whatever the tool does with them, so the palette
-    // offers only the rectangle there instead of collecting regions the asset cannot store.
-    if (impl_->trainingMode && shape != 0 && shape != 2)
+    if (shape != ImageViewport::DrawNone && shape != ImageViewport::drawShapeForType(impl_->roiSession.type().type))
         return;
     auto *viewport = impl_->presentation.viewport();
     if (!viewport)
@@ -152,7 +169,7 @@ int AppController::activeRoiShape() const
 
 bool AppController::startTrainingRoi(int parameter, int shape)
 {
-    if (!impl_->idle() || !impl_->ensureTrainingSession() || impl_->training->roiParameter() != static_cast<PortId>(parameter)) return false;
+    if (!impl_->idle() || !impl_->ensureTrainingSession() || !impl_->training->selectRoiParameter(static_cast<PortId>(parameter))) return false;
     if (!impl_->trainingMode) setTrainingMode(true);
     impl_->seatTrainingRegions();
     setDrawShape(shape);
@@ -173,8 +190,7 @@ bool AppController::startRoiDraw(int parameter, int shape)
         if (!editRoi(parameter, true))
             return false;
     }
-    if (auto *viewport = impl_->presentation.viewport())
-        viewport->setDrawShape(shape);
+    setDrawShape(shape);
     emit resultsChanged();
     return true;
 }
@@ -188,9 +204,9 @@ bool AppController::clearRoi(int parameter)
     const auto *declaration = impl_->parameter(port, false);
     if (!node || !declaration)
         return false;
-    if (declaration->type.type != Type::ROI)
+    if (!isShapeType(declaration->type.type))
         return false;
-    PortValue    emptyVal = DataRef<ROI>(ROI{});
+    PortValue    emptyVal = defaultValue(declaration->type);
     InputBinding committed{BindingMode::Literal, std::move(emptyVal), {}};
     const bool   changed = impl_->editor.setBinding(impl_->flow.toStdString(), node->id, port, std::move(committed));
     if (impl_->roiSession.active() && impl_->roiSession.input() == port && impl_->roiSession.node() == node->id)

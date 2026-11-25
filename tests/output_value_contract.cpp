@@ -88,7 +88,7 @@ try
         decimalOutputs.outputs = {
             {2, "小数", {Type::Float}},
             {3, "对齐数据", {Type::Array, DType::Float64, 3}},
-            {4, "圆", {Type::ROI}},
+            {4, "圆", {Type::Circle}},
             {5, "单精度数组", {Type::Array, DType::Float32, 2}},
             {6, "文本", {Type::String}}
         };
@@ -97,7 +97,7 @@ try
             {2, 1.123456789},
             {3, Array::fromNested(NestedVector<double, 3>{{{1.123456789, -2.7755575615628914e-17,
                                                            2.7755575615628914e-15, 1.23, 1}}, {}})},
-            {4, DataRef<ROI>(ROI{{makeCircle({10.123456789, 20.123456789}, 3.25)}})},
+            {4, Circle::fromEncoded(ROI{{makeCircle({10.123456789, 20.123456789}, 3.25)}})},
             {5, Array::fromNested(NestedVector<float, 2>{{0.123456789f, 1}})},
             {6, std::string("1.000000")}
         };
@@ -108,7 +108,7 @@ try
                 "output arrays must omit trailing zeros and rounded negative zero");
         require(decimals.get(3)["typeDisplay"] == QStringLiteral("三维浮点数数组"),
                 "double array descriptions must omit the redundant bit width");
-        require(decimals.get(4)["preview"] == "[[[3,10.123457,20.123457,3.25]]]",
+        require(decimals.get(4)["preview"] == "[[[10.123457,20.123457,3.25]]]",
                 "output ROI coordinates must share the numeric display policy");
         require(decimals.get(5)["preview"] == "[[0.123457,1]]", "float32 arrays did not use the display precision");
         require(decimals.get(5)["typeDisplay"] == QStringLiteral("二维单精度浮点数数组"),
@@ -139,7 +139,7 @@ try
     // Outputs are numbered 2..5: 0 and 1 belong to the host-owned status envelope.
     definition.outputs = {
         {2, "数组", {Type::Array, DType::Int64, 2}},
-        {3, "区域", {Type::ROI}},
+        {3, "区域", {Type::Circle}},
         {4, "未运行", {Type::String}},
         {5, "文字", {Type::String}}
     };
@@ -148,7 +148,7 @@ try
     snapshot->publication = 19;
     snapshot->outputs     = {
         {2, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}, {4, 5}})},
-        {3, DataRef<ROI>(ROI{{{3., 1., 2., 3.}}, {}})},
+        {3, Circle::fromEncoded(ROI{{{3., 1., 2., 3.}}, {}})},
         {4, Missing{}},
         {5, std::string("中文\n\"图像\"")}
     };
@@ -183,14 +183,12 @@ try
             "output display replaced array values with a truncated preview");
     require(OutputModel::fullText(*model.capture(2)).size() > 4096, "full output was replaced with a preview");
     const auto regions = QJsonDocument::fromJson(OutputModel::fullText(*model.capture(3)).toUtf8()).array();
-    require(regions.size() == 2 && regions[0].toArray()[0].toArray().size() == 4,
-            "ROI lost native three-level list encoding");
-    snapshot->outputs[3] = DataRef<ROI>(ROI{{makePoint(1, 2), makeSegment({0, 0}, {1, 1}),
-        makeRectangle(1, 2, 3, 4), makeCircle({5, 6}, 2),
-        makePolygon(std::vector<cv::Point2d>{{0, 0}, {4, 0}, {4, 3}})}});
+    require(regions.size() == 2 && regions[0].toArray()[0].toArray().size() == 3,
+            "circle lost its headerless three-level coordinate encoding");
+    snapshot->outputs[3] = Circle::fromNested({{{5, 6, 2}, {7, 8, 3}}});
     snapshot->outputs[5] = QString(10000, QChar(0x4e2d)).toUtf8().toStdString();
     model.setResult(&definition, snapshot, {});
-    require(model.get(3)["typeDisplay"].toString() == QStringLiteral("点、线、矩形、圆、多边形"),
+    require(model.get(3)["typeDisplay"].toString() == QStringLiteral("圆"),
             "output type hid its concrete geometry kinds");
     require(model.get(5)["preview"].toString() == QString(10000, QChar(0x4e2d)),
             "long Unicode string display was truncated");

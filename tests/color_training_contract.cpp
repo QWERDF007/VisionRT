@@ -80,10 +80,11 @@ std::unique_ptr<IToolInstance> createTrainer(ToolRegistry &registry)
 // after a user adds one picture and names four regions on it.
 void fillDraft(TrainingSession &session)
 {
+    require(session.selectRoiParameter(2), "the sampling ROI field can be selected explicitly");
     const auto frame = patchFrame();
     for (const auto &patch : kPatches)
     {
-        const auto index = session.addImage(frame, ColorOrder::BGR, QStringLiteral("inputs:1"));
+        const auto index = session.addRecord(frame, ColorOrder::BGR, QStringLiteral("inputs:1"));
         require(index.has_value(), "the draft refused the published frame");
         require(session.setField(*index, 1, std::string(patch.label)),
                 "the draft refused the colour name for " + std::string(patch.label));
@@ -145,9 +146,7 @@ int main(int argc, char **argv)
             blank.spec            = *color.training;
             empty.begin(blank);
             auto   trainerTool = createTrainer(registry);
-            Values inputs;
-            inputs.emplace(3, std::string{});
-            const auto result = trainerTool->train(empty.trainingSet().get(), inputs);
+            const auto result = trainerTool->train(empty.parameters());
             require(!testview::status(result), "the trainer must refuse a draft without records");
             require(!testview::status(result).message.empty(), "a refused draft needs a reason");
             require(trainerTool->release().code == 0, "the trainer must release after a refusal");
@@ -156,9 +155,7 @@ int main(int argc, char **argv)
         // The trainer reads the draft the host would hand it and answers with the model the node
         // loads. Both field numbers travel as declared values, never as assumptions about order.
         auto   trainerTool = createTrainer(registry);
-        Values inputs;
-        inputs.emplace(3, std::string{});
-        const auto trained = trainerTool->train(session.trainingSet().get(), inputs);
+        const auto trained = trainerTool->train(session.parameters());
         require(testview::status(trained).code == 0,
                 "the real trainer refused the draft: " + testview::status(trained).message);
         require(trainerTool->release().code == 0, "the trainer must release after training");
@@ -181,8 +178,8 @@ int main(int argc, char **argv)
         for (const auto &patch : kPatches) regions.push_back(makeCircle({patch.left + 30.0, 50}, 15));
         const Values detection{
             {1, DataRef<Image>(Image{patchFrame()})},
-            {2, Array::empty(DType::Float64, 3)},
-            {3, DataRef<ROI>(ROI{regions})},
+            {2, alignmentArray(Affine2D::identity())},
+            {3, Circle::fromEncoded(ROI{regions})},
             {4, 0.05},
             {5, 0.5}
         };

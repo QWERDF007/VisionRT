@@ -113,7 +113,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/02_工具示例/04_行间距测量/images"
+              "literal": "examples/images/行间距测量"
             },
             {
               "port_id": 2,
@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "MeasureRowSpacing",
           "tool_name_snapshot": "测量行间距",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "3.0.0",
           "alias": "测量宽度与节距",
           "pos": [
             0,
@@ -165,7 +165,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": 6
+                  "type": 12
                 }
               },
               {
@@ -173,7 +173,7 @@
                 "type": {
                   "type": 5,
                   "dtype": 4,
-                  "rank": 3
+                  "rank": 2
                 }
               },
               {
@@ -216,6 +216,14 @@
                 "port_id": 10,
                 "type": {
                   "type": 3
+                }
+              },
+              {
+                "port_id": 11,
+                "type": {
+                  "type": 5,
+                  "dtype": 4,
+                  "rank": 3
                 }
               }
             ],
@@ -339,7 +347,7 @@
               {
                 "port_id": 16,
                 "type": {
-                  "type": 6
+                  "type": 11
                 }
               },
               {
@@ -366,7 +374,6 @@
               "literal": [
                 [
                   [
-                    2,
                     50,
                     90,
                     200,
@@ -379,7 +386,16 @@
             {
               "port_id": 3,
               "mode": 0,
-              "literal": []
+              "literal": [
+                [
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0
+                ]
+              ]
             },
             {
               "port_id": 4,
@@ -415,6 +431,11 @@
               "port_id": 10,
               "mode": 0,
               "literal": "px"
+            },
+            {
+              "port_id": 11,
+              "mode": 0,
+              "literal": []
             }
           ]
         }

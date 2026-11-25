@@ -19,6 +19,10 @@
 | 执行、快照与读回 | [运行时](../src/runtime/include/runtime/RuntimeEngine.h)、[快照](../src/runtime/include/runtime/Snapshot.h)、[结果展示](../src/ui/ResultPresentation.h) |
 | 原生与 Python 工具 | [插件加载](../src/plugins/PluginLoader.cpp)、[环境状态](../src/python/include/python/PythonEnvironment.h)、[探测](../src/python/PythonProbe.cpp)、[后端](../src/python/PythonBackend.cpp)、[值桥](../src/python_bridge/PythonInterop.cpp) |
 | 训练草稿与发布 | [实例接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[统一参数声明](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[会话](../src/ui/include/ui/TrainingSession.h)、[资产所有权](../src/ui/include/ui/TrainingAssets.h)、[工作台接线](../src/ui/AppControllerTraining.cpp) |
+| 可复用参数页与阶段编辑 | [公共页](../src/ui/qml/ParameterPage.qml)、[初始化页](../src/ui/qml/InitializationParameterPage.qml)、[训练页](../src/ui/qml/TrainingParameterPage.qml)、[普通输入页](../src/ui/qml/InputParameterPage.qml)、[实际控制器验证](../tests/workbench_parameter_stages_contract.cpp) |
+| 具体形状参数 | [类型映射](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeKinds.def)、[类型化批次](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeValues.h)、[形状和连接验证](../3rdparty/VisionRTContracts/tests/test_geometry_values_contract.cpp)、[实际窗口编辑与连接限制](../tests/workbench_roi.cpp) |
+| 方向与二维坐标系 | [共享值](../3rdparty/VisionRTContracts/include/visionrt/contracts/GeometryValues.h)、[叠加绘制](../src/ui/RoiOverlay.cpp)、[缩放平移验证](../tests/geometry_overlay_contract.cpp) |
+| 平面标定与测量示例 | [示例入口](../examples/03_综合示例/03_变距尺子标定测量/README.md)、[原生训练与完整流程验证](../tests/calibration_example_contract.cpp)、[集中图片](../examples/images/) |
 | 日志与诊断 | [日志服务](../src/log/include/log/LogService.h)、[宿主错误](../src/core/include/core/Errors.def)、[诊断投影](../src/ui/Diagnostics.cpp) |
 
 ## 工作台

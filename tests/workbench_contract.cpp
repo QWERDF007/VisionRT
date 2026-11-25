@@ -113,9 +113,9 @@ void outputContract()
             "output text must escape strings as JSON");
     require(OutputModel::fullText({std::numeric_limits<double>::infinity(), {Type::Float}}).contains("non_finite"),
             "nonfinite output must have an explicit JSON description");
-    require(typeText({Type::ROI}) == QStringLiteral("ROI"), "scalar rectangle type must be displayed safely");
-    const auto                  rectangle = DataRef<ROI>(ROI{{{2, 1.25, -2.5, 3.75, 4.5, 17.5}}});
-    const OutputModel::Captured rectangleCapture{rectangle, {Type::ROI}};
+    require(typeText({Type::Rectangle}) == QStringLiteral("Rectangle"), "scalar rectangle type must be displayed safely");
+    const auto                  rectangle = Rectangle::fromEncoded(ROI{{{2, 1.25, -2.5, 3.75, 4.5, 17.5}}});
+    const OutputModel::Captured rectangleCapture{rectangle, {Type::Rectangle}};
     require(OutputModel::fullText(rectangleCapture).contains("1.25"),
             "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
@@ -465,7 +465,7 @@ void nodeDiagnosticsContract()
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         jsonFile.close();
     }
@@ -490,7 +490,7 @@ void nodeDiagnosticsContract()
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         failJsonFile.close();
     }
@@ -506,7 +506,7 @@ void nodeDiagnosticsContract()
     "kind": "host",
     "binding": "nonexistent.binding"
   },
-  "schema_version": 2
+  "schema_version": 4
 })json");
         unfulfilledJson.close();
     }
@@ -778,7 +778,7 @@ void packageDrivenCatalogAndRefreshContract()
   "implementation": {
     "kind": "cpp"
   },
-  "schema_version": 2
+  "schema_version": 4
 })json");
             legacyJson.close();
         }
@@ -802,7 +802,7 @@ void packageDrivenCatalogAndRefreshContract()
     "file": "legacy.py",
     "symbol": "run"
   },
-  "schema_version": 2
+  "schema_version": 4
 })json");
             legacyPyJson.close();
         }
@@ -855,7 +855,7 @@ void packageDrivenCatalogAndRefreshContract()
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         rootCounterJson.close();
     }
@@ -888,7 +888,7 @@ void packageDrivenCatalogAndRefreshContract()
       "id": 2
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         rootFunctionJson.close();
     }
@@ -933,7 +933,7 @@ void packageDrivenCatalogAndRefreshContract()
       "id": 3
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         root3JsonA.close();
     }
@@ -1005,7 +1005,7 @@ void packageDrivenCatalogAndRefreshContract()
       "id": 4
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
         recvJson.close();
     }
@@ -1023,7 +1023,7 @@ void packageDrivenCatalogAndRefreshContract()
   "implementation": {
     "kind": "cpp"
   },
-  "schema_version": 2
+  "schema_version": 4
 })json");
         unindexedJson.close();
     }
@@ -1358,7 +1358,7 @@ void packageDrivenCatalogAndRefreshContract()
       "id": 4
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
             renamedJson.close();
         }

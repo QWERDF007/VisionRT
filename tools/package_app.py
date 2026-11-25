@@ -574,8 +574,7 @@ def example_project_problems(source: Path) -> list[str]:
 
 
 def verify_examples(install_dir: Path) -> list[str]:
-    """Every shipped example file must be installed with the same content, and the first batch must
-    still be complete with its own input images."""
+    """Every shipped file and every required project's shared image reference must be present."""
     source = REPO_ROOT / EXAMPLES_DIRECTORY
     installed = install_dir / EXAMPLES_DIRECTORY
     if not installed.is_dir():
@@ -596,8 +595,9 @@ def verify_examples(install_dir: Path) -> list[str]:
         if not project.is_file():
             problems.append(f"required example project missing: {relative}")
             continue
-        images = project.parent / "images"
-        if not images.is_dir() or not any(item.is_file() for item in images.iterdir()):
+        document = json.loads(project.read_text(encoding="utf-8"))
+        images = [install_dir / text for text in example_texts(document) if text.startswith("examples/images/")]
+        if not images or not all(path.exists() for path in images):
             problems.append(f"required example has no input images: {relative}")
         if not (project.parent / "README.md").is_file():
             problems.append(f"required example has no README: {relative}")

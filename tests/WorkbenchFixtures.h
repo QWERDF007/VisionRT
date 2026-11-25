@@ -25,22 +25,31 @@ inline void copyToolsPackage(const std::filesystem::path &source, const std::fil
     }
 }
 
-inline QString copyCableExample(const std::filesystem::path &source, const QString &installation)
+inline QString copyExample(const std::filesystem::path &source, const QString &installation,
+                             const std::filesystem::path &sample, const std::filesystem::path &projectFile)
 {
-    const auto sample = std::filesystem::path(u8"examples/03_综合示例/02_识别线缆颜色");
     const auto root = std::filesystem::path(installation.toStdWString());
     std::filesystem::create_directories((root / sample).parent_path());
     std::filesystem::copy(source / sample, root / sample, std::filesystem::copy_options::recursive);
-    const auto fileName = root / sample / std::filesystem::path(u8"识别线缆颜色.json");
+    const auto images = std::filesystem::path("examples/images") / projectFile.stem();
+    std::filesystem::create_directories((root / images).parent_path());
+    std::filesystem::copy(source / images, root / images, std::filesystem::copy_options::recursive);
+    const auto fileName = root / sample / projectFile;
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (!file.open(QIODevice::ReadOnly)) throw std::runtime_error("example could not be read");
     auto content = file.readAll();
     file.close();
-    content.replace(QByteArray("examples/03_综合示例/02_识别线缆颜色"),
-                    installation.toUtf8() + QByteArray("/examples/03_综合示例/02_识别线缆颜色"));
+    const auto relativeImages = QString::fromStdWString(images.generic_wstring()).toUtf8();
+    content.replace(relativeImages, installation.toUtf8() + '/' + relativeImages);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(content) != content.size())
         throw std::runtime_error("example could not be relocated");
     return file.fileName();
+}
+
+inline QString copyCableExample(const std::filesystem::path &source, const QString &installation)
+{
+    return copyExample(source, installation, std::filesystem::path(u8"examples/03_综合示例/02_识别线缆颜色"),
+                       std::filesystem::path(u8"识别线缆颜色.json"));
 }
 
 class WorkbenchInstallation

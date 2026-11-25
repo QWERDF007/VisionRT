@@ -252,8 +252,7 @@ try
     for (const auto size : sizes)
     {
         ROI regions{std::vector<std::vector<double>>(size / 6, {2., 1.25, 2.5, 3.75, 4.5, 17.5})};
-        regions.front().push_back({3., 1.25, 2.5, 3.75});
-        benchmark.run(DataRef<ROI>(std::move(regions)), size);
+        benchmark.run(visionrt::Rectangle::fromEncoded(std::move(regions)), size);
     }
     for (const auto count : full ? std::vector<int>{1, 8, 32} : std::vector<int>{1})
     {

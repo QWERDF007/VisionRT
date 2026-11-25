@@ -134,6 +134,7 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
         inspectedInput_.reset();
         static_cast<RoiOverlay *>(overlay_)->clear();
         display_   = frame.image;
+        if (display_.isNull()) geometry_.clear();
         imageSize_ = display_.size();
         ++textureRevision_;
         if (hasImage() && firstImage_)
@@ -158,6 +159,22 @@ void ImageViewport::setOverlays(RegionGroup inputs, RegionGroup outputs, std::ve
     inputs_       = std::move(inputs);
     outputs_      = std::move(outputs);
     inputTargets_ = std::move(targets);
+    overlaysUpdated();
+}
+
+std::optional<GeometryOverlay> GeometryOverlay::fromValue(const PortValue &value, int image, bool input, Affine2D alignment)
+{
+    if (image < 0) return std::nullopt;
+    if (const auto *v = std::get_if<Direction>(&value); v && static_cast<std::size_t>(image) < v->images())
+        return GeometryOverlay{*v, static_cast<std::size_t>(image), input, alignment};
+    if (const auto *v = std::get_if<CoordinateFrame2D>(&value); v && static_cast<std::size_t>(image) < v->images())
+        return GeometryOverlay{*v, static_cast<std::size_t>(image), input, alignment};
+    return std::nullopt;
+}
+
+void ImageViewport::setGeometryOverlays(std::vector<GeometryOverlay> values)
+{
+    geometry_ = std::move(values);
     overlaysUpdated();
 }
 

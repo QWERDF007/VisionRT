@@ -32,6 +32,7 @@ using namespace visionrt;
 constexpr PortId kImagesInput             = 1;
 constexpr PortId kRoisInput               = 2;
 constexpr PortId kRectInput               = 3;
+constexpr PortId kCircleInput             = 5;
 constexpr PortId kSourceImagesOutput      = 2;
 constexpr PortId kSourceRoisOutput        = 3;
 constexpr PortId kSourceRectOutput        = 4;
@@ -82,8 +83,8 @@ void roiParameterContract()
           "import numpy as np\ndef run(inputs):\n"
           "    return {'outputs': {2: [np.zeros((96, 128, 3), dtype=np.uint8), "
           "np.ones((24, 32, 3), dtype=np.uint8)], "
-          "4: [[np.array([2, 1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float64).tolist()]], "
-          "3: [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]], "
+          "4: [[np.array([1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float64).tolist()]], "
+          "3: [[np.array([40, 40, 10, 10, 0], dtype=np.float64).tolist()]], "
           "0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/roi/source.json",
           R"json({
@@ -108,12 +109,12 @@ void roiParameterContract()
     },
     {
       "name_zh": "源区域",
-      "type": "roi",
+      "type": "rectangle",
       "id": 3
     },
     {
       "name_zh": "源矩形",
-      "type": "roi",
+      "type": "rectangle",
       "relations": {
         "image": {
           "stage": "outputs",
@@ -123,17 +124,17 @@ void roiParameterContract()
       "id": 4
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
           "    return {'outputs': {2: len(inputs[2][0]), "
-          "3: inputs[1], 4: [[np.array([2, 60, 75, 15, 10, 0], dtype=np.float64).tolist()], []], "
+          "3: inputs[1], 4: [[np.array([60, 75, 15, 10, 0], dtype=np.float64).tolist()], []], "
           "5: inputs[1][:1], 6: [], "
           "7: [image[5:, 10:] for image in inputs[1]], "
-          "8: [[np.array([2, 25, 20, 10, 10, 0], dtype=np.float64).tolist()], []], "
+          "8: [[np.array([25, 20, 10, 10, 0], dtype=np.float64).tolist()], []], "
           "9: np.array([[10, 5] for image in inputs[1]], dtype=np.float64).tolist(), "
-          "10: [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]], "
+          "10: [[np.array([30, 75, 15, 10, 0], dtype=np.float64).tolist()]], "
           "0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/roi/editor.json",
           R"json({
@@ -154,7 +155,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "区域",
-      "type": "roi",
+      "type": "rectangle",
       "default": [
         []
       ],
@@ -168,11 +169,10 @@ void roiParameterContract()
     },
     {
       "name_zh": "矩形",
-      "type": "roi",
+      "type": "rectangle",
       "default": [
         [
           [
-            2,
             1.234567881,
             2.5,
             3.75,
@@ -194,11 +194,10 @@ void roiParameterContract()
     },
     {
       "name_zh": "参考区域",
-      "type": "roi",
+      "type": "rectangle",
       "default": [
         [
           [
-            2,
             80,
             50,
             20,
@@ -217,6 +216,18 @@ void roiParameterContract()
         }
       },
       "id": 4
+    },
+    {
+      "id": 5,
+      "name_zh": "圆",
+      "type": "circle",
+      "default": [],
+      "relations": {
+        "image": {
+          "stage": "inputs",
+          "id": 1
+        }
+      }
     }
   ],
   "outputs": [
@@ -242,7 +253,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "结果区域",
-      "type": "roi",
+      "type": "rectangle",
       "relations": {
         "image": {
           "stage": "outputs",
@@ -277,7 +288,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "裁剪坐标区域",
-      "type": "roi",
+      "type": "rectangle",
       "relations": {
         "image": {
           "stage": "outputs",
@@ -297,7 +308,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "其他坐标区域",
-      "type": "roi",
+      "type": "rectangle",
       "relations": {
         "image": {
           "stage": "outputs",
@@ -307,7 +318,7 @@ void roiParameterContract()
       "id": 10
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
 
     AppController app(1, directory.path());
@@ -491,7 +502,7 @@ void roiParameterContract()
                  .arg(initial, literal(), app.diagnostic()))
                 .toStdString());
     auto       committed = literal();
-    const auto rois      = std::get<DataRef<ROI>>(ValueJson::parse(committed, {Type::ROI}));
+    const auto rois      = std::get<visionrt::Rectangle>(ValueJson::parse(committed, {Type::Rectangle}));
     require(rois.get().size() == 1 && rois.get()[0].size() == 1 && roiKind(rois.get()[0][0]) == RoiKind::Rectangle,
             "ROI parameter lost its typed rectangle representation");
     require(app.save(project) && !app.dirty(), "ROI project could not be saved");
@@ -538,7 +549,7 @@ void roiParameterContract()
             "Deleting a copied ROI detached its upstream binding");
     viewport.setDrawShape(2);
     draw(false);
-    const auto edited = std::get<DataRef<ROI>>(ValueJson::parse(literal(), {Type::ROI}));
+    const auto edited = std::get<visionrt::Rectangle>(ValueJson::parse(literal(), {Type::Rectangle}));
     require(edited.get().size() == 1 && edited.get()[0].size() == 2,
             "copied ROI input could not be edited independently");
     committed = literal();
@@ -690,7 +701,7 @@ void roiParameterContract()
     };
     const auto rectangle = [&]
     {
-        const auto rois = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI}));
+        const auto rois = std::get<visionrt::Rectangle>(ValueJson::parse(rectLiteral(), {Type::Rectangle}));
         return rois.get().empty() || rois.get().front().empty() ? EncodedRegion{} : rois.get().front().front();
     };
     const auto settle = [&]
@@ -776,7 +787,7 @@ void roiParameterContract()
     app.addNode("test.roi.editor", 0, 2);
     settle();
     const auto withoutImage = app.selectedNode();
-    require(app.setParameter(kRectInput, false, "[[[2,0,9.25,8,6,30]]]"),
+    require(app.setParameter(kRectInput, false, "[[[0,9.25,8,6,30]]]"),
             "image-free rectangle parameter was rejected");
     settle();
     require(rectangle()[2] == 9.25 && app.save(project), "image-free geometry could not be saved");
@@ -877,12 +888,14 @@ void roiParameterContract()
     app.endRoiPreview();
 
     app.selectNode(target);
-    app.setParameterMode(kRoisInput, false);
-    require(app.setParameter(kRoisInput, false, "[[[3,30,30,10]]]"), "circle fixture was rejected");
+    require(!app.bindInput(app.portContext(kCircleInput), source, kSourceRoisOutput),
+            "a circle input accepted an upstream rectangle port");
+    app.setParameterMode(kCircleInput, false);
+    require(app.setParameter(kCircleInput, false, "[[[30,30,10]]]"), "circle fixture was rejected");
     settle();
     require(app.save(project), "circle baseline could not be saved");
     settle();
-    require(app.editRoi(kRoisInput, false), "circle input could not enter editing");
+    require(app.editRoi(kCircleInput, false), "circle input could not enter editing");
     require(QTest::qWaitFor([&] { return viewport.editTarget() && viewport.hasImage(); }, 3000), "circle frame did not arrive");
     viewport.selectRegion(0);
     QSignalSpy circleCommits(&app, &AppController::projectChanged);
@@ -897,7 +910,7 @@ void roiParameterContract()
     require(circleCommits.size() == 1 && app.dirty(), "one circle gesture must produce one project commit");
     app.endRoiPreview();
     app.setParameterMode(kRectInput, false);
-    require(app.setParameter(kRectInput, false, "[[[2,10.123456789,20.987654321,40,30,0.123456789]]]"),
+    require(app.setParameter(kRectInput, false, "[[[10.123456789,20.987654321,40,30,0.123456789]]]"),
             "precise rectangle fixture was rejected");
     settle();
     const auto exactRectangleText = rectLiteral();
@@ -909,7 +922,7 @@ void roiParameterContract()
         {
             auto *item = pending.takeLast();
             if (item->metaObject()->indexOfProperty("inputItem") >= 0
-                && item->property("text").toString() == "[2,10.123457,20.987654,40,30,0.123457]")
+                && item->property("text").toString() == "[[[10.123457,20.987654,40,30,0.123457]]]")
                 rectangleField = item;
             pending.append(item->childItems());
         }

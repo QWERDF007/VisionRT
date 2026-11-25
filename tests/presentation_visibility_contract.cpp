@@ -4,7 +4,6 @@
 // decision, which is why this runs without a window: QML only renders the list it is given.
 
 #include "ResultPresentation.h"
-#include "core/ProjectEditor.h"
 #include "ui/OutputModel.h"
 #include "ui/RoiEditSession.h"
 
@@ -40,7 +39,7 @@ PortDefinition roiPort(PortId id, std::string name, PortId image)
     PortDefinition port;
     port.id     = id;
     port.nameZh = std::move(name);
-    port.type   = TypeSpec{Type::ROI};
+    port.type   = TypeSpec{Type::Rectangle};
     port.image  = PortRef{PortStage::Inputs, image};
     return port;
 }
@@ -142,7 +141,7 @@ try
     node.signatures.inputs = {
         {1, TypeSpec{Type::Image}},
         {2, TypeSpec{Type::Image}},
-        {3,   TypeSpec{Type::ROI}}
+        {3,   TypeSpec{Type::Rectangle}}
     };
     node.signatures.outputs = {
         {2, TypeSpec{Type::Image}}
@@ -157,8 +156,7 @@ try
     host.flow = &flow;
     host.tool = &tool;
 
-    ProjectEditor      editor;
-    RoiEditSession     session(editor);
+    RoiEditSession     session;
     OutputModel        outputs;
     ResultPresentation presentation(host, outputs, session, nullptr);
 
@@ -171,8 +169,7 @@ try
     RoiEditSession::Start start;
     start.node  = node.id;
     start.input = 3;
-    start.flow  = QStringLiteral("flow_1");
-    start.type  = TypeSpec{Type::ROI};
+    start.type  = TypeSpec{Type::Rectangle};
     session.begin(start);
     require(session.active() && session.input() == 3, "the ROI session did not start on its declared input");
     require(presentation.selectedImageOutput().isEmpty(), "a hidden ROI background was reported as the selected image");

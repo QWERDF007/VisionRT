@@ -70,7 +70,8 @@ QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
     if (port.step)
         row["step"] = valueText(*port.step, port.type);
     QVariantList options;
-    for (const auto &option : port.options) options.push_back(valueText(option, port.type));
+    for (const auto &option : port.options)
+        options.push_back(QVariantMap{{"value", valueText(option.value, port.type)}, {"label", q(option.label)}});
     row["options"] = options;
     return row;
 }
@@ -142,7 +143,7 @@ QVariantList AppController::parameters() const
     // Rows come from the materialised contract, the same definition execution consumes; the raw
     // declaration is still the source for type_from selection options.
     const auto *contract = impl_->effectiveTool();
-    auto        add      = [&](PortId id, const TypeSpec &type, PortStage stage, const PortDefinition *declaration)
+    auto        add      = [&](PortId id, const TypeSpec &type, PortStage stage, const PortDefinition *declaration, bool recordScoped = false)
     {
         const bool initialization = stage == PortStage::Init;
         const bool trainingParameter = stage == PortStage::Train;
@@ -151,14 +152,14 @@ QVariantList AppController::parameters() const
         QString     source;
         if (trainingParameter)
         {
-            if (declaration->scope == ParameterScope::Tool)
+            if (!recordScoped)
             {
                 const auto found = impl_->training->parameter(id);
-                if (found) literal = portValueOf(*found);
+                if (found) literal = *found;
             }
             else if (impl_->training && impl_->training->selected() >= 0)
             {
-                if (const auto value = impl_->training->value(impl_->training->selected(), id)) literal = portValueOf(*value);
+                if (const auto value = impl_->training->value(impl_->training->selected(), id)) literal = *value;
             }
         }
         else if (initialization)
@@ -199,7 +200,7 @@ QVariantList AppController::parameters() const
                 source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
         }
-        if (!initialization && impl_->roiSession.active() && impl_->roiSession.target().kind == RoiTargetKind::Input
+        if (!recordScoped && impl_->roiSession.active() && impl_->roiSession.parameterStage() == stage
             && impl_->roiSession.original().mode == BindingMode::Literal && impl_->roiSession.node() == node->id
             && impl_->roiSession.input() == id)
             literal = impl_->roiSession.draft();
@@ -207,8 +208,8 @@ QVariantList AppController::parameters() const
         QString formattedText;
         try
         {
-            text = valueText(literal, type);
             formattedText = displayValueText(literal, type);
+            text = type.type == Type::Image || type.type == Type::TrainingSet ? formattedText : valueText(literal, type);
         }
         catch (const std::exception &error)
         {
@@ -227,11 +228,12 @@ QVariantList AppController::parameters() const
                 });
         };
         if (declaration)
-            for (const auto &value : declaration->options)
+            for (const auto &option : declaration->options)
             {
+                const auto &value = option.value;
                 const auto *stringValue = std::get_if<std::string>(&value);
                 const auto  optionText  = stringValue ? q(*stringValue) : valueText(value, type);
-                addOption(stringValue ? optionText : displayValueText(value, type), optionText);
+                addOption(option.label.empty() ? (stringValue ? optionText : displayValueText(value, type)) : q(option.label), optionText);
             }
         // type_from parameters drive both the source selection and the resolved
         // contract, so their option lists still come from the raw declaration.
@@ -277,67 +279,21 @@ QVariantList AppController::parameters() const
         // a second picker.
         EditorKind editorKind = declaration ? declaration->editor : EditorKind::Default;
 
-        QVariant    rectMap;
-        bool        hasRect         = false;
-        QString     rectDisplayText = QStringLiteral("[]");
-        const bool  rectangleEditor = type.type == Type::ROI && editorKind == EditorKind::Rect;
-        const auto *regions         = std::get_if<DataRef<ROI>>(&literal);
-        if (rectangleEditor && regions && regions->get().size() == 1 && regions->get()[0].size() == 1)
-        {
-            const auto &record = regions->get()[0][0];
-            try
-            {
-                const auto rectangle = RegionView(record).rectangle();
-                hasRect              = true;
-                rectMap              = QVariantMap{
-                                 {  "type",                  2},
-                                 {     "x",   rectangle.left()},
-                                 {     "y",    rectangle.top()},
-                                 { "width",  rectangle.width()},
-                                 {"height", rectangle.height()},
-                                 { "angle",  rectangle.angle()}
-                };
-                rectDisplayText = displayRegionText(record);
-            }
-            catch (const ContractError &)
-            {
-                // A non-rectangle in a rect editor is reported by the parameter text below, which
-                // still shows the raw value; the map only exists for editable rectangles.
-            }
-        }
+        const auto *regions = shapeRegions(literal);
+        const bool rectangleEditor = type.type == Type::Rectangle && editorKind == EditorKind::Rect;
+        const bool hasRect = rectangleEditor && regions && regions->size() == 1 && regions->front().size() == 1;
         std::size_t roiCount = 0;
         if (regions)
-            for (const auto &group : regions->get()) roiCount += group.size();
+            for (const auto &group : (*regions)) roiCount += group.size();
         const bool  hasRois      = roiCount > 0;
-        int         roiDrawShape = ImageViewport::DrawRectangle;
-        const auto *shapeRegions = regions;
-        if ((!shapeRegions || shapeRegions->get().empty()) && declaration)
-            shapeRegions = std::get_if<DataRef<ROI>>(&declaration->defaultValue);
-        if (shapeRegions && !shapeRegions->get().empty() && !shapeRegions->get().front().empty())
-            switch (RegionView(shapeRegions->get().front().front()).kind())
-            {
-            case RoiKind::Point:
-                roiDrawShape = ImageViewport::DrawPoint;
-                break;
-            case RoiKind::Segment:
-                roiDrawShape = ImageViewport::DrawLine;
-                break;
-            case RoiKind::Circle:
-                roiDrawShape = ImageViewport::DrawCircle;
-                break;
-            case RoiKind::Polygon:
-                roiDrawShape = ImageViewport::DrawPolygon;
-                break;
-            case RoiKind::Rectangle:
-                break;
-            }
+        const int roiDrawShape = ImageViewport::drawShapeForType(type.type);
         QString arrayText = text;
         if (type.type == Type::Array && (text.isEmpty() || text == QStringLiteral("null")))
             arrayText = QStringLiteral("[]");
         QString displayText;
         if (rectangleEditor)
-            displayText = hasRect ? rectDisplayText : QStringLiteral("[]");
-        else if (type.type == Type::ROI)
+            displayText = hasRect ? formattedText : QStringLiteral("[]");
+        else if (isShapeType(type.type))
             displayText = formattedText;
         else if (type.type == Type::Array)
             displayText = arrayText == QStringLiteral("[]") ? arrayText : formattedText;
@@ -348,22 +304,25 @@ QVariantList AppController::parameters() const
 
         QVariantMap row{
             {"roiDrawShape", roiDrawShape},
+            {"isShape", isShapeType(type.type)},
+            {"emptyLiteral", type.type == Type::TrainingSet ? ValueJson::text(defaultValue(type), type) : QStringLiteral("[]")},
             {"id", static_cast<uint>(id)},
             {"stage", static_cast<int>(stage)},
-            {"recordScoped", trainingParameter && declaration->scope == ParameterScope::Record},
-            {"recordId", trainingParameter && declaration->scope == ParameterScope::Record ? selectedTrainingDraftRecord() : QString{}},
+            {"recordScoped", recordScoped},
+            {"datasetEditor", trainingParameter && !recordScoped && tool->training && std::ranges::any_of(tool->training->datasets, [&](const auto &dataset) { return dataset.parameter == id; })},
+            {"datasetId", impl_->training && impl_->training->datasetParameter() ? QVariant::fromValue(*impl_->training->datasetParameter()) : QVariant{}},
+            {"recordId", recordScoped ? selectedTrainingDraftRecord() : QString{}},
             {"name", declaration ? q(declaration->nameZh) : q(portLabel(id))},
             {"type", static_cast<int>(type.type)},
             {"typeDetail", typeText(type)},
-            {"typeDisplay", rectangleEditor ? QStringLiteral("矩形") : displayTypeName(type, literal)},
+            {"typeDisplay", displayTypeName(type)},
             {"init", initialization},
             {"literal", type.type == Type::Array ? arrayText : text},
-            {"valueText", rectangleEditor && hasRect ? rectDisplayText
+            {"valueText", rectangleEditor && hasRect ? formattedText
                           : type.type == Type::Array ? arrayText
                           : string                   ? q(*string)
                                                      : text},
             {"displayText", displayText},
-            {"rect", rectMap},
             {"hasRect", hasRect},
             {"roiCount", roiCount},
             {"hasRois", hasRois},
@@ -372,7 +331,7 @@ QVariantList AppController::parameters() const
             {"sourcePort", hasSource ? static_cast<uint>(inputFound->second.source->port) : 0u},
             {"title", q(node->title())},
             {"editor", static_cast<int>(editorKind)},
-            {"tab", trainingParameter ? static_cast<int>(ParameterTab::Training) : declaration ? static_cast<int>(declaration->tab) : static_cast<int>(ParameterTab::BasicInput)},
+            {"tab", static_cast<int>(trainingParameter ? ParameterTab::Training : initialization ? ParameterTab::Initialization : declaration ? declaration->tab : ParameterTab::BasicInput)},
             {"group", declaration ? q(declaration->group) : QString{}},
             {"options", options},
             {"optionsProvider",
@@ -463,11 +422,13 @@ QVariantList AppController::parameters() const
 
     if (contract)
     {
-        if (tool->training)
+        if (trainingAvailable())
         {
             impl_->ensureTrainingSession();
             for (const auto &port : tool->trainParams)
                 add(port.id, port.type, PortStage::Train, &port);
+            for (const auto &port : impl_->training->recordParameters())
+                add(port.id, port.type, PortStage::Train, &port, true);
         }
         for (const auto &port : contract->initParams)
         {
@@ -591,7 +552,7 @@ QVariantList AppController::parameters() const
             if ((row.value("isMeta").toBool() && row.value("editor").toInt() != static_cast<int>(EditorKind::Expression)) || row.value("system").toBool()
                 || row.value("id").toUInt() == kUpstreamStatusPort || row.value("group") == QStringLiteral("流程控制")) group = basicGroups[0];
             else if (row.value("type").toInt() == static_cast<int>(Type::Image)) group = basicGroups[1];
-            else if (row.value("type").toInt() == static_cast<int>(Type::ROI)) group = basicGroups[2];
+            else if (isShapeType(static_cast<Type>(row.value("type").toInt()))) group = basicGroups[2];
             else group = basicGroups[3];
             row.insert("group", group);
         }
@@ -627,7 +588,7 @@ QVariantList AppController::parameterGroups() const
         }
         auto map = group->toMap();
         auto rows = map.value("parameters").toList();
-        rows.append(QVariantMap{{"id", row.value("id")}, {"stage", row.value("stage")}, {"recordId", row.value("recordId")}});
+        rows.append(QVariantMap{{"id", row.value("id")}, {"stage", row.value("stage")}, {"recordId", row.value("recordId")}, {"recordScoped", row.value("recordScoped")}, {"datasetId", row.value("datasetId")}});
         map.insert("parameters", rows);
         *group = map;
     }

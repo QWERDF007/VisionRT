@@ -114,7 +114,7 @@ try
         assert(readResult && roiResult && addResult);
         assert(readResult->status.code == 0 && roiResult->status.code == 0 && addResult->status.code == 0);
 
-        const auto &rois = std::get<DataRef<ROI>>(roiResult->outputs.at(2)).get();
+        const auto &rois = std::get<visionrt::Rectangle>(roiResult->outputs.at(2)).get();
         assert(rois.size() == 1 && rois.front().size() == 1);
         assert((rois.front().front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
         const auto &added = std::get<DataRef<Image>>(addResult->outputs.at(2)).get();

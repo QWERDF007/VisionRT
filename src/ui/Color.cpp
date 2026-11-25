@@ -24,6 +24,9 @@ VisionRTColor::VisionRTColor(QObject *parent)
     ROICrosshair(QColor("#222222"));
     ROILabelText(QColor("#FFFFFF"));
     ROIPreview(QColor("#F1C40F"));
+    CoordinateAxisX(QColor("#FF2424"));
+    CoordinateAxisY(QColor("#20CE4D"));
+    CoordinateOrigin(QColor("#AA00FF"));
     ROISelectionFillOpacity(0.18);
     NodeGrey(QColor(0xcf, 0xcf, 0xcf));
     NodeRed(QColor(0xed, 0x1c, 0x24));

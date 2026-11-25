@@ -216,7 +216,7 @@ struct AppController::Impl : PresentationHost
 
     // ROI editing state lives in one place; the controller only coordinates start/end with the
     // viewport and the project.
-    RoiEditSession     roiSession{editor};
+    RoiEditSession     roiSession;
     // Presentation state (snapshots, output rows, image batch, text/readback and its drain) has one
     // owner; the controller only connects QML and selection changes to it.
     ResultPresentation presentation{*this, outputs, roiSession, q};
@@ -241,6 +241,8 @@ struct AppController::Impl : PresentationHost
     bool                  editingAllowed() const;
     bool                  idle();
     bool                  applyParameter(PortId id, bool initialization, PortValue value);
+    bool applyTrainingValue(PortId id, PortValue value, const QString &record = {});
+    bool beginParameterRoi(PortId id, PortStage stage, bool copyUpstream);
     // A host failure is a system event; the two interaction notes pass LogSource::Ui explicitly.
     void                  report(const QString &text, LogSource source = LogSource::System);
     void                  report(ApplicationDiagnostic diagnostic, LogSource source = LogSource::System);

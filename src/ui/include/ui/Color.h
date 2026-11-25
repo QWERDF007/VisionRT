@@ -24,6 +24,9 @@ class VISIONRT_UI_API VisionRTColor final : public QObject
     VISIONRT_Q_PROPERTY_AUTO(QColor, ROICrosshair)
     VISIONRT_Q_PROPERTY_AUTO(QColor, ROILabelText)
     VISIONRT_Q_PROPERTY_AUTO(QColor, ROIPreview)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, CoordinateAxisX)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, CoordinateAxisY)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, CoordinateOrigin)
     VISIONRT_Q_PROPERTY_AUTO(qreal, ROISelectionFillOpacity)
 private:
     explicit VisionRTColor(QObject *parent = nullptr);

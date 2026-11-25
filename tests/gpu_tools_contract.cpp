@@ -234,7 +234,7 @@ int main(int argc, char **argv)
                                              + (results.contains(node.id) ? results.at(node.id)->status.message
                                                                          : "missing result"));
             const auto &outputs = results.at(detector.id)->outputs;
-            const auto &regions = std::get<DataRef<ROI>>(outputs.at(3)).get();
+            const auto &regions = std::get<visionrt::Rectangle>(outputs.at(3)).get();
             const auto &scores  = std::get<Array>(outputs.at(4));
             const auto &classes = std::get<Array>(outputs.at(5));
             const auto &names   = std::get<Array>(outputs.at(6));
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
                     throw std::runtime_error("YOLO result differs from independent PyTorch class/box/score reference");
             }
             const auto &filtered = results.at(nodes[2].id)->outputs;
-            if (std::get<DataRef<ROI>>(filtered.at(3)).get()[0].size() != 4)
+            if (std::get<visionrt::Rectangle>(filtered.at(3)).get()[0].size() != 4)
                 throw std::runtime_error("Downstream filter did not remove the low-confidence person");
             std::cout << "[PASS] Native YOLO matches five PyTorch detections; downstream filter retains four." << std::endl;
             std::cout << "[YOLO] " << phase << " completed in "

@@ -113,7 +113,7 @@
             {
               "port_id": 1,
               "mode": 0,
-              "literal": "examples/01_基础入门/01_图像读取/images"
+              "literal": "examples/images/图像读取"
             },
             {
               "port_id": 2,

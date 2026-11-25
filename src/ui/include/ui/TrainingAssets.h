@@ -16,9 +16,6 @@ class ToolRegistry;
 
 namespace visionrt::training {
 
-VISIONRT_UI_API void writeFrame(const cv::Mat &pixels, ColorOrder order, const QString &path);
-VISIONRT_UI_API void readFrame(const QString &path, cv::Mat &pixels, ColorOrder &order);
-
 // Owns one complete unpublished revision until the project transaction accepts its directory.
 // A refusal or exception removes only this revision, including its staging files.
 class VISIONRT_UI_API Revision final

@@ -61,7 +61,7 @@ try
     definition.outputs = {
         {2, "值", {Type::Int}},
         {3, "图像", {Type::Image}},
-        {4, "区域", {Type::ROI}},
+        {4, "区域", {Type::Rectangle}},
         {5, "说明", {Type::String}}
     };
     write(package + "tools/custom/publication/source.json",
@@ -124,7 +124,7 @@ class Tool:
     require(std::get<std::int64_t>(firstValue->value) == 1, "publication success has the wrong value");
     require(std::get<DataRef<Image>>(firstImage->value).get()[0].at<std::uint8_t>(0, 0) == 11,
             "publication image does not carry the initialized value");
-    require(std::get<DataRef<ROI>>(firstRect->value).get()[0][0][1] == 2.0, "publication ROI is malformed");
+    require(std::get<visionrt::Rectangle>(firstRect->value).get()[0][0][1] == 1.0, "publication rectangle is malformed");
     require(std::get<std::string>(firstNote->value) == "10:1", "publication note is malformed");
     require(!stateOf(node).value("timingText").toString().isEmpty(), "publication success has no timing");
     const auto firstPublication = firstValue->publication;

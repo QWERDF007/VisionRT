@@ -25,7 +25,8 @@ QuiCard {
     readonly property int portType: typeSpec.type
     readonly property bool numeric: portType === PortType.Int || portType === PortType.Float
     readonly property bool isImage: portType === PortType.Image
-    readonly property bool isRoi: portType === PortType.ROI
+    readonly property bool isRoi: root.types.some(function (item) { return item.token.type === root.portType && item.isShape; })
+    readonly property bool isGeometry: isRoi || portType === PortType.Direction || portType === PortType.CoordinateFrame2D
     readonly property bool hasAdvanced: root.portType === PortType.String || (showsRelation(RelationKind.Image) && root.model.imageRef.id !== undefined) || (showsRelation(RelationKind.Alignment) && root.model.alignmentRef.id !== undefined) || (showsRelation(RelationKind.SameGeometry) && root.model.sameGeometryRef.id !== undefined) || (portType === PortType.String && root.model.editorType !== EditorKind.Default) || (root.model.optionsText && root.model.optionsText !== "")
     property bool advancedChecked: false
     readonly property real lowerBound: root.model.minValue !== "" && !isNaN(Number(root.model.minValue)) ? Number(root.model.minValue) : -2147483648
@@ -101,9 +102,9 @@ QuiCard {
 
     function showsRelation(kind) {
         if (kind === RelationKind.Image)
-            return root.isRoi;
+            return root.isGeometry;
         if (kind === RelationKind.Alignment)
-            return root.isRoi && root.stage === PortStage.Inputs;
+            return root.isGeometry;
         if (kind === RelationKind.SameGeometry)
             return root.isImage && root.stage === PortStage.Outputs;
         return false;

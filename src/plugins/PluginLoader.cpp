@@ -414,10 +414,10 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     return result;
 }
 
-ToolResult DomainToolAdapter::train(const TrainingSet &set, const Values &parameters)
+ToolResult DomainToolAdapter::train(const Values &parameters)
 {
     if (!raw_) throw ContractError("工具实例已释放");
-    auto result = raw_->train(set, parameters);
+    auto result = raw_->train(parameters);
     const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
     for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
     return result;

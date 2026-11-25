@@ -79,7 +79,7 @@ void runPackageReplacement(PythonRuntime &python)
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
     }
 
@@ -115,7 +115,7 @@ void runPackageReplacement(PythonRuntime &python)
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
     }
 
@@ -170,7 +170,7 @@ void runPackageReplacement(PythonRuntime &python)
       "type": "string"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
     }
 
@@ -417,7 +417,7 @@ void runPackageReplacement(PythonRuntime &python)
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
     }
     // Write platform receiver declaration
@@ -471,7 +471,7 @@ void runPackageReplacement(PythonRuntime &python)
       "type": "string"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json";
     }
     // Write module_index.json for Package 2

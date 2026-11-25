@@ -30,6 +30,72 @@
 - ...
 -->
 
+### 2026-11-25 — 提交参数、具体形状与标定示例
+
+**目标**
+- 提交已验收的参数体系、具体形状端口、标定工具与示例，以及前轮尚未提交的相关改动。
+
+**当前状态**
+- Contracts 已提交为 4746f7487226043ae9f976bdb8aa17b3afde6f5a，两份检出一致且干净；两个父仓固定相同契约。本轮提交包含现有实现、测试、文档、集中示例图片和认知资产，提交身份以 Git 历史为准，未推送。
+- 本次只整理任务账本和 Git 引用，未改变已验证的功能；实现与验证入口见下方“具体形状类型与标定坐标方向”和“参数体系与标定测量实施”。
+
+**验证证据**
+- Contracts 两份暂存树同为 ce2c76f624d2c6de78ff3d8bef50936767a61dd2，差异检查通过；主提交已同步到工具仓 SDK。
+- 沿用 concrete-final-tests.log 的 29 项通过及 concrete-migrated-fixtures.log 四项、concrete-assist.log 的后续修正绿灯；SDK 隔离安装、工具仓 11 项、31 个声明和 13 个 CPU 工具实际消费通过，证据见前条日志。
+- 默认 build/bin 程序真实标定工程运行和窗口截图已验收；本轮未重复运行无变化的功能测试。
+
+**下一步**
+- 无待续接业务开发；使用 build/bin/VisionRT.exe 验收。三个仓库的本轮提交身份以 Git 历史为准，尚未推送。
+
+### 2026-11-25 — 具体形状类型与标定坐标方向
+
+**目标**
+- 用户已确认：点、线、矩形、圆、多边形采用独立参数类型，删除可混装形状的通用 ROI 端口；同步共享契约、两仓工具、Python、编辑、连接及示例。标定模型和坐标系统一正 Y 方向。页签固定为基本输入、初始化、训练、预处理、检测、结果处理，按声明隐藏不可用页面。
+
+**当前状态**
+- 已读取两仓规则与实现，使用 codebase-design 和 tdd；共享契约测试先复现缺少具体类型。新增 ShapeKinds.def 为五种形状的映射来源，ShapeBatch 在公共值中区分具体类型，复用内部编码记录和视图。外部 JSON 按具体形状保存坐标，不携带形状编号。
+- 已删除公共 Type::ROI、PortValue 的 DataRef<ROI> 选项和通用参数读写。五种形状使用独立类型和头部无形状编号的 JSON，UI 类型名称只来自声明，画布按声明限制绘制。ABI 15、声明格式 4，31 个作者声明和 12 个工程已迁移。未提交。
+- 标定模型版本 2 已用真实板图重新训练并写回示例；实际平面映射和显示均为正 X 向右、正 Y 向上。基本输入、初始化、训练、预处理、检测、结果处理顺序已实现。默认 build/bin 程序与工具包已更新，真实窗口中红色 X 轴向右、绿色 Y 轴向上。
+
+**验证证据**
+- build/concrete-shapes-red-build.log 复现 Circle 等未声明；concrete-shapes-green-build.log 和首次 test_geometry_values_contract 通过。
+- concrete-shape-ports-red.log 复现缺少具体参数读写；随后新增具体读写及 JSON 往返。首轮新写入断言误把空错误当成失败，已按 OutputWriter 契约修正，后续绿灯以 concrete-shape-ports-green.log 为准。
+
+- concrete-final-build.log 与 concrete-last-build.log 记录默认程序及受影响验证目标构建成功；concrete-final-tests.log 的 34 项中 29 项通过，另 5 项是旧夹具仍读取形状编号、旧三维对齐和旧坐标。修正后 concrete-migrated-fixtures.log 四项通过；剩余 Assist 的矩形长度断言在 concrete-assist.log 通过，未修改产品兜底。
+- concrete-sdk-installed.log：SDK 隔离安装、编译和独立消费通过。工具仓 concrete-final-tests.log 11 项通过；concrete-final-package.log 31 个声明和 13 个 CPU 工具实际消费通过。
+- build/bin/VisionRT.exe 打开并运行随包标定工程后以 0 退出；已检查 build/evidence/concrete-calibration-plane.png，坐标轴正 Y 向上、正 X 向右，参考线为具体线类型，训练页紧随基本输入。workbench_parameter_stages_contract 同时验证含初始化工具的完整六页顺序。
+- package_app.verify_examples(Path('build/bin')) 返回空问题列表；两份 SDK 所有本轮变更文件逐一字节比较无差异；三仓 diff --check 和 U+00B7 检查通过。
+
+**下一步**
+- 无待续接业务代码。正式认知已取得 aligned 终态；verify、Aggregate Check 和 Guide 均通过，凭据见 build/concrete-aoci-*.json。未提交或推送。验收入口 build/bin/VisionRT.exe；提交时先提交 Contracts 并同步两个父仓引用。
+
+### 2026-11-24 — 参数体系与标定测量实施
+
+**目标**
+- 实施已确认方案：初始化、训练、输入、输出同级参数，train(Values)，公共参数页，方向与二维坐标系，对齐 N×6，中文选项、搜索方向，平面标定与变距尺子示例；示例原图统一 examples/images，沿用现有执行按钮。
+
+**当前状态**
+- 代码、默认 build/bin 程序、31 个工具声明与工具包已更新，ABI 为 14、声明格式为 3。未提交或推送；共享契约的两份检出须保持相同内容。
+- TrainingSet 参数是训练记录和原像素的唯一持久化来源，格式 5 训练清单仅索引模型。训练参数、记录字段、图像、多个数据集及显式 ROI 字段使用公共值类型；零编号与无图记录已验证。训练草稿和 ROI 手势各有唯一写入口；整数步进按记录字段寻址，训练草稿编辑不重新初始化节点。
+- ParameterPage 由初始化、训练和普通输入页继承复用，初始化页仅有可编辑初始化参数时显示。方向、坐标系与 ROI 共用图像缩放和平移；通用选项分离内部值和中文标签。实现入口统一见 docs/README.md。
+- 16 张原图归 examples/images/<示例名>，12 个工程及安装引用已同步。旧线缆原帧已迁入 TrainingSet 并删除重复帧文件。最初批量移动并删除空目录的命令被自动审查拒绝；随后使用明确路径完成移动，未重试删除空目录；空目录不进入 Git。
+- CalibrateCamera 通过现有训练界面读取原图和 Version 3 标定板描述，发布模型、标定点、质量及坐标系；运行时参考线确定当前平面尺度，RowSpacing 使用完整畸变和平面映射。新示例：examples/03_综合示例/03_变距尺子标定测量/变距尺子标定测量.json。
+- 解释器已通过 build/bin/ui-preferences.json 设置为 D:/Software/anaconda3/envs/py312/python.exe，程序实际探测和加载成功。两种窗口自动化接口均因本机管道不可用失败；设置窗口的手动选择路径本轮未验证。已通过程序截图命令及真实 Qt 工作台测试验证运行、标定训练和显示。
+- 标定参考资源：F:/merlic工程/images/Calibration/2d_calibration；描述和参考方案位于 F:/merlic工程/示例工程/calibrate_for_ruler_changed_distance。随包资源不含这些本机绝对路径。
+
+**验证证据**
+- Contracts：geometry-values、affine-values、portable-values 相关绿灯日志验证新几何、N×6、图像和训练集往返；calibration-delivery-tests.log 的六项 SDK 契约通过。calibration-sdk-installed.log 记录独立安装、编译和消费通过；首次直接 CTest 未初始化 MSVC，随后安装消费夹具仍有旧声明版本，分别修正运行环境和夹具后通过。
+- Python：python-training-values-green.log、python-train-lifecycle-green.log 验证新值、零编号、函数生命周期和模型 bytes；parameter-regression.log 中 Python 值、加载、几何叠加、输出、数值展示与展示归属六项通过。
+- 真实工作台：training-asset-root-green.log 两项通过，涵盖线缆和无 ROI 的真实标定板训练、模型保存及重开。已检查 evidence/calibration-training-workbench.png，训练帧、标定点和坐标轴可见。
+- 参数阶段：parameter-stages-stable.log 连续 20 次通过，覆盖各阶段图像、ROI、多个数据集、无图记录及同编号字段整数步进。CDB 的 record-integer-stack-2.log 定位早期测试崩溃为夹具在异步画布未就绪时提交旧目标并访问空区域；测试现等待正确阶段、可编辑状态及 Python 启动探测结束。未为此增加产品兜底。最后移除展示夹具的无用编辑器依赖后，calibration-final-visibility.log 再次通过。
+- parameter-summary-red.log 复现参数投影展开像素；修复为摘要后训练窗口约 5 秒通过。parameter-layout.log 验证真实参数页布局、焦点及编辑；旧布局检查曾把新 Flickable 误认成完整面板，已改为真实面板身份。
+- affine-example-ui.log 的 Assist 通过；parameter-final.log 的全部随包示例实际运行通过；shared-images-project-tests.log 两项通过。calibration-install-tests.log 的发行图片与安装 15 项通过。首次示例及安装夹具仍有旧对齐值和旧声明，均按新契约迁移。
+- 新示例完整原生训练与执行在 calibration_example_contract 中通过：RMS 0.102466 px，平均中心距 0.999998 mm，样本标准差 4.48425 um。已检查 evidence/calibration-plane.png 和 calibration-statistics.png，默认程序两次以 0 退出。
+- evidence/calibration-python.json：环境 ready，实际加载 py312/python312.dll，Python 3.12.13、NumPy 2.4.3。工具仓 calibration-package.log：31 个声明及 13 个 CPU 工具真实消费通过；其 calibration-regression.log 原生七项、calibration-package-tests.log 发行三项通过。
+
+**下一步**
+- 使用 build/bin/VisionRT.exe 打开新示例；无待续接业务开发。认知收尾以 AOCI 正式终态回执为准。提交尚未执行；若需提交，先提交并同步 Contracts，再提交两个父仓。
+
 ### 2026-11-24 — 提交原生构建改动
 
 **目标**

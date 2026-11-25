@@ -29,7 +29,7 @@ bool lessNumber(const PortValue &left, const PortValue &right, Type type)
 
 } // namespace
 
-void validateToolValue(const PortDefinition &port, const PortValue &value)
+void validateToolValue(const PortDefinition &port, const PortValue &value, ValueCompleteness completeness)
 {
     if (isMissing(value))
         return;
@@ -45,9 +45,23 @@ void validateToolValue(const PortDefinition &port, const PortValue &value)
 
     if (!port.options.empty()
         && std::none_of(port.options.begin(), port.options.end(),
-                        [&](const auto &option) { return equalValues(option, value); }))
+                        [&](const auto &option) { return equalValues(option.value, value); }))
     {
         throw ContractError(port.nameZh + " 的值不在允许的选项内");
+    }
+
+    if (isShapeType(port.type.type) && (port.minRegions || port.maxRegions))
+    {
+        const auto &groups = *shapeRegions(value);
+        if (groups.empty() && port.minRegions > 0 && completeness == ValueCompleteness::Complete)
+            throw ContractError(port.nameZh + " 的区域数量少于声明下限");
+        for (const auto &group : groups)
+        {
+            if (completeness == ValueCompleteness::Complete && group.size() < static_cast<std::size_t>(port.minRegions))
+                throw ContractError(port.nameZh + " 的区域数量少于声明下限");
+            if (port.maxRegions && group.size() > static_cast<std::size_t>(port.maxRegions))
+                throw ContractError(port.nameZh + " 的区域数量超过声明上限");
+        }
     }
 
     if (port.minimum || port.maximum)

@@ -338,7 +338,7 @@ class PathProbe:
       "type": "string"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })json");
     const auto definition = parseToolDefinitionFile(sources.declarations / "paths.json", sources.source());
     const auto loaded     = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));

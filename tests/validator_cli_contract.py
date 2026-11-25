@@ -37,7 +37,7 @@ def main():
             return result
 
         tool = {
-            "schema_version": 2,
+            "schema_version": 4,
             "name_en": "test.cli", "name_zh": "校验工具",
             "version": "1", "implementation": {"kind": "cpp"},
             "inputs": [{"id": 1, "name_zh": "数量", "type": "int", "default": 9007199254740993}],

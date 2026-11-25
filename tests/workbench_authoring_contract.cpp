@@ -46,7 +46,7 @@ constexpr PortId kImagesOutput = 2;
 constexpr PortId kRoiOutput    = 36;
 
 const char *kMeasureDeclaration = R"json({
-  "schema_version": 2,
+  "schema_version": 4,
   "name_en": "ProbeMeasure",
   "name_zh": "探针测量",
   "version": "1.0.0",
@@ -76,7 +76,7 @@ const char *kMeasureDeclaration = R"json({
     {
       "id": 34,
       "name_zh": "测量区域",
-      "type": "roi",
+      "type": "circle",
       "default": [],
       "ui": {
         "editor": "array"
@@ -91,10 +91,11 @@ const char *kMeasureDeclaration = R"json({
     {
       "id": 55,
       "name_zh": "参考变换",
+      "default": [[1, 0, 0, 0, 1, 0]],
       "type": {
         "type": "array",
         "dtype": "float64",
-        "rank": 3
+        "rank": 2
       },
       "ui": {
         "editor": "array"
@@ -140,7 +141,7 @@ const char *kMeasureDeclaration = R"json({
     {
       "id": 36,
       "name_zh": "测量区域",
-      "type": "roi",
+      "type": "circle",
       "relations": {
         "image": {
           "stage": "inputs",
@@ -152,7 +153,7 @@ const char *kMeasureDeclaration = R"json({
 })json";
 
 const char *kPickDeclaration = R"json({
-  "schema_version": 2,
+  "schema_version": 4,
   "name_en": "ProbePick",
   "name_zh": "探针点选",
   "version": "1.0.0",
@@ -174,7 +175,7 @@ const char *kPickDeclaration = R"json({
     {
       "id": 2,
       "name_zh": "搜索区域",
-      "type": "roi",
+      "type": "circle",
       "ui": {
         "editor": "array"
       }
@@ -182,7 +183,7 @@ const char *kPickDeclaration = R"json({
     {
       "id": 4,
       "name_zh": "已有区域",
-      "type": "roi",
+      "type": "circle",
       "default": [],
       "ui": {
         "editor": "array"
@@ -191,10 +192,11 @@ const char *kPickDeclaration = R"json({
     {
       "id": 5,
       "name_zh": "参考变换",
+      "default": [[1, 0, 0, 0, 1, 0]],
       "type": {
         "type": "array",
         "dtype": "float64",
-        "rank": 3
+        "rank": 2
       },
       "ui": {
         "editor": "array"
@@ -221,12 +223,12 @@ const char *kPickDeclaration = R"json({
     {
       "id": 30,
       "name_zh": "预览",
-      "type": "roi"
+      "type": "circle"
     },
     {
       "id": 31,
       "name_zh": "候选",
-      "type": "roi"
+      "type": "circle"
     },
     {
       "id": 32,

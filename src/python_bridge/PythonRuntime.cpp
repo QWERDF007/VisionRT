@@ -181,9 +181,10 @@ struct ToolObjects
         ToolStatus status{};
         try
         {
-            if (instance)
+            const auto target = instance ? instance : execute;
+            if (target && !target.is_none() && py::hasattr(target, "release"))
             {
-                status = lifecycleStatus(instance.attr("release")(), storage);
+                status = lifecycleStatus(target.attr("release")(), storage);
                 releaseOrigin = DiagnosticOrigin::Tool;
             }
         }
@@ -268,12 +269,22 @@ public:
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
             return loadStatus;
-        if (definition_.kind == ToolKind::PythonFunction)
-            return {};
         try
         {
+            const auto target = objects_->instance ? objects_->instance : objects_->execute;
+            if (!configuration.models.empty())
+            {
+                py::dict models;
+                for (const auto &[id, path] : configuration.models)
+                {
+                    const auto text = path.generic_u8string();
+                    models[py::str(id)] = py::str(reinterpret_cast<const char *>(text.data()), text.size());
+                }
+                target.attr("models") = std::move(models);
+            }
+            if (!py::hasattr(target, "initialize")) return {};
             auto inputs = inputDictionary(parameters, definition_.initParams);
-            auto status = lifecycleStatus(objects_->instance.attr("initialize")(inputs), state_->storage);
+            auto status = lifecycleStatus(target.attr("initialize")(inputs), state_->storage);
             origin_ = DiagnosticOrigin::Tool;
             return status;
         }
@@ -292,6 +303,17 @@ public:
     }
 
     ToolResult execute(const Values &inputs) override
+    {
+        return invoke(inputs, ProducedBy::Execute);
+    }
+
+    ToolResult train(const Values &parameters) override
+    {
+        return invoke(parameters, ProducedBy::Train);
+    }
+
+private:
+    ToolResult invoke(const Values &inputs, ProducedBy phase)
     {
         metrics_ = {};
 
@@ -345,13 +367,14 @@ public:
         {
             {
                 ScopeTimer inputTimer(metrics_.pythonInputMs);
-                auto       parameters = inputDictionary(inputs, definition_.inputs);
+                auto       parameters = inputDictionary(inputs, phase == ProducedBy::Train ? definition_.trainParams : definition_.inputs);
                 inputTimer.stop();
 
                 metrics_.pythonCallMeasured = true;
                 ScopeTimer callTimer(metrics_.pythonCallMs);
 
-                returned = objects_->execute(parameters);
+                const auto target = objects_->instance ? objects_->instance : objects_->execute;
+                returned = phase == ProducedBy::Train ? target.attr("train")(parameters) : objects_->execute(parameters);
                 callTimer.stop();
             }
         }
@@ -373,17 +396,30 @@ public:
         metrics_.pythonOutputMeasured   = true;
         Values      outputs;
         std::string detail;
+        std::map<std::string, ModelArtifact> artifacts;
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
             try
             {
                 auto envelope = resultDictionary(returned);
-                if (envelope.size() != 2 || !envelope.contains("outputs") || !envelope.contains("detail"))
-                    throw ContractError("execute 必须返回 outputs 与 detail");
+                if ((envelope.size() != 2 && envelope.size() != 3) || !envelope.contains("outputs") || !envelope.contains("detail")
+                    || (envelope.size() == 3 && !envelope.contains("artifacts")))
+                    throw ContractError("工具调用必须返回 outputs、detail，以及可选的 artifacts");
                 if (!py::isinstance<py::dict>(envelope["outputs"]) || !py::isinstance<py::str>(envelope["detail"]))
                     throw ContractError("outputs 必须是字典且 detail 必须是字符串");
                 const auto outputsDictionary = py::reinterpret_borrow<py::dict>(envelope["outputs"]);
                 detail = envelope["detail"].cast<std::string>();
+                if (envelope.contains("artifacts"))
+                {
+                    const auto models = resultDictionary(envelope["artifacts"]);
+                    for (const auto item : models)
+                    {
+                        if (!py::isinstance<py::str>(item.first) || !py::isinstance<py::bytes>(item.second))
+                            throw ContractError("模型产物必须是字符串标识到 bytes 的字典");
+                        const auto bytes = item.second.cast<std::string>();
+                        artifacts.emplace(item.first.cast<std::string>(), ModelArtifact{{bytes.begin(), bytes.end()}});
+                    }
+                }
                 // Only what the tool actually returned is converted: the host's completion entry owns
                 // the declared defaults, so an omitted business port is not an author error here.
                 // Keys are port numbers; a string, a bool or a float key is an author error, never a
@@ -431,9 +467,10 @@ public:
             }
         }
 
-        return ToolResult{std::move(outputs), std::move(detail)};
+        return ToolResult{std::move(outputs), std::move(detail), std::move(artifacts)};
     }
 
+public:
     ToolStatus releaseWithGil() noexcept
     {
         origin_ = DiagnosticOrigin::System;
@@ -505,12 +542,15 @@ private:
                 {
                     if (!PyType_Check(impl.symbol.ptr()))
                         throw ContractError("Python 类入口不是类");
-                    for (const char *method : {"initialize", "execute", "release"})
-                        if (!py::hasattr(impl.symbol, method) || !PyCallable_Check(impl.symbol.attr(method).ptr()))
-                            throw ContractError(std::string("Python 类缺少可调用方法：") + method);
+                    if (!py::hasattr(impl.symbol, "execute") || !PyCallable_Check(impl.symbol.attr("execute").ptr()))
+                        throw ContractError("Python 类缺少可调用方法：execute");
                 }
                 else if (PyType_Check(impl.symbol.ptr()))
                     throw ContractError("Python 函数入口不能是类");
+                if (!definition_.initParams.empty() && (!py::hasattr(impl.symbol, "initialize") || !PyCallable_Check(impl.symbol.attr("initialize").ptr())))
+                    throw ContractError("声明初始化参数的 Python 工具缺少 initialize 方法");
+                if ((!definition_.trainParams.empty() || definition_.training) && (!py::hasattr(impl.symbol, "train") || !PyCallable_Check(impl.symbol.attr("train").ptr())))
+                    throw ContractError("声明训练能力的 Python 工具缺少 train 方法");
             }
             catch (const py::error_already_set &error)
             {

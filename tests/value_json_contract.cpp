@@ -30,6 +30,8 @@ void roundtrip(const PortValue &value, const TypeSpec &type)
 
 int main()
 {
+    roundtrip(Direction::fromNested({{{10, 20, 5, 90}}, {}, {{2, 3, 4, 0}}}), {Type::Direction});
+    roundtrip(CoordinateFrame2D::fromNested({{{3, 4, 2, 1, -1, 3}}}), {Type::CoordinateFrame2D});
     const TypeSpec type{Type::Array, DType::Int64, 2};
     const auto     value = ValueJson::parse("[[9007199254740993], [], [-9223372036854775808]]", type);
     const auto    &items = nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(value));
@@ -87,15 +89,15 @@ int main()
     roundtrip(std::string("中文 \"引号\"\nC:\\Images\\null"), {Type::String});
     roundtrip(1.25, {Type::Float});
     roundtrip(DataRef<Image>(Image{}), {Type::Image});
-    const DataRef<ROI> regions(ROI{
-        {},
-        {{3, 2, 3, 1}, {2, 16777217.125, -2.5, 3.75, 4.5, 17.5}}
-    });
-    roundtrip(regions, {Type::ROI});
-    const auto emptyRoi   = ValueJson::parse("[]", {Type::ROI});
-    const auto emptyGroup = ValueJson::parse("[[]]", {Type::ROI});
-    roundtrip(emptyRoi, {Type::ROI});
-    roundtrip(emptyGroup, {Type::ROI});
+    roundtrip(Point::fromNested({{{1.25, 2.5}}, {}, {{3, 4}}}), {Type::Point});
+    roundtrip(Line::fromNested({{{1, 2, 3, 4}}}), {Type::Line});
+    roundtrip(Rectangle::fromNested({{}, {{16777217.125, -2.5, 3.75, 4.5, 17.5}}}), {Type::Rectangle});
+    roundtrip(Circle::fromNested({{}, {{2, 3, 1}}}), {Type::Circle});
+    roundtrip(Polygon::fromNested({{{0, 0, 3, 0, 3, 2}}}), {Type::Polygon});
+    const auto emptyRoi = ValueJson::parse("[]", {Type::Circle});
+    const auto emptyGroup = ValueJson::parse("[[]]", {Type::Circle});
+    roundtrip(emptyRoi, {Type::Circle});
+    roundtrip(emptyGroup, {Type::Circle});
     assert(!equalValues(emptyRoi, emptyGroup));
     for (const auto invalid : {"", "1,2", "1 trailing", "~", "yes", "[1,]", "NaN", "Infinity", ".nan"})
         rejects([&] { ValueJson::parse(invalid, {Type::Float}); });
@@ -115,10 +117,10 @@ int main()
     rejects([] { ValueJson::parse("[1]", {Type::Array, DType::Bool, 1}); });
     rejects([] { ValueJson::parse("[1]", {Type::Array, DType::String, 1}); });
     rejects([] { ValueJson::parse("[1e100]", {Type::Array, DType::Float32, 1}); });
-    for (const auto invalid : {"[3,1,2,3]", "[[[2,0,0,0,1,0]]]", "[[[3,1,2,-1]]]", "[[[9,1,2]]]"})
-        rejects([&] { ValueJson::parse(invalid, {Type::ROI}); });
+    for (const auto invalid : {"[1,2,3]", "[[[1,2]]]", "[[[1,2,-1]]]", "[[[1,2,3,4]]]"})
+        rejects([&] { ValueJson::parse(invalid, {Type::Circle}); });
     rejects([] { ValueJson::parse("[1]", {Type::Image}); });
-    for (const auto old : {"NumericArray", "StringArray", "ImageBatch", "Rect", "RoiBatch", "Unknown"})
+    for (const auto old : {"NumericArray", "StringArray", "ImageBatch", "Rect", "RoiBatch", "ROI", "Unknown"})
         rejects(
             [&]
             {
@@ -184,7 +186,20 @@ int main()
     assert(data[1].toObject().value("type") == "float64" && data[1].toObject().value("non_finite") == "Infinity");
     rejects([&] { ValueJson::decode(display, floating); });
     const PortValue images = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(7))});
-    rejects([&] { ValueJson::text(images, {Type::Image}); });
+    const auto restoredImage = std::get<DataRef<Image>>(ValueJson::parse(ValueJson::text(images, {Type::Image}), {Type::Image}));
+    assert(restoredImage.get().front().type() == CV_8UC1 && restoredImage.get().front().at<std::uint8_t>(1, 2) == 7);
+    TrainingSet set;
+    set.images.emplace(4, trainingFrame(4, cv::Mat(3, 5, CV_16UC3, cv::Scalar(1000, 2000, 3000)), ColorOrder::BGR));
+    set.records.emplace(8, TrainingRecord{8, 4, {{0, std::int64_t{9007199254740993LL}},
+        {1, Direction::fromNested({{{10, 20, 30, 90}}})}, {2, images}}});
+    set.records.emplace(9, TrainingRecord{9, std::nullopt, {{0, std::string{}}}});
+    const auto encodedSet = ValueJson::text(DataRef<TrainingSet>(set), {Type::TrainingSet});
+    const auto restoredSet = std::get<DataRef<TrainingSet>>(ValueJson::parse(encodedSet, {Type::TrainingSet}));
+    assert(restoredSet.get().images.at(4).pixels.type() == CV_16UC3);
+    assert(restoredSet.get().images.at(4).pixels.at<cv::Vec3w>(1, 2)[2] == 3000);
+    assert(restoredSet.get().images.at(4).colorOrder == ColorOrder::BGR);
+    assert(std::get<std::int64_t>(restoredSet.get().records.at(8).fields.at(0)) == 9007199254740993LL);
+    assert(!restoredSet.get().records.at(9).imageId);
     const auto description = ValueJson::encode(images, {Type::Image}, ValueJson::Purpose::Display).toObject();
     assert(description.value("type") == "Image" && description.value("count").toInteger() == 1);
     assert(description.value("images").toArray()[0].toObject().value("rows").toInteger() == 2);

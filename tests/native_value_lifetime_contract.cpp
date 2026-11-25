@@ -71,10 +71,9 @@ int main(int argc, char **argv)
         }
         else
         {
-            auto &record = std::get<DataRef<ROI>>(value).get()[0][0];
+            auto &record = std::get<visionrt::Rectangle>(value).get()[0][0];
             assert(record[1] == 16777217.125);
-            record[1] += 0.5;
-            assert(std::get<DataRef<ROI>>(alias).get()[0][0][1] == 16777217.625);
+            assert(&record == &std::get<visionrt::Rectangle>(alias).get()[0][0]);
         }
         value = Missing{};
         assert(!alive.expired() && !std::filesystem::exists(std::filesystem::u8path(marker)));
@@ -89,5 +88,5 @@ int main(int argc, char **argv)
 #endif
     }
     std::cout
-        << "Module-created writable Image, Array and ROI outlive adapters and unload after final payload release\n";
+        << "Module-created Image, Array and Rectangle outlive adapters and unload after final payload release\n";
 }

@@ -80,7 +80,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
 
     auto s2 = snapshot(update, 2);
     assert((s2 && s2->status.code == 0));
-    const auto &rois2 = std::get<DataRef<ROI>>(s2->outputs.at(3));
+    const auto &rois2 = std::get<visionrt::Rectangle>(s2->outputs.at(3));
     assert((rois2.get().size() == images1.get().size()));
 
     auto s3 = snapshot(update, 3);
@@ -205,7 +205,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     assert((binarised.size() == 1 && binarised[0].rows == 300 && binarised[0].cols == 400));
 
     const auto located = run(root / u8"02_工具示例" / u8"01_ROI定位与裁剪" / u8"ROI定位与裁剪.json", 3);
-    const auto &rois    = std::get<DataRef<ROI>>(snapshot(located, 2)->outputs.at(3)).get();
+    const auto &rois    = std::get<visionrt::Rectangle>(snapshot(located, 2)->outputs.at(3)).get();
     assert((rois.size() == 1 && rois[0].size() == 1));
     const auto &cropped = std::get<DataRef<Image>>(snapshot(located, 3)->outputs.at(2)).get();
     assert((cropped.size() == 1 && cropped[0].rows == 300 && cropped[0].cols == 60));
@@ -231,7 +231,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     for (const auto &gap : gaps[0][0]) assert((std::abs(gap - 20.0) < 0.5));
 
     const auto branch = run(root / u8"03_综合示例" / u8"01_多分支视觉检测" / u8"多分支视觉检测.json", 5);
-    const auto &branchRois = std::get<DataRef<ROI>>(snapshot(branch, 2)->outputs.at(3)).get();
+    const auto &branchRois = std::get<visionrt::Rectangle>(snapshot(branch, 2)->outputs.at(3)).get();
     assert((branchRois.size() == 1 && branchRois[0].size() == 1));
     const auto &branchCrop = std::get<DataRef<Image>>(snapshot(branch, 3)->outputs.at(2)).get();
     assert((branchCrop.size() == 1 && branchCrop[0].rows == 300 && branchCrop[0].cols == 60));
@@ -245,14 +245,14 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     // the identity, and the five trained wire tips as their classes in wire order.
     const auto cable = run(root / u8"03_综合示例" / u8"02_识别线缆颜色" / u8"识别线缆颜色.json", 3);
     const auto pose
-        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
-    assert((pose.size() == 1 && pose[0].size() == 3 && pose[0][0].size() == 3));
-    assert((std::abs(pose[0][0][0] - 1.0) < 1e-3 && std::abs(pose[0][1][1] - 1.0) < 1e-3));
-    assert((std::abs(pose[0][0][1]) < 1e-3 && std::abs(pose[0][1][0]) < 1e-3));
-    assert((std::hypot(pose[0][0][2], pose[0][1][2]) <= 0.75));
-    assert((std::abs(std::atan2(pose[0][1][0], pose[0][0][0]) * 180.0 / 3.14159265358979323846) <= 0.05));
+        = nestedOf<NestedVector<double, 2>>(std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
+    assert((pose.size() == 1 && pose[0].size() == 6));
+    assert((std::abs(pose[0][0] - 1.0) < 1e-3 && std::abs(pose[0][4] - 1.0) < 1e-3));
+    assert((std::abs(pose[0][1]) < 1e-3 && std::abs(pose[0][3]) < 1e-3));
+    assert((std::hypot(pose[0][2], pose[0][5]) <= 0.75));
+    assert((std::abs(std::atan2(pose[0][3], pose[0][0]) * 180.0 / 3.14159265358979323846) <= 0.05));
     // The reference edges are reported back on the picture they were trained on.
-    const auto foundEdges = std::get<DataRef<ROI>>(snapshot(cable, 2)->outputs.at(3)).get();
+    const auto foundEdges = std::get<Line>(snapshot(cable, 2)->outputs.at(3)).get();
     assert((foundEdges.size() == 1 && foundEdges[0].size() == 2));
     for (const auto &edge : foundEdges[0]) assert((RegionView(edge).kind() == RoiKind::Segment));
 
@@ -360,7 +360,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     {
         cv::Mat        mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         DataRef<Image> imgBatch(Image{(mat)});
-        DataRef<ROI>   emptyRois(ROI{{}});
+        auto emptyRois = Rectangle::fromEncoded(ROI{{}});
         Array          emptyScores  = Array::fromNested(NestedVector<float, 2>{{}});
         Array          emptyClasses = Array::fromNested(NestedVector<std::int64_t, 2>{{}});
         Array          emptyNames   = Array::fromNested(NestedVector<std::string, 2>{std::vector<std::string>{}});
@@ -382,7 +382,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
         assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 0));
 
-        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
+        const auto *outRois = std::get_if<visionrt::Rectangle>(&res.outputs[3]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].empty()));
 
         const auto *outScores = std::get_if<Array>(&res.outputs[4]);
@@ -409,7 +409,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         rois3.push_back(std::vector<double>{2, 10.0f, 10.0f, 20.0f, 20.0f, 5.0f});
         rois3.push_back(std::vector<double>{2, 30.0f, 30.0f, 40.0f, 40.0f, 15.0f});
         rois3.push_back(std::vector<double>{2, 50.0f, 50.0f, 60.0f, 60.0f, 30.0f});
-        DataRef<ROI> roiBatch(ROI{rois3});
+        auto roiBatch = Rectangle::fromEncoded(ROI{rois3});
 
         std::vector<float>        scoreVals = {0.20f, 0.70f, 0.95f};
         std::vector<std::int64_t> classVals = {10, 20, 30};
@@ -436,7 +436,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
         assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 2));
 
-        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
+        const auto *outRois = std::get_if<visionrt::Rectangle>(&res.outputs[3]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].size() == 2));
 
         // Target 1 ROI geometric fields
@@ -569,7 +569,7 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
         std::cerr << "ROI projection execute failed: " << testview::status(res).message << std::endl;
     }
     assert((testview::status(res).code == 0));
-    const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
+    const auto *outRois = std::get_if<visionrt::Rectangle>(&res.outputs[3]);
     assert((outRois && outRois->get().size() == 1 && !outRois->get()[0].empty()));
     const auto &r = outRois->get()[0][0];
     assert((roiKind(r) == RoiKind::Rectangle));

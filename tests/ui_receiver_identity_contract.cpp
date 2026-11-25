@@ -86,7 +86,7 @@ try
       "type": "int"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     write("python/custom/identity/source.py",
           "import threading\n"

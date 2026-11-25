@@ -325,20 +325,38 @@ Array arrayFromNumpy(const TypeSpec &expected, const py::handle &value, const Py
                                 storage.retain(value));
 }
 
-py::object fieldView(const TrainingFieldValue &field)
+py::object pythonType(const PortValue &value)
 {
-    return std::visit(
-        [](const auto &payload) -> py::object
-        {
-            using Payload = std::decay_t<decltype(payload)>;
-            if constexpr (std::is_same_v<Payload, Array>)
-                return arrayToPython(payload);
-            else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
-                return encodeList(payload.get());
-            else
-                return py::cast(payload);
-        },
-        field);
+    const auto type = typeOf(value);
+    if (!type) return py::none();
+    py::dict result;
+    result["type"] = static_cast<int>(type->type);
+    if (type->dtype) result["dtype"] = static_cast<int>(*type->dtype);
+    if (type->type == Type::Array) result["rank"] = type->rank;
+    return result;
+}
+
+py::dict dictionary(py::handle value, const std::string &path)
+{
+    if (!py::isinstance<py::dict>(value)) throw ContractError(path + " 必须是字典");
+    return py::reinterpret_borrow<py::dict>(value);
+}
+
+std::uint32_t identity(py::handle value, const std::string &path)
+{
+    const auto id = scalar<std::int64_t>(value, path);
+    if (id < 0 || id > std::numeric_limits<std::uint32_t>::max()) throw ContractError(path + " 编号超出范围");
+    return static_cast<std::uint32_t>(id);
+}
+
+TypeSpec nativeType(py::handle value, const std::string &path)
+{
+    const auto info = dictionary(value, path);
+    TypeSpec type{typeFromCode(scalar<std::int64_t>(info["type"], path + ".type"))};
+    if (info.contains("dtype")) type.dtype = static_cast<DType>(scalar<std::int64_t>(info["dtype"], path + ".dtype"));
+    if (info.contains("rank")) type.rank = static_cast<int>(scalar<std::int64_t>(info["rank"], path + ".rank"));
+    validateTypeSpec(type);
+    return type;
 }
 
 // A trainer reads the set by identity: images and records are dictionaries keyed by the numbers the
@@ -361,16 +379,62 @@ py::dict trainingView(const DataRef<TrainingSet> &set)
     for (const auto &[id, record] : value.records)
     {
         py::dict fields;
-        for (const auto &[fieldId, field] : record.fields) fields[py::int_(fieldId)] = fieldView(field);
+        py::dict types;
+        for (const auto &[fieldId, field] : record.fields)
+        {
+            fields[py::int_(fieldId)] = toPython(field);
+            types[py::int_(fieldId)] = pythonType(field);
+        }
         py::dict entry;
-        entry["image_id"]     = record.imageId;
+        entry["image_id"]     = record.imageId ? py::object(py::int_(*record.imageId)) : py::none();
         entry["fields"]       = std::move(fields);
+        entry["field_types"]  = std::move(types);
         records[py::int_(id)] = std::move(entry);
     }
     py::dict result;
     result["images"]  = std::move(images);
     result["records"] = std::move(records);
     return result;
+}
+
+DataRef<TrainingSet> trainingFromPython(py::handle value, const PythonStorage &storage, const std::string &path)
+{
+    const auto set = dictionary(value, path);
+    TrainingSet result;
+    for (const auto item : dictionary(set["images"], path + ".images"))
+    {
+        const auto id = identity(item.first, path + ".images");
+        const auto image = dictionary(item.second, path + ".images[" + std::to_string(id) + "]");
+        py::list batch;
+        batch.append(image["pixels"]);
+        const auto pixels = python::imageHeaders(batch, storage, path + ".pixels");
+        const auto order = static_cast<ColorOrder>(scalar<std::int64_t>(image["color_order"], path + ".color_order"));
+        result.images.emplace(id, TrainingImage{id, pixels.get().front(), order});
+    }
+    for (const auto item : dictionary(set["records"], path + ".records"))
+    {
+        TrainingRecord r;
+        r.id = identity(item.first, path + ".records");
+        const auto record = dictionary(item.second, path + ".records[" + std::to_string(r.id) + "]");
+        if (!record["image_id"].is_none()) r.imageId = identity(record["image_id"], path + ".image_id");
+        const auto types = dictionary(record["field_types"], path + ".field_types");
+        for (const auto field : dictionary(record["fields"], path + ".fields"))
+        {
+            const auto id = identity(field.first, path + ".fields");
+            const auto key = py::int_(id);
+            if (!types.contains(key)) throw ContractError(path + " 缺少训练字段类型");
+            const auto type = types[key];
+            if (type.is_none())
+            {
+                if (!field.second.is_none()) throw ContractError(path + " 缺失字段值必须为 None");
+                r.fields.emplace(id, Missing{});
+            }
+            else r.fields.emplace(id, fromPython(nativeType(type, path + ".field_types"), field.second, storage, path + ".fields"));
+        }
+        result.records.emplace(r.id, std::move(r));
+    }
+    validateTrainingSet(result);
+    return DataRef<TrainingSet>(std::move(result), {storage.retain(value)});
 }
 }
 
@@ -386,10 +450,12 @@ py::object toPython(const PortValue &value)
                 return py::none();
             else if constexpr (std::is_same_v<Payload, DataRef<Image>>)
                 return python::imageViews(payload);
-            else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
-                return encodeList(payload.get());
+            else if constexpr (isShapeValue<Payload>)
+                return encodeList(payload.nested());
             else if constexpr (std::is_same_v<Payload, Array>)
                 return arrayToPython(payload);
+            else if constexpr (std::is_same_v<Payload, Direction> || std::is_same_v<Payload, CoordinateFrame2D>)
+                return arrayToPython(payload.array());
             else if constexpr (std::is_same_v<Payload, DataRef<TrainingSet>>)
                 return trainingView(payload);
             else
@@ -420,22 +486,21 @@ PortValue fromPython(const TypeSpec &expected, py::handle value, const PythonSto
             return arrayFromNumpy(expected, value, storage, path);
         return arrayFromList(expected, value, path);
     case Type::TrainingSet:
-        throw ContractError(path + " 不能从 Python 构造训练集");
-    case Type::ROI:
-    {
-        auto result = decodeList<ROI>(value, path);
-        for (std::size_t group = 0; group < result.size(); ++group)
-            for (std::size_t record = 0; record < result[group].size(); ++record) try
-                {
-                    validateRoi(result[group][record]);
-                }
-                catch (const ContractError &error)
-                {
-                    throw ContractError(path + "[" + std::to_string(group) + "][" + std::to_string(record) + "]："
-                                        + error.what());
-                }
-        return DataRef<ROI>(std::move(result));
+        return trainingFromPython(value, storage, path);
+    case Type::Direction:
+        return Direction(py::isinstance<py::array>(value) ? arrayFromNumpy(Direction::storageType(), value, storage, path)
+                                                        : arrayFromList(Direction::storageType(), value, path));
+    case Type::CoordinateFrame2D:
+        return CoordinateFrame2D(py::isinstance<py::array>(value) ? arrayFromNumpy(CoordinateFrame2D::storageType(), value, storage, path)
+                                                                : arrayFromList(CoordinateFrame2D::storageType(), value, path));
+#define VRT_SHAPE(name, kind, view, code, wire, label) \
+    case Type::name: { \
+        auto coordinates = decodeList<ROI>(value, path); \
+        try { return name::fromNested(std::move(coordinates)); } \
+        catch (const ContractError &error) { throw ContractError(path + ": " + error.what()); } \
     }
+#include <visionrt/contracts/ShapeKinds.def>
+#undef VRT_SHAPE
     }
     throw ContractError(path + " 的类型不受支持");
 }

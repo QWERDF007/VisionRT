@@ -2,6 +2,8 @@
 
 #include "core/ValueJson.h"
 #include "ui/DisplayTypes.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace visionrt {
 
@@ -183,7 +185,9 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
     {
         QStringList lines;
         for (const auto &option : port.options)
-            lines.append(ValueJson::text(option, port.type));
+            lines.append(option.label.empty() ? ValueJson::text(option.value, port.type)
+                : QString::fromUtf8(QJsonDocument(QJsonObject{{"value", ValueJson::encode(option.value, port.type)},
+                    {"label", QString::fromStdString(option.label)}}).toJson(QJsonDocument::Compact)));
         return lines.join(QLatin1Char('\n'));
     }
     case TabRole:
@@ -455,7 +459,17 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
             candidate.options.clear();
             for (const auto &line : properties.value("options").toString().split(QLatin1Char('\n')))
                 if (!line.trimmed().isEmpty())
-                    candidate.options.push_back(parseEditorValue(line.trimmed(), candidate.type));
+                {
+                    const auto text = line.trimmed();
+                    if (text.startsWith(QLatin1Char('{')))
+                    {
+                        const auto object = QJsonDocument::fromJson(text.toUtf8()).object();
+                        if (object.size() != 2 || !object.contains("value") || !object.value("label").isString())
+                            throw ContractError("候选项对象需要 value 和 label");
+                        candidate.options.emplace_back(ValueJson::decode(object.value("value"), candidate.type), object.value("label").toString().toStdString());
+                    }
+                    else candidate.options.push_back(parseEditorValue(text, candidate.type));
+                }
         }
         if (properties.contains("showImage"))
         {
@@ -590,10 +604,9 @@ void ToolPortListModel::requireRelationTarget(const PortDefinition &port, Relati
     }
     if (kind == RelationKind::Alignment)
     {
-        if (self || reference.stage != PortStage::Inputs
-            || target->type != TypeSpec{Type::Array, DType::Float64, 3})
+        if (self || target->typeFrom || target->type != kAlignmentType)
             throw ContractError(std::string(relationLabel(kind))
-                                + " 必须指向另一个 Array(float64, 3) 输入：" + formatPortRef(reference));
+                                + " 必须指向另一个二维浮点数数组参数：" + formatPortRef(reference));
         return;
     }
     if (self || reference.stage != stage_ || target->type != TypeSpec{Type::String} || port.editor != EditorKind::Path)
@@ -617,14 +630,14 @@ QVariantList ToolPortListModel::relationCandidates(int row, RelationKind kind) c
 
     const auto &port = (*ports)[businessIndex];
     const auto  stageLabel = [](PortStage stage) {
-        return stage == PortStage::Init ? "初始化" : stage == PortStage::Inputs ? "输入" : "输出";
+        return stage == PortStage::Init ? "初始化" : stage == PortStage::Train ? "训练" : stage == PortStage::Inputs ? "输入" : "输出";
     };
 
     // The candidate list is exactly what the relation rule accepts: the same check that guards an
     // edit decides what the editor may offer, so the two can never disagree.
-    for (const auto stage : {PortStage::Init, PortStage::Inputs, PortStage::Outputs})
+    for (const auto stage : {PortStage::Init, PortStage::Train, PortStage::Inputs, PortStage::Outputs})
     {
-        const auto &list = stage == PortStage::Init    ? draft_->initParams
+        const auto &list = stage == PortStage::Init    ? draft_->initParams : stage == PortStage::Train ? draft_->trainParams
                            : stage == PortStage::Inputs ? draft_->inputs
                                                         : draft_->outputs;
         for (const auto &other : list)

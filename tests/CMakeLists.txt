@@ -29,6 +29,10 @@ visionrt_contract(tool_registry_contract visionrt_core)
 visionrt_contract(definition_json_contract visionrt_core)
 visionrt_contract(tools_package_contract visionrt_core)
 visionrt_contract(custom_tool_store_contract visionrt_core)
+visionrt_contract(calibration_example_contract visionrt_runtime LABELS bridge)
+target_link_libraries(calibration_example_contract PRIVATE visionrt_plugins visionrt_python_testing Qt6::Core)
+target_compile_definitions(calibration_example_contract PRIVATE
+    VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}" VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME validator_cli_contract COMMAND "${VISIONRT_TEST_PYTHON_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
     --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}"
@@ -141,6 +145,8 @@ if(VISIONRT_BUILD_APP)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
     visionrt_contract(viewport_contract visionrt_ui)
+    visionrt_contract(geometry_overlay_contract visionrt_ui)
+    target_link_libraries(geometry_overlay_contract PRIVATE Qt6::Test)
     visionrt_contract(viewport_pixel_contract visionrt_ui)
     visionrt_contract(roi_interaction_contract visionrt_ui)
     visionrt_contract(viewport_lifetime_contract visionrt_ui)
@@ -304,6 +310,8 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
     visionrt_contract(workbench_training_contract visionrt_ui)
+    visionrt_contract(workbench_parameter_stages_contract visionrt_ui)
+    target_link_libraries(workbench_parameter_stages_contract PRIVATE Qt6::Test)
     target_link_libraries(workbench_training_contract PRIVATE visionrt_plugins Qt6::Test)
     target_compile_definitions(workbench_training_contract PRIVATE
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"

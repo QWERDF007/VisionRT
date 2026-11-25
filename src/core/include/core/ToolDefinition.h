@@ -57,7 +57,12 @@ VISIONRT_CORE_API void validateIdentifier(const std::string &value, bool isPort)
 VISIONRT_CORE_API void stripHostPorts(ToolDefinition &def);
 
 // Fixed parameter pages shared by the validator and the workbench.
-VISIONRT_CORE_API std::span<const std::string_view> toolTabs() noexcept;
+struct ParameterTabDefinition
+{
+    ParameterTab id;
+    std::string_view name;
+};
+VISIONRT_CORE_API std::span<const ParameterTabDefinition> toolTabs() noexcept;
 
 // The one place that turns a declaration into an effective contract: host-owned ports are
 // materialised at their reserved numbers, every value-carrying port receives its explicit default

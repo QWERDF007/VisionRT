@@ -10,13 +10,21 @@ PortValue copyProjectLiteral(const PortValue &value)
             using Payload = std::decay_t<decltype(payload)>;
             if constexpr (std::is_same_v<Payload, Array>)
                 return payload.clone();
-            else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
-                return DataRef<ROI>(payload.get());
+            else if constexpr (std::is_same_v<Payload, Direction> || std::is_same_v<Payload, CoordinateFrame2D> || isShapeValue<Payload>)
+                return payload.clone();
             else if constexpr (std::is_same_v<Payload, DataRef<Image>>)
             {
-                if (!payload.get().empty())
-                    throw ContractError("工程图像字面量只能是 Missing 或空列表");
-                return DataRef<Image>(Image{});
+                Image images;
+                for (const auto &image : payload.get()) images.push_back(image.clone());
+                return DataRef<Image>(std::move(images));
+            }
+            else if constexpr (std::is_same_v<Payload, DataRef<TrainingSet>>)
+            {
+                auto set = payload.get();
+                for (auto &[id, image] : set.images) image.pixels = image.pixels.clone();
+                for (auto &[id, record] : set.records)
+                    for (auto &[field, value] : record.fields) value = copyProjectLiteral(value);
+                return DataRef<TrainingSet>(std::move(set));
             }
             else
                 return payload;

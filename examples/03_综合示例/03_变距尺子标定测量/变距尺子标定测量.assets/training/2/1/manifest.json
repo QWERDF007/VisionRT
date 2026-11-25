@@ -1,0 +1,11 @@
+{
+  "schema_version": 5,
+  "artifacts": [
+    {
+      "id": "calibration-model",
+      "file": "models/calibration-model.bin",
+      "format": "visiontools.planar-calibration",
+      "version": 2
+    }
+  ]
+}

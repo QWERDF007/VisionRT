@@ -13,7 +13,6 @@ ColumnLayout {
     signal selectTypeEditorRequested(string node)
     objectName: "parameter_" + parameter.id
     readonly property bool isMeta: !!parameter.isMeta
-    readonly property bool alwaysUpstream: parameter.type === PortType.Image
     readonly property bool conditionRow: parameter.editor === EditorKind.Condition || parameter.editor === EditorKind.ConditionUpstream
     // The source button only reports the input mode. It never infers the mode from a
     // source, from a retained binding or this round's success.
@@ -22,7 +21,7 @@ ColumnLayout {
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled && (!parameter.recordScoped || !!parameter.recordId)
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string displayText: parameter.displayText === undefined ? root.valueText : parameter.displayText
-    readonly property string parameterKey: nodeId + ":" + parameter.stage + ":" + (parameter.recordId || "") + ":" + parameter.id
+    readonly property string parameterKey: nodeId + ":" + parameter.stage + ":" + !!parameter.recordScoped + ":" + (parameter.recordScoped ? parameter.datasetId : "") + ":" + (parameter.recordId || "") + ":" + parameter.id
     readonly property real numberValue: Number(root.valueText)
     readonly property real minimumValue: parameter.minimum === undefined || parameter.minimum === "" ? -Infinity : Number(parameter.minimum)
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
@@ -38,13 +37,14 @@ ColumnLayout {
         return app.setParameter(parameter.id, parameter.init, text);
     }
     function clearRegions() {
-        return parameter.stage === PortStage.Train ? commit("[[]]") : app.clearRoi(parameter.id);
+        return commit("[]");
     }
     function drawRegion(shape) {
-        return parameter.stage === PortStage.Train ? app.startTrainingRoi(parameter.id, shape) : app.startRoiDraw(parameter.id, shape);
+        return app.startParameterRoi(parameter.id, parameter.stage, shape, !!parameter.recordScoped);
     }
     onParameterKeyChanged: {
         pathPicker.close();
+        imagePicker.close();
     }
 
     RowLayout {
@@ -103,7 +103,7 @@ ColumnLayout {
                         id: editorLoader
                         anchors.fill: parent
                         enabled: root.editable
-                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor : root.isMeta ? metaEditor : root.upstream ? upstreamEditor : (root.parameter.options || []).length > 0 ? choiceEditor : (root.parameter.type === PortType.Bool && (root.parameter.editor === EditorKind.Switch || root.parameter.editor === EditorKind.Recursive)) ? toggleSwitchComponent : root.parameter.type === PortType.Bool ? boolEditor : root.parameter.type === PortType.Int ? integerEditor : root.parameter.type === PortType.Float ? floatEditor : (root.parameter.type === PortType.ROI && root.parameter.editor === EditorKind.Rect) ? rectEditor : root.parameter.type === PortType.ROI ? regionsEditor : root.parameter.type === PortType.Array ? arrayEditor : textEditor
+                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor : root.isMeta ? metaEditor : root.upstream ? upstreamEditor : root.parameter.datasetEditor ? datasetEditor : root.parameter.type === PortType.Image ? imageEditor : (root.parameter.options || []).length > 0 ? choiceEditor : (root.parameter.type === PortType.Bool && (root.parameter.editor === EditorKind.Switch || root.parameter.editor === EditorKind.Recursive)) ? toggleSwitchComponent : root.parameter.type === PortType.Bool ? boolEditor : root.parameter.type === PortType.Int ? integerEditor : root.parameter.type === PortType.Float ? floatEditor : (root.parameter.isShape && root.parameter.editor === EditorKind.Rect) ? rectEditor : root.parameter.isShape ? regionsEditor : root.parameter.type === PortType.Array || root.parameter.type === PortType.Direction || root.parameter.type === PortType.CoordinateFrame2D || root.parameter.type === PortType.TrainingSet ? arrayEditor : textEditor
                     }
                 }
 
@@ -118,7 +118,7 @@ ColumnLayout {
                 ParameterActionButton {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: root.parameter.stage !== PortStage.Train && !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.conditionRow)
+                    visible: root.parameter.stage === PortStage.Inputs && (!root.isMeta || root.conditionRow)
                     Layout.fillHeight: true
                     padding: 0
                     verticalPadding: 0
@@ -166,6 +166,13 @@ ColumnLayout {
                     if (root.editable)
                         root.parameter.stage === PortStage.Train ? app.setTrainingParameterPath(root.parameter.id, path) : app.setParameterPath(root.parameter.id, root.parameter.init, path);
                 }
+            }
+            FileDialog {
+                id: imagePicker
+                title: "选择图像"
+                fileMode: FileDialog.OpenFile
+                nameFilters: ["图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)", "所有文件 (*)"]
+                onAccepted: app.loadParameterImage(root.parameter.id, root.parameter.stage, selectedFile, root.parameter.recordId || "")
             }
         }
     }
@@ -290,7 +297,7 @@ ColumnLayout {
                 app.logParameterDraftRejected(root.parameter.id + "：" + text);
             }
             stepValue: function (direction, text) {
-                return root.editable && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text, root.parameter.stage);
+                return root.editable && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text, root.parameter.stage, root.parameter.recordId || "");
             }
         }
     }
@@ -467,6 +474,34 @@ ColumnLayout {
     }
 
     Component {
+        id: imageEditor
+        ParameterTextField {
+            flat: true
+            readOnly: true
+            text: root.displayText
+            actionIcon: QuiFontIcon.FolderOpen
+            actionText: "选择图像"
+            onActionRequested: imagePicker.open()
+        }
+    }
+    Component {
+        id: datasetEditor
+        ParameterTextField {
+            flat: true
+            readOnly: true
+            text: root.displayText
+            actionIcon: QuiFontIcon.Edit
+            actionText: "编辑训练集"
+            secondaryActionIcon: QuiFontIcon.Add
+            secondaryActionText: "添加记录"
+            onSecondaryActionRequested: app.addTrainingRecord(root.parameter.id)
+            onActionRequested: {
+                app.selectTrainingDataset(root.parameter.id);
+                app.trainingMode = true;
+            }
+        }
+    }
+    Component {
         id: textEditor
         ParameterTextField {
             id: field
@@ -588,7 +623,7 @@ ColumnLayout {
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape > 0
 
             leadingActionIcon: QuiFontIcon.RectangularClipping
-            leadingActionText: isDrawing ? "正在绘制..." : ({1:"画线",2:"画矩形",3:"画圆",4:"画多边形",5:"画点"})[root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle]
+            leadingActionText: isDrawing ? "正在绘制..." : "画" + root.parameter.typeDisplay
             leadingActionActive: isDrawing
 
             actionIcon: hasRois ? QuiFontIcon.Clear : 0
@@ -598,40 +633,10 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    root.drawRegion(root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle);
+                    root.drawRegion(root.parameter.roiDrawShape);
                 }
             }
             onActionRequested: root.clearRegions()
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                onClicked: shapeMenu.open()
-            }
-
-            Menu {
-                id: shapeMenu
-                MenuItem {
-                    text: "画矩形"
-                    onTriggered: root.drawRegion(RoiDrawShape.DrawRectangle)
-                }
-                MenuItem {
-                    text: "画圆"
-                    onTriggered: root.drawRegion(RoiDrawShape.DrawCircle)
-                }
-                MenuItem {
-                    text: "画线"
-                    onTriggered: root.drawRegion(RoiDrawShape.DrawLine)
-                }
-                MenuItem {
-                    text: "画多边形"
-                    onTriggered: root.drawRegion(RoiDrawShape.DrawPolygon)
-                }
-                MenuItem {
-                    text: "画点"
-                    onTriggered: root.drawRegion(RoiDrawShape.DrawPoint)
-                }
-            }
 
             function sync(force) {
                 const currentText = root.displayText;
@@ -686,7 +691,7 @@ ColumnLayout {
             onActionRequested: {
                 text = "[]";
                 committedText = "[]";
-                root.commit("[]");
+                root.commit(root.parameter.emptyLiteral || "[]");
             }
 
             function sync(force) {

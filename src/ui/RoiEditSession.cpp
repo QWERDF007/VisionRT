@@ -7,11 +7,6 @@
 
 namespace visionrt {
 
-RoiEditSession::RoiEditSession(ProjectEditor &editor)
-    : editor_(editor)
-{
-}
-
 std::uint64_t RoiEditSession::begin(Start start)
 {
     end();
@@ -19,7 +14,6 @@ std::uint64_t RoiEditSession::begin(Start start)
                 start.node,
                 start.kind,
                 std::move(start.input),
-                std::move(start.flow),
                 std::move(start.type),
                 start.singleRectangle,
                 std::move(start.original),
@@ -46,6 +40,14 @@ void RoiEditSession::end()
 PortId RoiEditSession::input() const noexcept
 {
     return draft_ ? draft_->input : 0;
+}
+
+PortStage RoiEditSession::parameterStage() const noexcept
+{
+    if (!draft_) return PortStage::Inputs;
+    return draft_->kind == RoiTargetKind::Initialization ? PortStage::Init
+        : draft_->kind == RoiTargetKind::TrainingParameter || draft_->kind == RoiTargetKind::Training ? PortStage::Train
+        : PortStage::Inputs;
 }
 
 RoiEditTarget RoiEditSession::target(int index) const
@@ -95,10 +97,10 @@ bool RoiEditSession::stageGeometry(const RoiEditTarget &target, const EncodedReg
         return {};
 
     if (draft_->singleRectangle)
-        draft_->draft = DataRef<ROI>(value ? ROI{{*value}} : ROI{});
+        draft_->draft = shapeValue(draft_->type.type, value ? ROI{{*value}} : ROI{});
     else
     {
-        auto updated = std::get<DataRef<ROI>>(draft_->draft).get();
+        auto updated = *shapeRegions(draft_->draft);
         updated.resize(std::max(updated.size(), static_cast<std::size_t>(target.imageIndex) + 1));
         auto &current = updated[static_cast<std::size_t>(target.imageIndex)];
         if (target.roiIndex < 0 && value)
@@ -112,7 +114,7 @@ bool RoiEditSession::stageGeometry(const RoiEditTarget &target, const EncodedReg
         }
         else
             return {};
-        draft_->draft = DataRef<ROI>(std::move(updated));
+        draft_->draft = shapeValue(draft_->type.type, std::move(updated));
     }
     validateValue(draft_->type, draft_->draft);
     return true;
@@ -135,14 +137,13 @@ bool RoiEditSession::previewGeometry(const RoiEditTarget &target, const EncodedR
     return stageGeometry(target, &value);
 }
 
-RoiEditSession::Commit RoiEditSession::commitGeometry(const RoiEditTarget &target, const EncodedRegion *value)
+bool RoiEditSession::commitGeometry(const RoiEditTarget &target, const EncodedRegion *value)
 {
     cancelPreview();
     if (!stageGeometry(target, value))
         return {};
-    InputBinding committed{BindingMode::Literal, draft_->draft, std::nullopt};
-    draft_->original = committed;
-    return {true, editor_.setBinding(draft_->flow.toStdString(), draft_->node, draft_->input, std::move(committed))};
+    draft_->original = {BindingMode::Literal, draft_->draft, std::nullopt};
+    return true;
 }
 
 } // namespace visionrt

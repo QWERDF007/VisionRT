@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     "file": "tool.py",
     "symbol": "execute"
   },
-  "schema_version": 2
+  "schema_version": 4
 })";
                 }
                 {
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
       "type": "string"
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })";
                     const auto code = std::filesystem::path(external.path().toStdWString()) / "code";
                     std::filesystem::create_directories(code / "trainingprobe");
@@ -235,14 +235,14 @@ def execute(inputs):
                         {1, images}
                     });
                     assert(testview::status(result).code == 0 && testview::businessCount(result) == 1);
-                    const auto &groups = std::get<DataRef<ROI>>(result.outputs.at(2)).get();
+                    const auto &groups = std::get<visionrt::Rectangle>(result.outputs.at(2)).get();
                     assert(groups.size() == 2);
                     assert((groups[0].front() == std::vector<double>{2, 0, 0, 3, 2, 0}));
                     assert((groups[1].front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
                     const auto empty = roi->execute({
                         {1, DataRef<Image>(Image{})}
                     });
-                    assert(testview::status(empty).code == 0 && std::get<DataRef<ROI>>(empty.outputs.at(2)).get().empty());
+                    assert(testview::status(empty).code == 0 && std::get<visionrt::Rectangle>(empty.outputs.at(2)).get().empty());
                     assert(roi->release().code == 0);
                 }
                 {

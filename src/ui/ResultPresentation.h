@@ -107,6 +107,7 @@ public:
     ResultSlot::Snapshot                  displaySnapshot(const NodeDefinition &node) const;
     // The bound value of an input, read through this module's snapshots. One lookup, no second copy.
     const PortValue                      *resolvedInput(const NodeDefinition &node, PortId input) const;
+    PortValue resolvedValue(const NodeDefinition &node, PortRef reference) const;
 
     // One polled node. Returns true when its visible role or result changed.
     bool applyNode(NodeId node, bool active, const std::shared_ptr<const NodeDiagnostic> &lifecycle,
@@ -166,6 +167,7 @@ public:
     }
 
 private:
+    const PortDefinition *roiDeclaration() const;
     struct TextResult
     {
         QString       text;
@@ -223,6 +225,7 @@ private:
     RegionGroup                          displayInputs_;
     std::vector<RoiEditTarget>           displayInputTargets_;
     RegionGroup                          displayOutputs_;
+    std::vector<GeometryOverlay> displayGeometry_;
     std::optional<RoiEditTarget>         displayRoiTarget_;
     bool                                 suspended_ = false;
     QPointer<ImageViewport>              viewport_;

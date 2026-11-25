@@ -216,7 +216,7 @@ void candidateAndRawPreservation(const QString &directory)
     catch (const std::exception &error)
     {
         const std::string message = error.what();
-        require(message.find("需要标准 JSON 文档，offset=") != std::string::npos
+        require(message.find("JSON 解析失败（位置 ") != std::string::npos
                     && message.find(utf8Path(path(source))) != std::string::npos,
                 "legacy syntax failure lost its JSON position or source file");
     }
@@ -550,7 +550,7 @@ void retiredInitialization(const QString &directory)
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 4
 })");
     auto raw = savedNode("9007199254740993", "");
     raw.insert("init_params",
@@ -997,17 +997,77 @@ void rejectsHostExecutionGuard(const QString &directory)
 void trainingAssets(const QString &directory)
 {
     const auto declaration = R"json({
-      "schema_version":2,"name_en":"ProbeAssets","name_zh":"资产探针","version":"1.0.0",
-      "implementation":{"kind":"cpp"},
-      "train_params":[
-        {"id":7,"name_zh":"模型路径","type":"string","scope":"tool"},
-        {"id":1,"name_zh":"采样区","type":"roi","scope":"record","canvas":{"min":1,"max":2}}
-      ],
-      "inputs":[{"id":1,"name_zh":"图像","type":"image"}],
-      "outputs":[{"id":2,"name_zh":"模型路径","type":"string"}],
-      "training":{"image":{"stage":"inputs","id":1},"max_records":1,
-        "artifacts":[{"id":"model","source_port":2,"format":"probe.model","version":1,"target":{"stage":"train_params","id":7}}]}
-    })json";
+  "schema_version": 4,
+  "name_en": "ProbeAssets",
+  "name_zh": "资产探针",
+  "version": "1.0.0",
+  "implementation": {
+    "kind": "cpp"
+  },
+  "train_params": [
+    {
+      "id": 7,
+      "name_zh": "模型路径",
+      "type": "string"
+    },
+    {
+      "id": 0,
+      "name_zh": "样本",
+      "type": "training_set"
+    }
+  ],
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "图像",
+      "type": "image"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "模型路径",
+      "type": "string"
+    }
+  ],
+  "training": {
+    "datasets": [
+      {
+        "parameter": 0,
+        "image": {
+          "stage": "inputs",
+          "id": 1
+        },
+        "max_records": 1,
+        "fields": [
+          {
+            "id": 1,
+            "name_zh": "采样区",
+            "type": "rectangle",
+            "constraints": {
+              "regions": {
+                "min": 1,
+                "max": 2
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "artifacts": [
+      {
+        "id": "model",
+        "source_port": 2,
+        "format": "probe.model",
+        "version": 1,
+        "target": {
+          "stage": "train_params",
+          "id": 7
+        }
+      }
+    ]
+  }
+})json";
     ToolRegistry registry;
     auto         tool   = parseToolDefinitionJson(declaration);
     tool.definitionPath = path(directory + "/ProbeAssets.json");
@@ -1022,7 +1082,7 @@ void trainingAssets(const QString &directory)
             "training asset fixture directory was not created");
     put(QString::fromStdWString((revision / L"models" / L"model.bin").wstring()), "MODEL");
     put(QString::fromStdWString((revision / L"manifest.json").wstring()),
-        R"({"schema_version":4,"artifacts":[{"id":"model","file":"models/model.bin"}]})");
+        R"({"schema_version":5,"artifacts":[{"id":"model","file":"models/model.bin"}]})");
     const std::vector<LiteralWrite> writes{{PortStage::Train, 7, utf8Path((revision / L"models" / L"model.bin").lexically_relative(path(directory)))}};
     require(editor.setLiteralWrites("flow_1", nodeId, writes, [&] { return revision; }),
             "the revision reference was not stored");

@@ -10,7 +10,6 @@
 #include <QScopeGuard>
 #include <QUuid>
 #include <algorithm>
-#include <cstring>
 #include <system_error>
 
 namespace visionrt::training {
@@ -34,62 +33,6 @@ int nextRevision(const std::filesystem::path &base)
 }
 } // namespace
 
-void writeFrame(const cv::Mat &pixels, ColorOrder order, const QString &path)
-{
-    if (pixels.empty())
-        throw ContractError("训练图为空");
-    QByteArray bytes(static_cast<qsizetype>(pixels.total() * pixels.elemSize()), Qt::Uninitialized);
-    if (pixels.isContinuous())
-        std::memcpy(bytes.data(), pixels.data, static_cast<std::size_t>(bytes.size()));
-    else
-    {
-        cv::Mat packed;
-        pixels.copyTo(packed);
-        std::memcpy(bytes.data(), packed.data, static_cast<std::size_t>(bytes.size()));
-    }
-    const QJsonObject root{
-        {       "rows",                           pixels.rows},
-        {       "cols",                           pixels.cols},
-        {       "type",                         pixels.type()},
-        {"color_order",               static_cast<int>(order)},
-        {       "data", QString::fromLatin1(bytes.toBase64())}
-    };
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly))
-        throw ContractError("无法写入训练图：" + file.errorString().toStdString());
-    const auto content = QJsonDocument(root).toJson(QJsonDocument::Compact);
-    if (file.write(content) != content.size() || !file.commit())
-        throw ContractError("无法提交训练图：" + file.errorString().toStdString());
-}
-
-void readFrame(const QString &path, cv::Mat &pixels, ColorOrder &order)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        throw ContractError("无法读取训练图：" + file.errorString().toStdString());
-    const auto bytes = file.readAll();
-    if (path.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive))
-    {
-        QJsonParseError parseError;
-        const auto      document = QJsonDocument::fromJson(bytes, &parseError);
-        if (parseError.error != QJsonParseError::NoError || !document.isObject())
-            throw ContractError("训练图不是有效的 JSON：" + parseError.errorString().toStdString());
-        const auto root = document.object();
-        const auto rows = root.value("rows").toInt();
-        const auto cols = root.value("cols").toInt();
-        const auto type = root.value("type").toInt();
-        const auto raw  = QByteArray::fromBase64(root.value("data").toString().toLatin1());
-        if (rows <= 0 || cols <= 0 || type < 0
-            || raw.size() != static_cast<qsizetype>(CV_ELEM_SIZE1(type) * CV_MAT_CN(type) * rows * cols))
-            throw ContractError("训练图数据不完整");
-        pixels = cv::Mat(rows, cols, type).clone();
-        std::memcpy(pixels.data, raw.constData(), static_cast<std::size_t>(raw.size()));
-        order = static_cast<ColorOrder>(root.value("color_order").toInt());
-        return;
-    }
-    throw ContractError("训练原图格式不支持");
-}
-
 Revision::Revision(const std::filesystem::path &base, const TrainingSession &draft,
                    const std::map<std::string, ModelArtifact> &models,
                    const std::map<std::string, std::filesystem::path> &destinations)
@@ -103,17 +46,8 @@ Revision::Revision(const std::filesystem::path &base, const TrainingSession &dra
             std::error_code ignored;
             std::filesystem::remove_all(directory_, ignored);
         });
-    std::filesystem::create_directories(directory_ / L"images");
-    if (!models.empty())
-        std::filesystem::create_directories(directory_ / L"models");
-    std::map<TrainingImageId, QString> images;
-    for (const auto &image : draft.images())
-    {
-        const auto relative = QStringLiteral("images/image-%1.json").arg(image.id);
-        writeFrame(image.pixels, image.colorOrder,
-                   QString::fromStdWString((directory_ / std::filesystem::path(relative.toStdWString())).wstring()));
-        images.emplace(image.id, relative);
-    }
+    std::filesystem::create_directories(directory_);
+    if (!models.empty()) std::filesystem::create_directories(directory_ / L"models");
     std::map<std::string, QString> artifacts;
     for (const auto &[id, model] : models)
     {
@@ -129,7 +63,7 @@ Revision::Revision(const std::filesystem::path &base, const TrainingSession &dra
     }
     QSaveFile file(QString::fromStdWString((directory_ / L"manifest.json").wstring()));
     file.setDirectWriteFallback(false);
-    const auto content = QJsonDocument(draft.manifest(images, artifacts)).toJson(QJsonDocument::Indented);
+    const auto content = QJsonDocument(draft.manifest(artifacts)).toJson(QJsonDocument::Indented);
     if (!file.open(QIODevice::WriteOnly) || file.write(content) != content.size() || !file.commit())
         throw ContractError("无法提交训练清单：" + file.errorString().toStdString());
     std::filesystem::rename(directory_, destination);

@@ -461,8 +461,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         continue;
                     for (const auto &input : definition->inputs)
                     {
-                        if (input.type.type == Type::ROI && input.image && *input.image == *output.sameGeometryAs)
-                            snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
+                        if (isGeometryType(input.type.type) && input.image && *input.image == *output.sameGeometryAs)
+                            snapshot->geometryInputs.emplace(input.id, inputs.at(input.id));
                     }
                 }
             }
@@ -503,7 +503,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     {
         // A failed node publishes its status while business outputs remain unavailable.
         result.outputs.clear();
-        snapshot->roiInputs.clear();
+        snapshot->geometryInputs.clear();
         snapshot->status = std::move(frameworkStatus);
         for (const auto &port : definition->outputs)
             if (!isReservedPort(PortStage::Outputs, port.id))

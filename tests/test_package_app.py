@@ -97,7 +97,7 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
-            "schema_version": 2,
+            "schema_version": 4,
             "name_en": "test.plugin", "name_zh": "部署测试",
             "version": "1.0.0", "implementation": {"kind": "cpp"},
         }
@@ -270,6 +270,19 @@ class ToolsDeploymentContract(unittest.TestCase):
 
 
 class ExampleProjectsContract(unittest.TestCase):
+    def test_source_images_share_the_examples_images_tree(self) -> None:
+        examples = package_app.REPO_ROOT / package_app.EXAMPLES_DIRECTORY
+        images = list(examples.rglob("*.png"))
+        self.assertTrue(images)
+        for image in images:
+            self.assertTrue(image.is_relative_to(examples / "images"), str(image))
+        for relative in package_app.REQUIRED_EXAMPLE_PROJECTS:
+            project = examples / relative
+            document = json.loads(project.read_text(encoding="utf-8"))
+            references = [text for text in package_app.example_texts(document) if text.startswith("examples/images/")]
+            self.assertTrue(references, str(relative))
+            self.assertTrue(all((package_app.REPO_ROOT / text).exists() for text in references), references)
+
     def test_json_projects_are_checked_without_reading_training_assets(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-example-json-") as directory:
             root = Path(directory)
