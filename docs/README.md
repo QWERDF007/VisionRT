@@ -22,7 +22,7 @@
 | 可复用参数页与阶段编辑 | [公共页](../src/ui/qml/ParameterPage.qml)、[初始化页](../src/ui/qml/InitializationParameterPage.qml)、[训练页](../src/ui/qml/TrainingParameterPage.qml)、[普通输入页](../src/ui/qml/InputParameterPage.qml)、[实际控制器验证](../tests/workbench_parameter_stages_contract.cpp) |
 | 具体形状参数 | [类型映射](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeKinds.def)、[类型化批次](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeValues.h)、[形状和连接验证](../3rdparty/VisionRTContracts/tests/test_geometry_values_contract.cpp)、[实际窗口编辑与连接限制](../tests/workbench_roi.cpp) |
 | 方向与二维坐标系 | [共享值](../3rdparty/VisionRTContracts/include/visionrt/contracts/GeometryValues.h)、[叠加绘制](../src/ui/RoiOverlay.cpp)、[缩放平移验证](../tests/geometry_overlay_contract.cpp) |
-| 平面标定与测量示例 | [示例入口](../examples/综合示例/变距尺子标定测量/README.md)、[原生训练与完整流程验证](../tests/calibration_example_contract.cpp)、[集中图片](../examples/images/) |
+| 平面标定与综合示例 | [示例目录](../examples/README.md)、[变距标定验证](../tests/calibration_example_contract.cpp)、[畸变校正与引脚检测验证](../tests/merlic_examples_contract.cpp)、[集中图片](../examples/images/) |
 | 日志与诊断 | [日志服务](../src/log/include/log/LogService.h)、[宿主错误](../src/core/include/core/Errors.def)、[诊断投影](../src/ui/Diagnostics.cpp) |
 
 ## 工作台

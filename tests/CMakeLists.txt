@@ -33,6 +33,10 @@ visionrt_contract(calibration_example_contract visionrt_runtime LABELS bridge)
 target_link_libraries(calibration_example_contract PRIVATE visionrt_plugins visionrt_python_testing Qt6::Core)
 target_compile_definitions(calibration_example_contract PRIVATE
     VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}" VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+visionrt_contract(merlic_examples_contract visionrt_runtime LABELS bridge)
+target_link_libraries(merlic_examples_contract PRIVATE visionrt_plugins visionrt_python_testing Qt6::Core)
+target_compile_definitions(merlic_examples_contract PRIVATE
+    VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}" VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME validator_cli_contract COMMAND "${VISIONRT_TEST_PYTHON_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
     --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}"

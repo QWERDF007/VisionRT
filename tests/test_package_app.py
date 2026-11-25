@@ -277,10 +277,12 @@ class ExampleProjectsContract(unittest.TestCase):
             "综合示例/多分支视觉检测/多分支视觉检测.vrtapp",
             "综合示例/识别线缆颜色/识别线缆颜色.vrtapp",
             "综合示例/变距尺子标定测量/变距尺子标定测量.vrtapp",
+            "综合示例/畸变标尺校正测量/畸变标尺校正测量.vrtapp",
+            "综合示例/弯曲引脚检测/弯曲引脚检测.vrtapp",
         })
         self.assertEqual(list(examples.glob("*/*/*.json")), [])
         self.assertEqual({path.name for path in (examples / "images").iterdir()}, {
-            "多分支视觉检测", "识别线缆颜色", "变距尺子标定测量",
+            "多分支视觉检测", "识别线缆颜色", "变距尺子标定测量", "畸变标尺校正测量", "弯曲引脚检测",
         })
 
     def test_source_images_share_the_examples_images_tree(self) -> None:

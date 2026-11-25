@@ -202,44 +202,70 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     assert((branchRadius.size() == 1 && branchRadius[0].size() == 1));
     assert((std::abs(branchRadius[0][0] - 50.0) < 0.5));
 
-    // Colour recognition: the reference picture is its own reference, so the pose must come back as
-    // the identity, and the five trained wire tips as their classes in wire order.
-    const auto cable = run(root / u8"综合示例" / u8"识别线缆颜色" / u8"识别线缆颜色.vrtapp", 3);
-    const auto pose
-        = nestedOf<NestedVector<double, 2>>(std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
-    assert((pose.size() == 1 && pose[0].size() == 6));
-    assert((std::abs(pose[0][0] - 1.0) < 1e-3 && std::abs(pose[0][4] - 1.0) < 1e-3));
-    assert((std::abs(pose[0][1]) < 1e-3 && std::abs(pose[0][3]) < 1e-3));
-    assert((std::hypot(pose[0][2], pose[0][5]) <= 0.75));
-    assert((std::abs(std::atan2(pose[0][3], pose[0][0]) * 180.0 / 3.14159265358979323846) <= 0.05));
-    // The reference edges are reported back on the picture they were trained on.
-    const auto foundEdges = std::get<Line>(snapshot(cable, 2)->outputs.at(3)).get();
-    assert((foundEdges.size() == 1 && foundEdges[0].size() == 2));
-    for (const auto &edge : foundEdges[0]) assert((RegionView(edge).kind() == RoiKind::Segment));
+    // Colour recognition: the installed directory contains all 11 cable frames (cable_01..11.png).
+    // Verify the default first frame (cable_01.png), every frame in the set, and the reference
+    // picture (cable_11.png) whose pose must stay near identity with exact wire order.
+    const auto cableFirst = run(root / u8"综合示例" / u8"识别线缆颜色" / u8"识别线缆颜色.vrtapp", 3);
+    const auto firstColors = nestedOf<std::vector<std::vector<std::string>>>(
+        std::get<Array>(snapshot(cableFirst, 3)->outputs.at(4)));
+    assert((firstColors.size() == 1 && firstColors[0].size() == 5));
+    const std::vector<std::string> expectedFirst{"red", "purple", "blue", "yellow", "purple"};
+    assert((firstColors[0] == expectedFirst));
 
-    const auto colorResult = snapshot(cable, 3);
-    const auto colors   = nestedOf<std::vector<std::vector<std::string>>>(std::get<Array>(colorResult->outputs.at(4)));
-    const auto scores   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(5)));
-    const auto ratios   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(6)));
-    const auto centerXs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(7)));
-    const auto centerYs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(8)));
-    assert((colors.size() == 1 && colors[0].size() == 5));
-    const std::vector<std::string> expected{"purple", "red", "blue", "yellow", "purple"};
-    assert((colors[0] == expected));
-    // Five wire tips at their trained positions: the same index keeps the same wire across every
-    // output, which is what a downstream rule indexes.
-    const std::vector<std::pair<float, float>> tips{
-        {950.0F,  652.0F},
-        {950.0F,  819.0F},
-        {950.0F, 1019.0F},
-        {950.0F, 1185.0F},
-        {950.0F, 1395.0F}
-    };
-    for (std::size_t index = 0; index < expected.size(); ++index)
+    auto cableLoaded = storage.load(root / u8"综合示例" / u8"识别线缆颜色" / u8"识别线缆颜色.vrtapp");
+    assert((cableLoaded.diagnostics.empty()));
+    for (int i = 1; i <= 11; ++i)
     {
-        assert((scores[0][index] > 0.3F && ratios[0][index] > 0.8F));
-        assert((std::abs(centerXs[0][index] - tips[index].first) < 2.0F));
-        assert((std::abs(centerYs[0][index] - tips[index].second) < 2.0F));
+        auto frameProject = cableLoaded.project;
+        frameProject.flows[0].nodes[0].inputs[1].literal
+            = std::string("examples/images/识别线缆颜色/cable_") + (i < 10 ? "0" : "") + std::to_string(i) + ".png";
+        RuntimeEngine frameEngine(4, root.parent_path());
+        assert((frameEngine.start(frameProject, registry, RunMode::Once).code == 0));
+        auto frameUpdate = finish(frameEngine);
+        for (const auto &node : frameProject.flows[0].nodes)
+        {
+            auto result = snapshot(frameUpdate, node.id);
+            if (!result || result->status.code != 0)
+                std::cerr << "CABLE FRAME FAILURE cable_" << i << " node=" << node.id
+                          << " msg=" << (result ? result->status.message : std::string{"missing"}) << std::endl;
+            assert((result && result->status.code == 0));
+        }
+        if (i == 11)
+        {
+            const auto pose
+                = nestedOf<NestedVector<double, 2>>(std::get<Array>(snapshot(frameUpdate, 2)->outputs.at(2)));
+            assert((pose.size() == 1 && pose[0].size() == 6));
+            assert((std::abs(pose[0][0] - 1.0) < 1e-3 && std::abs(pose[0][4] - 1.0) < 1e-3));
+            assert((std::abs(pose[0][1]) < 1e-3 && std::abs(pose[0][3]) < 1e-3));
+            assert((std::hypot(pose[0][2], pose[0][5]) <= 0.75));
+            assert((std::abs(std::atan2(pose[0][3], pose[0][0]) * 180.0 / 3.14159265358979323846) <= 0.05));
+            const auto foundEdges = std::get<Line>(snapshot(frameUpdate, 2)->outputs.at(3)).get();
+            assert((foundEdges.size() == 1 && foundEdges[0].size() == 2));
+            for (const auto &edge : foundEdges[0]) assert((RegionView(edge).kind() == RoiKind::Segment));
+
+            const auto colorResult = snapshot(frameUpdate, 3);
+            const auto colors   = nestedOf<std::vector<std::vector<std::string>>>(std::get<Array>(colorResult->outputs.at(4)));
+            const auto scores   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(5)));
+            const auto ratios   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(6)));
+            const auto centerXs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(7)));
+            const auto centerYs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(8)));
+            assert((colors.size() == 1 && colors[0].size() == 5));
+            const std::vector<std::string> expected{"purple", "red", "blue", "yellow", "purple"};
+            assert((colors[0] == expected));
+            const std::vector<std::pair<float, float>> tips{
+                {950.0F,  652.0F},
+                {950.0F,  819.0F},
+                {950.0F, 1019.0F},
+                {950.0F, 1185.0F},
+                {950.0F, 1395.0F}
+            };
+            for (std::size_t index = 0; index < expected.size(); ++index)
+            {
+                assert((scores[0][index] > 0.3F && ratios[0][index] > 0.8F));
+                assert((std::abs(centerXs[0][index] - tips[index].first) < 2.0F));
+                assert((std::abs(centerYs[0][index] - tips[index].second) < 2.0F));
+            }
+        }
     }
 
     std::cout << "[SHIPPED EXAMPLES] installed projects loaded and executed with the installed images\n";

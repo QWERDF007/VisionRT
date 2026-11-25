@@ -122,6 +122,8 @@ REQUIRED_EXAMPLE_PROJECTS = (
     "综合示例/多分支视觉检测/多分支视觉检测.vrtapp",
     "综合示例/识别线缆颜色/识别线缆颜色.vrtapp",
     "综合示例/变距尺子标定测量/变距尺子标定测量.vrtapp",
+    "综合示例/畸变标尺校正测量/畸变标尺校正测量.vrtapp",
+    "综合示例/弯曲引脚检测/弯曲引脚检测.vrtapp",
 )
 
 # A developer machine path in a shipped project is a broken example on every other machine.
