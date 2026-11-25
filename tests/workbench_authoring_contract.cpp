@@ -430,7 +430,7 @@ try
     require(!probe.isEmpty(), "probe node is missing: " + app.diagnostic().toStdString());
     require(app.bindInput(app.portContext(kImageInput), reader, kImagesOutput), "probe image input could not be bound");
     settle();
-    if (!app.save(root + "/authoring.json"))
+    if (!app.save(root + "/authoring.vrtapp"))
         throw std::runtime_error("probe project could not be saved: " + app.diagnostic().toStdString());
     stable();
     app.runOnce();

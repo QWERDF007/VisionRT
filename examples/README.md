@@ -1,43 +1,13 @@
 # VisionRT 示例工程
 
-示例工程与说明按类别组织，原图统一位于 [images](images/)，资源使用相对路径。
+通过软件的“文件 → 打开示例…”选择 `.vrtapp` 工程，修改后另存到用户目录。
 
-## 打开方式
+| 综合示例 | 使用说明 |
+| --- | --- |
+| [多分支视觉检测](综合示例/多分支视觉检测/多分支视觉检测.vrtapp) | [说明](综合示例/多分支视觉检测/README.md) |
+| [识别线缆颜色](综合示例/识别线缆颜色/识别线缆颜色.vrtapp) | [说明](综合示例/识别线缆颜色/README.md) |
+| [变距尺子标定测量](综合示例/变距尺子标定测量/变距尺子标定测量.vrtapp) | [说明](综合示例/变距尺子标定测量/README.md)，需要含 NumPy 的 Python 环境 |
 
-- 软件内：文件 → 打开示例…，对话框直接落在本目录。
-- 命令行：`VisionRT.exe --project examples/01_基础入门/01_图像读取/图像读取.json`
+原图统一存放于 [images](images/)，各工程的训练资源包（`.zip`，含模型与训练原图）及描述文件存放于同目录的 `assets`，相对路径均基于安装目录解析。ZIP 容器与训练资源包实现见 [ProjectArchive](../src/core/include/core/ProjectArchive.h) 与 [TrainingArchive](../3rdparty/VisionRTContracts/include/visionrt/contracts/TrainingArchive.h)。
 
-示例是只读的产品文件：修改后按 `Ctrl+S` 会要求另存到用户目录。原图继续引用软件的 `examples/images`；训练资产的保存入口见 [TrainingAssets](../src/ui/TrainingAssets.cpp)。
-
-## 首批示例
-
-| 示例 | 节点链 | 结果 |
-| --- | --- | --- |
-| [图像读取](01_基础入门/01_图像读取/README.md) | 图像读取 | 2 张图像的批次、索引与总数 |
-| [ROI定位与裁剪](02_工具示例/01_ROI定位与裁剪/README.md) | 图像读取 → 投影ROI → 图像裁剪 | 1 个矩形 ROI、60×300 裁剪图 |
-| [图像预处理](02_工具示例/02_图像预处理/README.md) | 图像读取 → 调整亮度 → 自适应二值化 | 提亮图、应用区域、二值图 |
-| [圆测量](02_工具示例/03_圆测量/README.md) | 图像读取 → 测量圆 | 半径 60.0 px、圆心 (160,120) |
-| [行间距测量](02_工具示例/04_行间距测量/README.md) | 图像读取 → 测量行间距 | 5 个亮条，宽 20.0 px、间隙 20.0 px |
-| [多分支视觉检测](03_综合示例/01_多分支视觉检测/README.md) | 图像读取 → 投影ROI → 裁剪 → 二值化；图像读取 → 测量圆 | 两条分支各自的图像与半径 |
-| [识别线缆颜色](03_综合示例/02_识别线缆颜色/README.md) | 图像读取 → 直边对齐 → 识别颜色 | 单位级姿态、五根线依次 purple/red/blue/yellow/purple |
-
-这七套只使用 CPU 原生工具，不依赖外部 Python、模型或相机。识别线缆颜色需要工具包内含 `vst_recognition.dll`（`处理/识别` 目录）。
-
-## 扩展示例
-
-扩展示例有明确前置条件，不属于免配置集合；各目录的 README 写明需要准备什么。
-
-| 示例 | 节点链 | 前置条件 |
-| --- | --- | --- |
-| [Python图像统计](04_扩展示例/01_Python图像统计/README.md) | 图像读取 → 投影ROI → 裁剪 → 二值化；图像读取 → 计算图像均值 | 外部 Python 环境 |
-| [逻辑表达式与条件分支](04_扩展示例/02_逻辑表达式与条件分支/README.md) | 图像读取 → 计算图像均值 → 评估表达式 → 条件分支 | 外部 Python 环境 |
-| [变距尺子标定测量](03_综合示例/03_变距尺子标定测量/README.md) | 图像读取 → 平面标定 → 测量行间距 → 评估表达式 | 外部 Python 环境 |
-| [GPU目标检测](04_扩展示例/03_GPU目标检测/README.md) | 图像读取 → YOLO推理 → 结果过滤 | GPU 环境、自备图片与权重 |
-| [错误诊断](04_扩展示例/04_错误诊断/README.md) | 缺输入、缺引擎、缺工具定义的负例 | 无；预期失败 |
-
-## 验证入口
-
-- [首批示例加载与执行](../tests/example_pipelines.cpp)：逐套加载、执行并校验上述数值，含中文与空格目录；同一文件内的 `testLogicExpressionExample` 覆盖逻辑表达式与条件分支示例。
-- [示例元数据契约](../tests/example_metadata_contract.cpp)：工程签名与工具声明一致、参数取值在声明选项内。
-- [示例保存规则契约](../tests/example_project_contract.cpp)：示例识别、素材随行、冲突不覆盖、`Ctrl+S` 不写安装目录。
-- [打包结构校验](../tools/package_app.py)：首批六套工程存在、工程引用的相对资源随包安装。
+验证入口：[工程加载和运行](../tests/example_pipelines.cpp)、[标定训练与测量](../tests/calibration_example_contract.cpp)、[元数据](../tests/example_metadata_contract.cpp)、[另存](../tests/example_project_contract.cpp)、[打包](../tools/package_app.py)。

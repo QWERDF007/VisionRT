@@ -328,7 +328,87 @@ QJsonArray encodeNested(const Vector &values, ValueJson::Purpose purpose, const 
 }
 }
 
-TypeSpec ValueJson::decodeType(const QJsonObject &json)
+namespace {
+template<class Enum>
+const char *declarationWireName(Enum value)
+{
+    const char *result = nullptr;
+#define VRT_DECLARATION_NAME(group, member, spelling) \
+    if constexpr (std::is_same_v<Enum, group>)        \
+    {                                                 \
+        if (value == group::member)                   \
+            result = spelling;                        \
+    }
+#include <visionrt/contracts/DeclarationNames.def>
+#undef VRT_DECLARATION_NAME
+    if (!result)
+        throw ContractError("未知类型枚举");
+    return result;
+}
+
+template<class Enum>
+Enum parseDeclarationWireName(const QJsonValue &json, const char *what)
+{
+    if (!json.isString())
+        throw ContractError(std::string(what) + " 必须是字符串名称");
+    const auto text = json.toString().toUtf8().toStdString();
+    std::optional<Enum> found;
+#define VRT_DECLARATION_NAME(group, member, spelling) \
+    if constexpr (std::is_same_v<Enum, group>)        \
+    {                                                 \
+        if (text == spelling)                         \
+            found = group::member;                    \
+    }
+#include <visionrt/contracts/DeclarationNames.def>
+#undef VRT_DECLARATION_NAME
+    if (!found)
+        throw ContractError(std::string(what) + "：未知名称 " + text);
+    return *found;
+}
+} // namespace
+
+TypeSpec ValueJson::decodeType(const QJsonValue &json)
+{
+    if (json.isString())
+    {
+        TypeSpec spec{parseDeclarationWireName<Type>(json, "type")};
+        validateTypeSpec(spec);
+        return spec;
+    }
+    if (!json.isObject())
+        throw ContractError("TypeSpec 必须是类型名称字符串或数组对象");
+    const auto object = json.toObject();
+    for (auto field = object.begin(); field != object.end(); ++field)
+        if (field.key() != "type" && field.key() != "dtype" && field.key() != "rank")
+            throw ContractError("TypeSpec 包含未知字段：" + field.key().toStdString());
+    const auto type = parseDeclarationWireName<Type>(object.value("type"), "type");
+    if (type != Type::Array || !object.contains("dtype"))
+        throw ContractError("数组类型描述必须指定 type=array、dtype 与 rank");
+    TypeSpec spec{Type::Array, parseDeclarationWireName<DType>(object.value("dtype"), "dtype")};
+    if (object.contains("rank"))
+    {
+        const auto rank = integer(object.value("rank"));
+        if (rank < 1 || rank > kMaxArrayRank)
+            throw ContractError("数组 rank 必须在支持范围内");
+        spec.rank = static_cast<int>(rank);
+    }
+    validateTypeSpec(spec);
+    return spec;
+}
+
+QJsonValue ValueJson::encodeType(const TypeSpec &type)
+{
+    validateTypeSpec(type);
+    if (type.type != Type::Array)
+        return QString::fromLatin1(declarationWireName(type.type));
+    return QJsonObject{
+        { "type", QString::fromLatin1(declarationWireName(type.type))},
+        {"dtype", QString::fromLatin1(declarationWireName(*type.dtype))},
+        { "rank", type.rank}
+    };
+}
+
+TypeSpec ValueJson::decodeTypeToken(const QJsonObject &json)
 {
     for (auto field = json.begin(); field != json.end(); ++field)
         if (field.key() != "type" && field.key() != "dtype" && field.key() != "rank")
@@ -336,9 +416,11 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
     TypeSpec type;
     const auto code = integer(json.value("type"));
     type.type = typeFromCode(code);
-    if (json.contains("dtype")) {
+    if (json.contains("dtype"))
+    {
         const auto dtype = integer(json.value("dtype"));
-        if (dtype < 0 || dtype > static_cast<int>(DType::String)) throw ContractError("未知元素类型编码");
+        if (dtype < 0 || dtype > static_cast<int>(DType::String))
+            throw ContractError("未知元素类型编码");
         type.dtype = static_cast<DType>(dtype);
     }
     if (json.contains("rank"))
@@ -352,7 +434,7 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
     return type;
 }
 
-QJsonObject ValueJson::encodeType(const TypeSpec &type)
+QJsonObject ValueJson::encodeTypeToken(const TypeSpec &type)
 {
     validateTypeSpec(type);
     QJsonObject json{{"type", static_cast<int>(type.type)}};

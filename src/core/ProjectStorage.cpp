@@ -1,30 +1,29 @@
-#include "core/ToolValueValidation.h"
 #include "core/ProjectStorage.h"
 
+#include "common/Version.h"
 #include "core/InputNormalizer.h"
 #include "core/JsonFields.h"
-#include "core/ProjectEditor.h"
-
 #include "core/NodeContracts.h"
+#include "core/ProjectArchive.h"
+#include "core/ProjectEditor.h"
 #include "core/Sequence.h"
 #include "core/ToolRegistry.h"
+#include "core/ToolValueValidation.h"
 #include "core/ValueJson.h"
 
-#include <core/ToolValueValidation.h>
-
-#include <QFile>
 #include <QJsonArray>
-#include <QSaveFile>
+#include <QJsonDocument>
 #include <QString>
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <string_view>
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 8;
+constexpr int projectFormatVersion = 9;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -36,33 +35,6 @@ std::string utf8Path(const std::filesystem::path &path)
 {
     const auto utf8 = path.generic_u8string();
     return {reinterpret_cast<const char *>(utf8.data()), utf8.size()};
-}
-
-// A training reference is stored relative to the project file, so a copied project keeps its own
-// assets. A revision outside the project tree (an unnamed project's workspace result) stays
-// absolute: there is no directory to be relative to yet.
-std::string storedTrainingAsset(const ProjectDefinition &project, const NodeDefinition &node)
-{
-    if (project.path.empty() || node.trainingAsset.is_relative())
-        return utf8Path(node.trainingAsset);
-    std::error_code error;
-    const auto      relative = std::filesystem::relative(node.trainingAsset, project.path.parent_path(), error);
-    if (!error && !relative.empty() && relative.begin() != relative.end() && *relative.begin() != "..")
-        return utf8Path(relative);
-    return utf8Path(node.trainingAsset);
-}
-
-// The in-memory form is the resolved directory: runtime parameters, the training session and the
-// save-time copier all read one absolute location instead of joining a relative path three times.
-void resolveTrainingAssets(ProjectDefinition &project)
-{
-    if (project.path.empty())
-        return;
-    const auto base = project.path.parent_path();
-    for (auto &flow : project.flows)
-        for (auto &node : flow.nodes)
-            if (!node.trainingAsset.empty() && node.trainingAsset.is_relative())
-                node.trainingAsset = (base / node.trainingAsset).lexically_normal();
 }
 
 [[noreturn]] void invalid(const std::string &message)
@@ -103,29 +75,21 @@ PortId portId(const QJsonValue &value, std::string_view context)
     return static_cast<PortId>(number);
 }
 
-// Signatures are entry arrays: the stored order is incidental, the number is the identity.
-TypeMap decodeTypes(const QJsonValue &node, std::string_view context)
+BindingMode decodeBindingMode(const QJsonValue &value, std::string_view context)
 {
-    TypeMap result;
-    if (node.isUndefined() || node.isNull())
-        return result;
-    if (!node.isArray())
-        invalid(std::string(context) + " 必须是数组");
-    const auto items = node.toArray();
-    for (const auto &item : items)
-    {
-        const auto entry = map(item, context);
-        const auto id    = portId(entry.value("port_id"), context);
-        if (!result.emplace(id, ValueJson::decodeType(map(entry.value("type"), context))).second)
-            invalid(std::string(context) + " 端口编号重复：" + portLabel(id));
-    }
-    return result;
+    const auto name = text(value, context, true);
+    if (name == "literal")
+        return BindingMode::Literal;
+    if (name == "upstream")
+        return BindingMode::Upstream;
+    invalid(std::string(context) + " 未知绑定模式：" + name);
 }
 
 TypeMap types(const std::vector<PortDefinition> &ports)
 {
     TypeMap result;
-    for (const auto &port : ports) result.emplace(port.id, port.type);
+    for (const auto &port : ports)
+        result.emplace(port.id, port.type);
     return result;
 }
 
@@ -139,9 +103,6 @@ void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefi
 void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const NodeDefinition &node,
                   const PortDefinition &port, PortValue &value)
 {
-    // Loading consumes the same normalisation as editing and running: a stored value outside the
-    // declared range is written back in its legal form with a visible diagnostic. A value the
-    // declaration cannot represent at all is kept untouched and reported.
     if (isMissing(value))
         return;
     try
@@ -167,198 +128,212 @@ PortValue defaultValue(const PortDefinition &port)
     return copyProjectLiteral(port.defaultValue);
 }
 
-// What reconciling one node against its current declaration moved. The wire pass reads it to know
-// which connections the declarations can still carry, and the update notice lists the node.
+struct SavedNodeParams
+{
+    TypeMap          initTypes;
+    TypeMap          trainTypes;
+    TypeMap          inputTypes;
+    std::set<PortId> inputLiterals;
+};
+
 struct NodeReconciliation
 {
-    std::set<PortId> changedOutputs;
     std::map<PortId, SourcePort> removedInputs;
-    bool             declarationChanged = false;
+    bool                         declarationChanged = false;
 };
 
 void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node,
-                   const ToolDefinition &definition, const std::set<PortId> &savedInputLiterals,
-                   NodeReconciliation &changes)
+                   const ToolDefinition &definition, const SavedNodeParams &saved, NodeReconciliation &changes)
 {
-    const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
-    auto       initTypes    = types(contract.initParams);
-    auto       inputTypes   = types(contract.inputs);
-    // A condition node reading an upstream Bool keeps its formula variables stored but inactive.
-    // They are not part of the contract, so the signature comparison must retain them exactly the
-    // way the editor does, or every reload would report a schema change.
+    const auto contract   = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    auto       initTypes  = types(contract.initParams);
+    auto       trainTypes = types(contract.trainParams);
+    auto       inputTypes = types(contract.inputs);
+
     if (definition.nodeModel == NodeModel::Condition && conditionUsesUpstream(node) && node.expression)
         for (const auto &variable : node.expression->variables)
-            if (const auto previous = node.signatures.inputs.find(variable.portId);
-                previous != node.signatures.inputs.end())
-                inputTypes.insert_or_assign(variable.portId, previous->second);
-    // Host-owned ports are materialised by the current contract. A project saved before they
-    // existed is migrated in memory: the binding gets its declared default and the signature is
-    // completed without turning a version upgrade into a user-visible schema warning.
-    auto       savedInputs  = node.signatures.inputs;
-    for (const auto &[id, type] : inputTypes)
-        if (isReservedPort(PortStage::Inputs, id))
-            savedInputs.emplace(id, type);
-    const auto savedOutputs = node.signatures.outputs;
-    setOutputDeclarations(node, definition);
-    auto outputTypes        = std::move(node.signatures.outputs);
-    node.signatures.outputs = savedOutputs;
-    for (const auto &[id, type] : outputTypes)
-        if (isReservedPort(PortStage::Outputs, id))
-            node.signatures.outputs.emplace(id, type);
-    for (const auto &[id, previous] : node.signatures.outputs)
-    {
-        const auto current = outputTypes.find(id);
-        if (current == outputTypes.end() || !compatible(previous, current->second))
-            changes.changedOutputs.insert(id);
-    }
-    for (const auto &[id, current] : outputTypes)
-        if (!node.signatures.outputs.contains(id))
-            changes.changedOutputs.insert(id);
-    for (const auto &[id, value] : node.initParams)
-    {
-        if (initTypes.contains(id))
-            continue;
-        const auto key = QString::number(id);
-        const auto valueType = typeOf(value).value_or(node.signatures.initParams.at(id));
-        node.retiredInitParams.insert(
-            key, QJsonObject{
-                     {"port_id", static_cast<double>(id)},
-                     {"value", ValueJson::encode(value, valueType,
-                                                 ValueJson::Purpose::Stored)},
-                     {"type", ValueJson::encodeType(valueType)}
-        });
-        node.signatures.initParams.erase(id);
-        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(id),
-                 "当前工具声明未定义此初始化参数，已保留原值和类型，不参与执行");
-    }
-    // The diagnostic names the stage that moved, so a reader knows which declaration changed
-    // instead of being told "something in the contract".
-    const auto changedStages = [&]
-    {
-        std::string stages;
-        const auto  append = [&stages](const char *name)
-        {
-            if (!stages.empty())
-                stages += "、";
-            stages += name;
-        };
-        if (node.signatures.initParams != initTypes)
-            append("初始化参数");
-        if (savedInputs != inputTypes)
-            append("输入");
-        if (node.signatures.outputs != outputTypes)
-            append("输出");
-        return stages;
-    }();
-    if (!changedStages.empty())
-        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
-                 "保存的端口类型已与当前工具定义同步：" + changedStages, true);
-    // A version the project recorded itself is the sharpest signal: it changes even when the
-    // declaration keeps every port. A project saved before the host recorded versions has none,
-    // and then only a port set that actually moved counts as an update.
-    changes.declarationChanged = !changedStages.empty()
-                              || (!node.toolVersionSnapshot.empty() && node.toolVersionSnapshot != definition.version);
+            if (const auto found = saved.inputTypes.find(variable.portId); found != saved.inputTypes.end())
+                inputTypes.insert_or_assign(variable.portId, found->second);
 
-    Values trainingParameters;
-    node.signatures.trainParams.clear();
+    setOutputDeclarations(node, definition);
+
+    bool schemaChanged = false;
+
+    // Reconcile training parameters.
+    Values trainParameters;
     for (const auto &port : contract.trainParams)
-        {
-            const auto found = node.trainParams.find(port.id);
-            auto value = found == node.trainParams.end() ? defaultValue(port) : found->second;
-            validateToolValue(port, value);
-            trainingParameters.emplace(port.id, std::move(value));
-            node.signatures.trainParams.emplace(port.id, port.type);
-        }
-    node.trainParams = std::move(trainingParameters);
-    Values parameters;
-    for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
     {
-        const auto old       = node.initParams.find(port.id);
-        const auto signature = node.signatures.initParams.find(port.id);
-        const bool retain    = old != node.initParams.end() && signature != node.signatures.initParams.end()
-                         && compatible(signature->second, port.type);
-        if (retain)
+        const auto old      = node.trainParams.find(port.id);
+        const auto oldType  = saved.trainTypes.find(port.id);
+        const bool sameType = old != node.trainParams.end() && oldType != saved.trainTypes.end()
+                           && compatible(oldType->second, port.type);
+        if (sameType)
+        {
+            auto value = old->second;
+            try
+            {
+                validateToolValue(port, value);
+                trainParameters.emplace(port.id, std::move(value));
+            }
+            catch (const ContractError &error)
+            {
+                trainParameters.emplace(port.id, defaultValue(port));
+                schemaChanged = true;
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "train." + portLabel(port.id),
+                         "训练参数不符合当前声明约束，已重置为默认值：" + std::string(error.what()), true);
+            }
+            continue;
+        }
+        if (old != node.trainParams.end())
+        {
+            trainParameters.emplace(port.id, defaultValue(port));
+            schemaChanged = true;
+            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "train." + portLabel(port.id),
+                     "训练参数与当前声明类型不兼容，已重置为声明默认值", true);
+            continue;
+        }
+        trainParameters.emplace(port.id, defaultValue(port));
+        schemaChanged = true;
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "train." + portLabel(port.id),
+                 "当前声明新增此训练参数，已填入声明默认值", true);
+    }
+    for (const auto &[id, value] : node.trainParams)
+    {
+        if (!trainTypes.contains(id))
+        {
+            schemaChanged = true;
+            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "train." + portLabel(id),
+                     "已丢弃声明中不再存在的训练参数", true);
+        }
+    }
+
+    // Reconcile init parameters.
+    Values initParameters;
+    const auto activeInitPorts = definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams;
+    for (const auto &port : activeInitPorts)
+    {
+        const auto old      = node.initParams.find(port.id);
+        const auto oldType  = saved.initTypes.find(port.id);
+        const bool sameType = old != node.initParams.end() && oldType != saved.initTypes.end()
+                           && compatible(oldType->second, port.type);
+        if (sameType)
         {
             auto value = old->second;
             rangeWarning(result, flow, node, port, value);
-            parameters.emplace(port.id, std::move(value));
+            initParameters.emplace(port.id, std::move(value));
             continue;
         }
         if (old != node.initParams.end())
         {
-            // A saved value that no longer matches the declaration is kept as it is. Rewriting it
-            // would change what the node does without the user saying so; the mismatch is reported
-            // and the node fails its contract until the parameter is corrected.
-            parameters.emplace(port.id, old->second);
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行");
+            initParameters.emplace(port.id, defaultValue(port));
+            schemaChanged = true;
+            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init." + portLabel(port.id),
+                     "初始化参数与当前声明类型不兼容，已重置为声明默认值", true);
             continue;
         }
-        // A port the declaration has now but the project never saved is materialised from the
-        // declaration; there is no saved value to preserve.
-        parameters.emplace(port.id, defaultValue(port));
-        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
+        initParameters.emplace(port.id, defaultValue(port));
+        schemaChanged = true;
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init." + portLabel(port.id),
                  "当前声明新增此初始化参数，已填入声明默认值", true);
     }
+    for (const auto &[id, value] : node.initParams)
+    {
+        if (definition.derivesPorts() || !initTypes.contains(id))
+        {
+            schemaChanged = true;
+            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init." + portLabel(id),
+                     "已丢弃声明中不再存在的初始化参数", true);
+        }
+    }
+
+    // Reconcile inputs.
     std::map<PortId, InputBinding> inputs;
     for (const auto &port : contract.inputs)
     {
-        const auto old       = node.inputs.find(port.id);
-        const auto signature = node.signatures.inputs.find(port.id);
-        const bool retain    = old != node.inputs.end() && signature != node.signatures.inputs.end()
-                         && compatible(signature->second, port.type);
+        const auto   old       = node.inputs.find(port.id);
+        const auto   oldType   = saved.inputTypes.find(port.id);
+        const bool   hasLit    = saved.inputLiterals.contains(port.id);
         InputBinding binding;
-        if (retain)
+        if (old != node.inputs.end())
         {
             binding = old->second;
-            if (!savedInputLiterals.contains(port.id))
+            if (hasLit)
             {
-                binding.literal = defaultValue(port);
-                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "未配置的字面量草稿已填入声明默认值", true);
+                if (oldType != saved.inputTypes.end() && compatible(oldType->second, port.type))
+                {
+                    if (binding.mode == BindingMode::Literal || !binding.source)
+                        rangeWarning(result, flow, node, port, binding.literal);
+                }
+                else
+                {
+                    binding.literal = defaultValue(port);
+                    if (!isReservedPort(PortStage::Inputs, port.id))
+                    {
+                        schemaChanged = true;
+                        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
+                                 "输入与当前声明类型不兼容，字面量已重置为声明默认值", true);
+                    }
+                }
             }
-            if (binding.mode == BindingMode::Literal || !binding.source)
-                rangeWarning(result, flow, node, port, binding.literal);
-        }
-        else if (old != node.inputs.end())
-        {
-            // Mode, literal and upstream reference all stay exactly as saved: a changed declaration
-            // is reported, never repaired on the user's behalf. The node reports the mismatch when
-            // it runs and the user decides what the value should become.
-            binding = old->second;
-            if (!isReservedPort(PortStage::Inputs, port.id))
-                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行");
+            else
+            {
+                // Connected port whose Missing literal placeholder was omitted on save.
+                binding.literal = defaultValue(port);
+            }
         }
         else
         {
             binding.literal = defaultValue(port);
             if (!isReservedPort(PortStage::Inputs, port.id))
+            {
+                schemaChanged = true;
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
                          "当前声明新增此输入，已填入声明默认值", true);
+            }
         }
         inputs.emplace(port.id, std::move(binding));
     }
+
+    // Preserve inactive formula variables on an upstream-mode condition node.
+    if (definition.nodeModel == NodeModel::Condition && conditionUsesUpstream(node) && node.expression)
+    {
+        for (const auto &variable : node.expression->variables)
+        {
+            if (inputs.contains(variable.portId))
+                continue;
+            const auto old     = node.inputs.find(variable.portId);
+            const auto oldType = saved.inputTypes.find(variable.portId);
+            if (old != node.inputs.end() && oldType != saved.inputTypes.end()
+                && compatible(oldType->second, variable.type))
+                inputs.emplace(variable.portId, old->second);
+        }
+    }
+
     for (const auto &[id, binding] : node.inputs)
     {
         if (!inputTypes.contains(id))
         {
             if (binding.mode == BindingMode::Upstream && binding.source)
                 changes.removedInputs.emplace(id, *binding.source);
+            schemaChanged = true;
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(id),
                      "已丢弃声明中不再存在的输入及其绑定", true);
         }
     }
-    node.initParams = std::move(parameters);
-    node.inputs     = std::move(inputs);
-    node.signatures.initParams = std::move(initTypes);
-    node.signatures.inputs = std::move(inputTypes);
-    node.signatures.outputs = std::move(outputTypes);
+
+    changes.declarationChanged = schemaChanged || (node.toolVersionSnapshot != definition.version);
+
+    node.trainParams            = std::move(trainParameters);
+    node.initParams             = std::move(initParameters);
+    node.inputs                 = std::move(inputs);
+    node.signatures.trainParams = std::move(trainTypes);
+    node.signatures.initParams  = std::move(initTypes);
+    node.signatures.inputs      = std::move(inputTypes);
+
     if (node.toolNameSnapshot != definition.nameZh)
     {
         node.toolNameSnapshot = definition.nameZh;
-        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool_name_snapshot", "工具显示名称快照已更新",
-                 true);
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool.name", "工具显示名称快照已更新", true);
     }
     node.toolVersionSnapshot = definition.version;
 }
@@ -366,7 +341,8 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
 void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
 {
     std::map<NodeId, std::size_t> indices;
-    for (std::size_t i = 0; i < flow.nodes.size(); ++i) indices.emplace(flow.nodes[i].id, i);
+    for (std::size_t i = 0; i < flow.nodes.size(); ++i)
+        indices.emplace(flow.nodes[i].id, i);
     std::vector<std::vector<std::size_t>> edges(flow.nodes.size());
     for (std::size_t i = 0; i < flow.nodes.size(); ++i)
     {
@@ -422,18 +398,12 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
             visit(visit, i);
 }
 
-QJsonObject object(const QJsonValue &value, const char *context)
-{
-    if (!value.isObject())
-        invalid(std::string(context) + " 必须是 JSON 对象");
-    return value.toObject();
-}
-
 ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolRegistry &registry)
 {
     if (!document.json().isObject())
         invalid("工程 JSON 根节点必须是对象");
     const auto root = document.json().object();
+    json::fields(root, {"format_version", "project", "flows"}, "root");
     if (!root.value("format_version").isDouble())
         invalid("format_version 必须是整数");
     const auto version = std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int}));
@@ -442,23 +412,32 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 + "，实际 " + std::to_string(version));
 
     const auto metadata = map(root.value("project"), "project");
+    json::fields(metadata, {"name", "notes", "app_version", "contracts_version", "next_node_seq", "next_flow_seq"},
+                 "project");
     if (!root.value("flows").isArray())
         invalid("flows 必须是数组");
+
     ProjectLoadResult result;
     auto             &project = result.project;
     project.flows.clear();
-    project.dirty      = false;
-    project.name       = text(metadata.value("name"), "project.name");
+    project.dirty = false;
+    project.name  = text(metadata.value("name"), "project.name");
+    if (metadata.contains("notes"))
+        project.notes = text(metadata.value("notes"), "project.notes");
+    if (metadata.contains("app_version"))
+        project.appVersion = text(metadata.value("app_version"), "project.app_version");
+    if (metadata.contains("contracts_version"))
+        project.contractsVersion = text(metadata.value("contracts_version"), "project.contracts_version");
     project.nextNodeId = sequence(metadata.value("next_node_seq"), "next_node_seq");
     project.nextFlowId = sequence(metadata.value("next_flow_seq"), "next_flow_seq");
+
     std::set<std::string, std::less<>>   flowIds, flowNames;
     std::set<NodeId>                     nodeIds;
     std::map<NodeId, NodeReconciliation> reconciliations;
     NodeId                               minimumNode = 0;
     std::uint64_t                        minimumFlow = 1;
     const auto                           flows       = root.value("flows").toArray();
-    // One notice per tool, created by the first node whose declaration moved. A node created after
-    // the update already carries the current version, so the notice keeps the version it saw first.
+
     const auto updateFor = [&result](const ToolDefinition &definition, const std::string &savedVersion) -> ToolUpdate &
     {
         for (auto &update : result.toolUpdates)
@@ -479,8 +458,6 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 return &update;
         return nullptr;
     };
-    // How a port is called in a notice: the declaration's Chinese name, which is what the user sees
-    // on the canvas, instead of a bare number.
     const auto portName = [&registry](const NodeDefinition &owner, PortStage stage, PortId port) -> std::string
     {
         const auto *definition = registry.find(owner.toolId);
@@ -492,13 +469,15 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                                             [port](const PortDefinition &item) { return item.id == port; });
         return found == ports.end() ? portLabel(port) : found->nameZh;
     };
+
     for (qsizetype flowIndex = 0; flowIndex < flows.size(); ++flowIndex)
     {
-        const auto     rawFlow = map(flows[flowIndex], "flow");
+        const auto rawFlow = map(flows[flowIndex], "flow");
+        json::fields(rawFlow, {"id", "name", "run_selected", "nodes", "layout", "connections"}, "flow");
         FlowDefinition flow;
-        flow.id = text(rawFlow.value("flow_id"), "flow_id", true);
+        flow.id = text(rawFlow.value("id"), "flow.id", true);
         if (!flowIds.insert(flow.id).second)
-            invalid("flow_id 重复：" + flow.id);
+            invalid("flow.id 重复：" + flow.id);
         if (flow.id.starts_with("flow_"))
         {
             const std::string_view suffix(flow.id.data() + 5, flow.id.size() - 5);
@@ -522,189 +501,245 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         flow.runSelected = rawFlow.value("run_selected").toBool();
         if (!rawFlow.value("nodes").isArray())
             invalid("flow.nodes 必须是数组");
-        std::map<std::pair<int, int>, NodeId> positions;
-        const auto                            nodes = rawFlow.value("nodes").toArray();
+        if (!rawFlow.value("layout").isArray())
+            invalid("flow.layout 必须是数组");
+        if (!rawFlow.value("connections").isArray())
+            invalid("flow.connections 必须是数组");
+
+        const auto                   nodes = rawFlow.value("nodes").toArray();
+        std::vector<QJsonObject>     rawNodes;
+        std::vector<SavedNodeParams> savedParams;
+        rawNodes.reserve(static_cast<std::size_t>(nodes.size()));
+        savedParams.reserve(static_cast<std::size_t>(nodes.size()));
+        flow.nodes.reserve(static_cast<std::size_t>(nodes.size()));
+        std::map<NodeId, std::size_t> flowNodeIndex;
+
         for (qsizetype nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
         {
             const auto        raw = map(nodes[nodeIndex], "node");
+            json::fields(raw, {"id", "tool", "alias", "params", "expression", "select_type"}, "node");
             const QStringList nodePath{"flows", QString::number(flowIndex), "nodes", QString::number(nodeIndex)};
             const auto        literal = [&](const QStringList &path, const TypeSpec &type)
             {
                 return document.decode(nodePath + path, type);
             };
-            NodeDefinition node;
-            node.id = sequence(raw.value("node_seq"), "node_seq");
+
+            NodeDefinition  node;
+            SavedNodeParams saved;
+            node.id = sequence(raw.value("id"), "node.id");
             if (!nodeIds.insert(node.id).second)
-                invalid("工程内 node_seq 重复：" + std::to_string(node.id));
+                invalid("工程内 node.id 重复：" + std::to_string(node.id));
             const bool exhausted = node.id == std::numeric_limits<NodeId>::max();
             minimumNode          = std::max(minimumNode, exhausted ? node.id : node.id + 1);
             if (exhausted)
-                diagnose(result, ProjectStorageCode::SequenceExhausted, flow, node, "node_seq",
+                diagnose(result, ProjectStorageCode::SequenceExhausted, flow, node, "id",
                          "节点标识序号已耗尽，无法新建节点");
-            node.toolId           = text(raw.value("tool_id"), "tool_id", true);
-            node.toolNameSnapshot = text(raw.value("tool_name_snapshot"), "tool_name_snapshot");
-            // Absent means the project predates the record, which is a different fact from "1.0.0".
-            if (raw.contains("tool_version_snapshot"))
-                node.toolVersionSnapshot = text(raw.value("tool_version_snapshot"), "tool_version_snapshot");
-            node.alias = text(raw.value("alias"), "alias");
-            if (raw.contains("training_asset"))
-                node.trainingAsset = std::filesystem::path(
-                    QString::fromStdString(text(raw.value("training_asset"), "training_asset")).toStdWString());
-            if (!raw.value("pos").isArray() || raw.value("pos").toArray().size() != 2)
-                invalid("node.pos 必须包含两个整数坐标");
-            const auto x = std::get<std::int64_t>(literal({"pos", "0"}, {Type::Int}));
-            const auto y = std::get<std::int64_t>(literal({"pos", "1"}, {Type::Int}));
-            if (x < std::numeric_limits<int>::min() || x > std::numeric_limits<int>::max()
-                || y < std::numeric_limits<int>::min() || y > std::numeric_limits<int>::max())
-                invalid("node.pos 超出有符号坐标范围");
-            node.position                   = {static_cast<int>(x), static_cast<int>(y)};
-            const auto [position, inserted] = positions.emplace(std::pair{node.position.x, node.position.y}, node.id);
-            if (!inserted)
-                diagnose(result, ProjectStorageCode::LayoutConflict, flow, node, "pos",
-                         "节点与节点 " + std::to_string(position->second) + " 重叠，位置已保留");
-            const auto signatures  = map(raw.value("type_snapshot"), "type_snapshot");
-            node.signatures        = {decodeTypes(signatures.value("init_params"), "init signature"),
-                                      decodeTypes(signatures.value("inputs"), "input signature"),
-                                      decodeTypes(signatures.value("outputs"), "output signature")};
-            node.signatures.trainParams = decodeTypes(signatures.value("train_params"), "training signature");
-            const auto trainingItems = raw.value("train_params");
-            if (!trainingItems.isUndefined() && !trainingItems.isArray()) invalid("node.train_params 必须是数组");
-            for (qsizetype index = 0; index < trainingItems.toArray().size(); ++index)
+
+            const auto toolObj = map(raw.value("tool"), "node.tool");
+            json::fields(toolObj, {"id", "name", "version"}, "node.tool");
+            node.toolId              = text(toolObj.value("id"), "node.tool.id", true);
+            node.toolNameSnapshot    = text(toolObj.value("name"), "node.tool.name");
+            node.toolVersionSnapshot = text(toolObj.value("version"), "node.tool.version", true);
+
+            if (raw.contains("alias"))
+                node.alias = text(raw.value("alias"), "node.alias");
+
+            if (raw.contains("params"))
             {
-                const auto entry = map(trainingItems.toArray()[index], "training parameter");
-                const auto id = portId(entry.value("port_id"), "training parameter");
-                const auto found = node.signatures.trainParams.find(id);
-                if (found == node.signatures.trainParams.end()) invalid("训练参数缺少类型");
-                if (!node.trainParams.emplace(id, literal({"train_params", QString::number(index), "value"}, found->second)).second)
-                    invalid("训练参数编号重复");
-            }
-            const auto *definition = registry.find(node.toolId);
-            const auto  parameters = raw.value("init_params");
-            if (!parameters.isUndefined() && !parameters.isArray())
-                invalid("node.init_params 必须是数组");
-            const auto parameterItems = parameters.toArray();
-            for (qsizetype index = 0; index < parameterItems.size(); ++index)
-            {
-                const auto entry = map(parameterItems[index], "init parameter");
-                const auto id    = portId(entry.value("port_id"), "init parameter");
-                const auto signature = node.signatures.initParams.find(id);
-                if (signature == node.signatures.initParams.end())
-                    invalid("保存的初始化参数缺少 type_snapshot：" + portLabel(id));
-                const auto valueType = entry.contains("value_type")
-                    ? ValueJson::decodeType(map(entry.value("value_type"), "init value type")) : signature->second;
-                node.initParams.emplace(id, literal({"init_params", QString::number(index), "value"}, valueType));
-            }
-            std::set<PortId> savedInputLiterals;
-            if (raw.contains("retired_init_params"))
-            {
-                if (!raw.value("retired_init_params").isArray())
-                    invalid("node.retired_init_params 必须是数组");
-                for (const auto &item : raw.value("retired_init_params").toArray())
+                const auto paramsObj = map(raw.value("params"), "node.params");
+                json::fields(paramsObj, {"init", "train", "inputs"}, "node.params");
+
+                if (paramsObj.contains("init"))
                 {
-                    const auto record = map(item, "retired init parameter");
-                    const auto id     = portId(record.value("port_id"), "retired init parameter");
-                    node.retiredInitParams.insert(QString::number(id), record);
+                    if (!paramsObj.value("init").isArray())
+                        invalid("node.params.init 必须是数组");
+                    const auto items = paramsObj.value("init").toArray();
+                    for (qsizetype i = 0; i < items.size(); ++i)
+                    {
+                        const auto entry = map(items[i], "init parameter");
+                        json::fields(entry, {"port", "type", "value"}, "init parameter");
+                        const auto id   = portId(entry.value("port"), "init.port");
+                        const auto type = ValueJson::decodeType(entry.value("type"));
+                        if (!saved.initTypes.emplace(id, type).second)
+                            invalid("初始化参数编号重复：" + portLabel(id));
+                        node.initParams.emplace(id, literal({"params", "init", QString::number(i), "value"}, type));
+                    }
                 }
-                // A retained value is skipped at run time, so the reader is told once per load
-                // instead of discovering the gap in the parameter panel. Nothing changed on disk,
-                // so the project is not marked dirty.
-                if (!node.retiredInitParams.isEmpty())
-                    diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "retired_init_params",
-                             "工程保存了当前声明未定义的初始化参数 " + std::to_string(node.retiredInitParams.size())
-                                 + " 项，原值已保留但不参与执行");
-            }
-            const auto inputs = raw.value("inputs");
-            if (!inputs.isUndefined() && !inputs.isArray())
-                invalid("node.inputs 必须是数组");
-            const auto inputItems = inputs.toArray();
-            for (qsizetype index = 0; index < inputItems.size(); ++index)
-            {
-                const auto   entry = map(inputItems[index], "input binding");
-                const auto   id    = portId(entry.value("port_id"), "input binding");
-                const auto   saved = entry;
-                InputBinding binding;
-                binding.mode = json::enumeration<BindingMode>(saved.value("mode"), BindingMode::Upstream, "binding.mode");
-                const auto signature = node.signatures.inputs.find(id);
-                if (signature == node.signatures.inputs.end())
-                    invalid("保存的输入缺少 type_snapshot：" + portLabel(id));
-                if (saved.contains("literal"))
+
+                if (paramsObj.contains("train"))
                 {
-                    const auto valueType = saved.contains("value_type")
-                        ? ValueJson::decodeType(map(saved.value("value_type"), "input value type")) : signature->second;
-                    binding.literal = literal({"inputs", QString::number(index), "literal"}, valueType);
-                    savedInputLiterals.insert(id);
+                    if (!paramsObj.value("train").isArray())
+                        invalid("node.params.train 必须是数组");
+                    const auto items = paramsObj.value("train").toArray();
+                    for (qsizetype i = 0; i < items.size(); ++i)
+                    {
+                        const auto entry = map(items[i], "training parameter");
+                        json::fields(entry, {"port", "type", "value"}, "training parameter");
+                        const auto id   = portId(entry.value("port"), "train.port");
+                        const auto type = ValueJson::decodeType(entry.value("type"));
+                        if (!saved.trainTypes.emplace(id, type).second)
+                            invalid("训练参数编号重复：" + portLabel(id));
+                        node.trainParams.emplace(id, literal({"params", "train", QString::number(i), "value"}, type));
+                    }
                 }
-                const auto source = saved.value("source");
-                if (!source.isUndefined() && !source.isNull())
+
+                if (paramsObj.contains("inputs"))
                 {
-                    const auto reference = map(source, "binding source");
-                    if (binding.mode != BindingMode::Upstream)
-                        invalid("字面量绑定不能包含生效的上游引用：" + portLabel(id));
-                    binding.source = SourcePort{sequence(reference.value("node_seq"), "source.node_seq"),
-                                                portId(reference.value("port_id"), "source.port_id")};
+                    if (!paramsObj.value("inputs").isArray())
+                        invalid("node.params.inputs 必须是数组");
+                    const auto items = paramsObj.value("inputs").toArray();
+                    for (qsizetype i = 0; i < items.size(); ++i)
+                    {
+                        const auto entry = map(items[i], "input parameter");
+                        json::fields(entry, {"port", "type", "value", "mode"}, "input parameter");
+                        const auto id   = portId(entry.value("port"), "inputs.port");
+                        const auto type = ValueJson::decodeType(entry.value("type"));
+                        if (!saved.inputTypes.emplace(id, type).second)
+                            invalid("输入参数编号重复：" + portLabel(id));
+                        InputBinding binding;
+                        if (entry.contains("mode"))
+                            binding.mode = decodeBindingMode(entry.value("mode"), "inputs.mode");
+                        binding.literal = literal({"params", "inputs", QString::number(i), "value"}, type);
+                        saved.inputLiterals.insert(id);
+                        node.inputs.emplace(id, std::move(binding));
+                    }
                 }
-                node.inputs.emplace(id, std::move(binding));
             }
-            if (raw.contains("expression_config"))
+
+            if (raw.contains("expression"))
             {
-                const auto config = map(raw.value("expression_config"), "expression_config");
+                const auto config = map(raw.value("expression"), "expression");
+                json::fields(config, {"next_port_id", "variables", "program"}, "expression");
                 ExpressionConfig expression;
                 expression.nextPortId = sequence(config.value("next_port_id"), "next_port_id");
                 if (!config.value("variables").isArray() || !config.value("program").isArray())
-                    invalid("expression_config.variables 与 program 必须是数组");
+                    invalid("expression.variables 与 program 必须是数组");
                 const auto variables = config.value("variables").toArray();
                 for (qsizetype index = 0; index < variables.size(); ++index)
                 {
                     const auto item = map(variables[index], "expression variable");
+                    json::fields(item, {"port", "name", "symbol", "type", "allow_missing"}, "expression variable");
                     ExpressionVariable variable;
-                    variable.portId     = portId(item.value("port_id"), "variable.port_id");
-                    variable.name       = text(item.value("name"), "variable.name", true);
-                    variable.symbol     = text(item.value("symbol"), "variable.symbol", true);
+                    variable.portId = portId(item.value("port"), "variable.port");
+                    variable.name   = text(item.value("name"), "variable.name", true);
+                    variable.symbol = text(item.value("symbol"), "variable.symbol", true);
                     if (!item.value("allow_missing").isBool())
                         invalid("variable.allow_missing 必须是布尔值");
                     variable.allowMissing = item.value("allow_missing").toBool();
-                    variable.type = ValueJson::decodeType(object(item.value("type"), "type"));
+                    variable.type         = ValueJson::decodeType(item.value("type"));
                     expression.variables.push_back(std::move(variable));
                 }
                 const auto program = config.value("program").toArray();
                 for (qsizetype index = 0; index < program.size(); ++index)
                 {
                     const auto item = map(program[index], "expression result");
+                    json::fields(item, {"port", "name", "symbol", "expression", "type", "exposed"}, "expression result");
                     ExpressionResult entry;
-                    entry.portId     = portId(item.value("port_id"), "result.port_id");
+                    entry.portId     = portId(item.value("port"), "result.port");
                     entry.name       = text(item.value("name"), "result.name", true);
                     entry.symbol     = text(item.value("symbol"), "result.symbol", true);
                     entry.expression = text(item.value("expression"), "result.expression", true);
                     if (!item.value("exposed").isBool())
                         invalid("result.exposed 必须是布尔值");
                     entry.exposed = item.value("exposed").toBool();
-                    entry.type    = ValueJson::decodeType(object(item.value("type"), "type"));
+                    entry.type    = ValueJson::decodeType(item.value("type"));
                     expression.program.push_back(std::move(entry));
                 }
                 node.expression = std::move(expression);
             }
-            if (raw.contains("execution_guard"))
-                throw ContractError("工程包含已移除的宿主执行条件 execution_guard，请改用普通参数连接");
+
             if (raw.contains("select_type"))
-                node.selectType = ValueJson::decodeType(map(raw.value("select_type"), "select_type"));
+                node.selectType = ValueJson::decodeType(raw.value("select_type"));
+
+            flowNodeIndex.emplace(node.id, flow.nodes.size());
+            flow.nodes.push_back(std::move(node));
+            rawNodes.push_back(raw);
+            savedParams.push_back(std::move(saved));
+        }
+
+        // Apply layout.
+        const auto                            layoutItems = rawFlow.value("layout").toArray();
+        std::set<NodeId>                      laidOut;
+        std::map<std::pair<int, int>, NodeId> positions;
+        for (qsizetype i = 0; i < layoutItems.size(); ++i)
+        {
+            const auto item = map(layoutItems[i], "layout");
+            json::fields(item, {"node", "col", "row"}, "layout");
+            const auto id    = sequence(item.value("node"), "layout.node");
+            const auto found = flowNodeIndex.find(id);
+            if (found == flowNodeIndex.end())
+                invalid("layout 引用了流程内不存在的节点：" + std::to_string(id));
+            if (!laidOut.insert(id).second)
+                invalid("layout 节点重复：" + std::to_string(id));
+            const QStringList itemPath{"flows", QString::number(flowIndex), "layout", QString::number(i)};
+            const auto col = std::get<std::int64_t>(document.decode(itemPath + QStringList{"col"}, {Type::Int}));
+            const auto row = std::get<std::int64_t>(document.decode(itemPath + QStringList{"row"}, {Type::Int}));
+            if (col < std::numeric_limits<int>::min() || col > std::numeric_limits<int>::max()
+                || row < std::numeric_limits<int>::min() || row > std::numeric_limits<int>::max())
+                invalid("layout 坐标超出有符号整数范围");
+            auto &node                      = flow.nodes[found->second];
+            node.position                   = {static_cast<int>(col), static_cast<int>(row)};
+            const auto [position, inserted] = positions.emplace(std::pair{node.position.x, node.position.y}, node.id);
+            if (!inserted)
+                diagnose(result, ProjectStorageCode::LayoutConflict, flow, node, "layout",
+                         "节点与节点 " + std::to_string(position->second) + " 重叠，位置已保留");
+        }
+        for (const auto &node : flow.nodes)
+            if (!laidOut.contains(node.id))
+                invalid("layout 缺少节点坐标：" + std::to_string(node.id));
+
+        // Apply connections before reconciling nodes so Condition upstream mode is known.
+        const auto                        connectionItems = rawFlow.value("connections").toArray();
+        std::set<std::pair<NodeId, PortId>> connectedTargets;
+        for (qsizetype i = 0; i < connectionItems.size(); ++i)
+        {
+            const auto item = map(connectionItems[i], "connection");
+            json::fields(item, {"from", "to"}, "connection");
+            const auto fromObj = map(item.value("from"), "connection.from");
+            const auto toObj   = map(item.value("to"), "connection.to");
+            json::fields(fromObj, {"node", "port"}, "connection.from");
+            json::fields(toObj, {"node", "port"}, "connection.to");
+            const auto fromNode = sequence(fromObj.value("node"), "connection.from.node");
+            const auto fromPort = portId(fromObj.value("port"), "connection.from.port");
+            const auto toNode   = sequence(toObj.value("node"), "connection.to.node");
+            const auto toPort   = portId(toObj.value("port"), "connection.to.port");
+            const auto found    = flowNodeIndex.find(toNode);
+            if (found == flowNodeIndex.end())
+                invalid("connections 目标节点不在当前流程中：" + std::to_string(toNode));
+            if (!connectedTargets.emplace(toNode, toPort).second)
+                invalid("connections 目标端口存在重复连线：" + std::to_string(toNode) + "." + portLabel(toPort));
+            auto &binding = flow.nodes[found->second].inputs[toPort];
+            binding.mode   = BindingMode::Upstream;
+            binding.source = SourcePort{fromNode, fromPort};
+        }
+
+        // Reconcile every node against the current tool registry.
+        for (std::size_t idx = 0; idx < flow.nodes.size(); ++idx)
+        {
+            auto       &node       = flow.nodes[idx];
+            const auto *definition = registry.find(node.toolId);
             if (!definition)
             {
-                node.unresolved = raw;
+                node.unresolved             = rawNodes[idx];
+                node.signatures.initParams  = savedParams[idx].initTypes;
+                node.signatures.trainParams = savedParams[idx].trainTypes;
+                node.signatures.inputs      = savedParams[idx].inputTypes;
                 diagnose(result, ProjectStorageCode::DefinitionMissing, flow, node, {},
-                         "工具定义缺失，原始配置已保留：" + node.toolId);
+                         "工具定义缺失，节点不可执行，请删除该节点或安装对应插件：" + node.toolId);
             }
             else
             {
                 const auto savedVersion = node.toolVersionSnapshot;
                 auto      &changes      = reconciliations[node.id];
-                reconcileNode(result, flow, node, *definition, savedInputLiterals, changes);
+                reconcileNode(result, flow, node, *definition, savedParams[idx], changes);
                 if (changes.declarationChanged)
                     updateFor(*definition, savedVersion).nodes.push_back(node.title());
             }
-            flow.nodes.push_back(std::move(node));
         }
+
         project.flows.push_back(std::move(flow));
     }
+
     if (project.nextNodeId < minimumNode || project.nextFlowId < minimumFlow)
     {
         project.nextNodeId = std::max(project.nextNodeId, minimumNode);
@@ -712,23 +747,22 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         project.dirty      = true;
         result.diagnostics.push_back({ProjectStorageCode::CounterRepaired, {}, {}, {}, "标识分配计数已按现有标识修复"});
     }
-    std::map<NodeId, TypeMap> savedOutputs;
-    for (const auto &flow : project.flows)
-        for (const auto &node : flow.nodes) savedOutputs.emplace(node.id, node.signatures.outputs);
+
+    const bool dirtyBeforeResolve = project.dirty;
     resolveOutputTypes(project);
+    project.dirty = dirtyBeforeResolve;
+
     for (auto &flow : project.flows)
     {
         for (const auto &node : flow.nodes)
-        {
-            for (const auto &[port, type] : savedOutputs.at(node.id))
-                if (!node.signatures.outputs.contains(port) || node.signatures.outputs.at(port) != type)
-                    reconciliations[node.id].changedOutputs.insert(port);
             for (const auto &[port, message] : node.outputTypeErrors)
                 diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                          "outputs." + portLabel(port), message);
-        }
+
         std::map<NodeId, const NodeDefinition *> nodes;
-        for (const auto &node : flow.nodes) nodes.emplace(node.id, &node);
+        for (const auto &node : flow.nodes)
+            nodes.emplace(node.id, &node);
+
         for (auto &node : flow.nodes)
         {
             if (!node.unresolved.isEmpty())
@@ -737,6 +771,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             for (const auto &[id, binding] : node.inputs)
                 if (binding.mode == BindingMode::Upstream && binding.source)
                     sources.emplace(id, *binding.source);
+
             for (const auto &[id, upstream] : sources)
             {
                 const auto source = nodes.find(upstream.node);
@@ -744,18 +779,12 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 {
                     diagnose(result, ProjectStorageCode::PendingReference, flow, node,
                              "inputs." + portLabel(id),
-                             "上游工具定义缺失，引用已保留以便恢复");
+                             "上游工具定义缺失，引用已保留，请先处理缺失插件节点");
                     continue;
                 }
                 const auto  check      = validateBinding(flow, upstream.node, upstream.port, node.id, id);
                 const auto *sourceNode = source == nodes.end() ? nullptr : source->second;
-                const auto  moved      = sourceNode ? reconciliations.find(sourceNode->id) : reconciliations.end();
-                const bool  outputMoved
-                    = moved != reconciliations.end() && moved->second.changedOutputs.contains(upstream.port);
-                // A declaration that no longer owns both ports cannot carry the connection. Cutting
-                // it is the truthful result: the canvas, the execution dependency and the saved file
-                // then agree, instead of a wire drawn over a binding the node can never run.
-                const bool cut = check.reason == BindingError::MissingPort || check.reason == BindingError::TypeMismatch;
+                const bool  cut = check.reason == BindingError::MissingPort || check.reason == BindingError::TypeMismatch;
                 if (!cut)
                 {
                     if (check.reason == BindingError::SameOrUpperRow)
@@ -773,10 +802,30 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                         ++updated->kept;
                     continue;
                 }
-                // The tool whose declaration moved owns the removal; both ends are recorded so the
-                // notice names the two ports instead of only the node that lost its input.
-                const auto *owner = outputMoved ? sourceNode : &node;
-                if (auto *update = findUpdate(owner->toolId))
+
+                const bool outputMissing = sourceNode && !sourceNode->signatures.outputs.contains(upstream.port);
+                const bool inputRemoved  = reconciliations[node.id].removedInputs.contains(id);
+                const NodeDefinition *owner = nullptr;
+                if (outputMissing)
+                    owner = sourceNode;
+                else if (inputRemoved)
+                    owner = &node;
+                else if (sourceNode && findUpdate(sourceNode->toolId))
+                    owner = sourceNode;
+                else
+                    owner = &node;
+
+                ToolUpdate *update = findUpdate(owner->toolId);
+                if (!update)
+                {
+                    if (const auto *def = registry.find(owner->toolId))
+                    {
+                        update = &updateFor(*def, owner->toolVersionSnapshot);
+                        if (std::find(update->nodes.begin(), update->nodes.end(), owner->title()) == update->nodes.end())
+                            update->nodes.push_back(owner->title());
+                    }
+                }
+                if (update)
                     update->removed.push_back(
                         {sourceNode ? sourceNode->title() + "." + portName(*sourceNode, PortStage::Outputs, upstream.port)
                                     : portLabel(upstream.port),
@@ -784,6 +833,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                          check.reason == BindingError::TypeMismatch
                              ? std::string("端口类型已变更")
                              : std::string("端口已从工具声明中删除")});
+
                 if (const auto binding = node.inputs.find(id); binding != node.inputs.end())
                 {
                     binding->second.mode = BindingMode::Literal;
@@ -798,154 +848,180 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     return result;
 }
 
-QJsonArray encodeTypes(const TypeMap &types)
-{
-    QJsonArray result;
-    for (const auto &[id, type] : types)
-        result.append(QJsonObject{{"port_id", static_cast<double>(id)}, {"type", ValueJson::encodeType(type)}});
-    return result;
-}
-
 QJsonObject encodeProject(const ProjectDefinition &project)
 {
     QJsonArray flows;
     for (const auto &flow : project.flows)
     {
         QJsonArray nodes;
+        QJsonArray layout;
+        QJsonArray connections;
+
         for (const auto &node : flow.nodes)
         {
-            const bool  unresolved = !node.unresolved.isEmpty();
-            QJsonObject raw        = node.unresolved;
-            raw.insert("node_seq", QString::number(node.id));
-            raw.insert("tool_id", QString::fromStdString(node.toolId));
-            raw.insert("tool_name_snapshot", QString::fromStdString(node.toolNameSnapshot));
-            // A lost tool keeps whatever version its file recorded; a resolved node always states
-            // the version it was reconciled against, so the next open can tell what moved.
+            layout.append(QJsonObject{
+                {"node", QString::number(node.id)},
+                { "col",           node.position.x},
+                { "row",           node.position.y}
+            });
+
+            for (const auto &[id, binding] : node.inputs)
+            {
+                if (binding.mode == BindingMode::Upstream && binding.source)
+                {
+                    connections.append(QJsonObject{
+                        {"from", QJsonObject{{"node", QString::number(binding.source->node)},
+                                             {"port", static_cast<double>(binding.source->port)}}},
+                        {  "to", QJsonObject{{"node", QString::number(node.id)},
+                                             {"port", static_cast<double>(id)}}}
+                    });
+                }
+            }
+
+            const bool unresolved = !node.unresolved.isEmpty();
             if (unresolved)
             {
-                if (!node.toolVersionSnapshot.empty())
-                    raw.insert("tool_version_snapshot", QString::fromStdString(node.toolVersionSnapshot));
+                QJsonObject raw = node.unresolved;
+                raw.insert("id", QString::number(node.id));
+                raw.insert("alias", QString::fromStdString(node.alias));
+                nodes.append(raw);
+                continue;
             }
-            else
-                raw.insert("tool_version_snapshot", QString::fromStdString(node.toolVersionSnapshot));
-            raw.insert("alias", QString::fromStdString(node.alias));
-            raw.insert("pos", QJsonArray{node.position.x, node.position.y});
-            raw.remove("training_asset");
-            if (!node.trainingAsset.empty())
-                raw.insert("training_asset", QString::fromStdString(storedTrainingAsset(project, node)));
-            if (!unresolved)
+
+            QJsonObject entry{
+                {   "id", QString::number(node.id)},
+                { "tool", QJsonObject{{"id", QString::fromStdString(node.toolId)},
+                                      {"name", QString::fromStdString(node.toolNameSnapshot)},
+                                      {"version", QString::fromStdString(node.toolVersionSnapshot.empty()
+                                                                             ? std::string("1.0.0")
+                                                                             : node.toolVersionSnapshot)}}},
+                {"alias", QString::fromStdString(node.alias)}
+            };
+
+            QJsonObject paramsObj;
+            if (!node.initParams.empty())
             {
-                QJsonArray trainingParameters;
-                for (const auto &[id, value] : node.trainParams)
-                    trainingParameters.append(QJsonObject{{"port_id", static_cast<double>(id)},
-                        {"value", ValueJson::encode(value, node.signatures.trainParams.at(id), ValueJson::Purpose::Stored)}});
-                raw.insert("train_params", trainingParameters);
-                QJsonArray parameters;
-                auto       parameterTypes = encodeTypes(node.signatures.initParams);
+                QJsonArray initArr;
                 for (const auto &[id, value] : node.initParams)
                 {
                     const auto signature = node.signatures.initParams.find(id);
                     if (signature == node.signatures.initParams.end())
-                        invalid("无法保存缺少 type_snapshot 的初始化参数：" + portLabel(id));
-                    const auto valueType = typeOf(value).value_or(signature->second);
-                    QJsonObject entry{
-                        {"port_id", static_cast<double>(id)},
-                        {"value", ValueJson::encode(value, valueType, ValueJson::Purpose::Stored)}};
-                    if (valueType != signature->second)
-                        entry.insert("value_type", ValueJson::encodeType(valueType));
-                    parameters.append(entry);
+                        invalid("无法保存缺少类型声明的初始化参数：" + portLabel(id));
+                    initArr.append(QJsonObject{
+                        { "port",                                                       static_cast<double>(id)},
+                        { "type",                                        ValueJson::encodeType(signature->second)},
+                        {"value", ValueJson::encode(value, signature->second, ValueJson::Purpose::Stored)}
+                    });
                 }
-                raw.remove("retired_init_params");
-                if (!node.retiredInitParams.isEmpty())
-                {
-                    QJsonArray retired;
-                    for (auto parameter = node.retiredInitParams.begin(); parameter != node.retiredInitParams.end();
-                         ++parameter)
-                        retired.append(parameter.value().toObject());
-                    raw.insert("retired_init_params", retired);
-                }
-                raw.remove("expression_config");
-                raw.remove("select_type");
-                if (node.expression)
-                {
-                    QJsonArray variables;
-                    for (const auto &variable : node.expression->variables)
-                        variables.append(QJsonObject{{"port_id", static_cast<double>(variable.portId)},
-                                                     {"name", QString::fromStdString(variable.name)},
-                                                     {"symbol", QString::fromStdString(variable.symbol)},
-                                                     {"type", ValueJson::encodeType(variable.type)},
-                                                     {"allow_missing", variable.allowMissing}});
-                    QJsonArray program;
-                    for (const auto &result : node.expression->program)
-                        program.append(QJsonObject{{"port_id", static_cast<double>(result.portId)},
-                                                   {"name", QString::fromStdString(result.name)},
-                                                   {"symbol", QString::fromStdString(result.symbol)},
-                                                   {"expression", QString::fromStdString(result.expression)},
-                                                   {"type", ValueJson::encodeType(result.type)},
-                                                   {"exposed", result.exposed}});
-                    raw.insert("expression_config",
-                               QJsonObject{{"next_port_id", QString::number(node.expression->nextPortId)},
-                                           {"variables", variables},
-                                           {"program", program}});
-                }
+                if (!initArr.isEmpty())
+                    paramsObj.insert("init", initArr);
+            }
 
-                if (node.selectType)
-                    raw.insert("select_type", ValueJson::encodeType(*node.selectType));
-                raw.insert("init_params", parameters);
-                raw.insert("type_snapshot", QJsonObject{
-                                                {"train_params", encodeTypes(node.signatures.trainParams)},
-                                                {"init_params",                       parameterTypes},
-                                                {     "inputs",  encodeTypes(node.signatures.inputs)},
-                                                {    "outputs", encodeTypes(node.signatures.outputs)}
+            if (!node.trainParams.empty())
+            {
+                QJsonArray trainArr;
+                for (const auto &[id, value] : node.trainParams)
+                {
+                    const auto signature = node.signatures.trainParams.find(id);
+                    if (signature == node.signatures.trainParams.end())
+                        invalid("无法保存缺少类型声明的训练参数：" + portLabel(id));
+                    trainArr.append(QJsonObject{
+                        { "port",                                                       static_cast<double>(id)},
+                        { "type",                                        ValueJson::encodeType(signature->second)},
+                        {"value", ValueJson::encode(value, signature->second, ValueJson::Purpose::Stored)}
+                    });
+                }
+                if (!trainArr.isEmpty())
+                    paramsObj.insert("train", trainArr);
+            }
+
+            if (!node.inputs.empty())
+            {
+                QJsonArray inputArr;
+                for (const auto &[id, binding] : node.inputs)
+                {
+                    const auto signature = node.signatures.inputs.find(id);
+                    if (signature == node.signatures.inputs.end())
+                        invalid("无法保存缺少类型声明的输入参数：" + portLabel(id));
+                    const bool wired = binding.mode == BindingMode::Upstream && binding.source.has_value();
+                    if (wired && isMissing(binding.literal))
+                        continue;
+                    if (isReservedPort(PortStage::Inputs, id) && binding.mode == BindingMode::Literal
+                        && isMissing(binding.literal))
+                        continue;
+                    QJsonObject item{
+                        { "port",                                                                 static_cast<double>(id)},
+                        { "type",                                                  ValueJson::encodeType(signature->second)},
+                        {"value", ValueJson::encode(binding.literal, signature->second, ValueJson::Purpose::Stored)}
+                    };
+                    if (binding.mode == BindingMode::Upstream && !binding.source)
+                        item.insert("mode", QStringLiteral("upstream"));
+                    inputArr.append(item);
+                }
+                if (!inputArr.isEmpty())
+                    paramsObj.insert("inputs", inputArr);
+            }
+
+            if (!paramsObj.isEmpty())
+                entry.insert("params", paramsObj);
+
+            if (node.expression)
+            {
+                QJsonArray variables;
+                for (const auto &variable : node.expression->variables)
+                    variables.append(QJsonObject{
+                        {         "port",         static_cast<double>(variable.portId)},
+                        {         "name",           QString::fromStdString(variable.name)},
+                        {       "symbol",         QString::fromStdString(variable.symbol)},
+                        {         "type",          ValueJson::encodeType(variable.type)},
+                        {"allow_missing",                          variable.allowMissing}
+                    });
+                QJsonArray program;
+                for (const auto &res : node.expression->program)
+                    program.append(QJsonObject{
+                        {      "port",             static_cast<double>(res.portId)},
+                        {      "name",               QString::fromStdString(res.name)},
+                        {    "symbol",             QString::fromStdString(res.symbol)},
+                        {"expression",         QString::fromStdString(res.expression)},
+                        {      "type",              ValueJson::encodeType(res.type)},
+                        {   "exposed",                                  res.exposed}
+                    });
+                entry.insert("expression", QJsonObject{
+                                               {"next_port_id", QString::number(node.expression->nextPortId)},
+                                               {   "variables",                                    variables},
+                                               {     "program",                                      program}
                 });
             }
-            // Bindings are encoded for every node, including one whose tool is missing: the editor
-            // still shows its inputs, so an edit made there has to survive the save instead of
-            // falling back to the opaque copy read from the file.
-            QJsonArray inputs;
-            for (const auto &[id, binding] : node.inputs)
-            {
-                const auto signature = node.signatures.inputs.find(id);
-                if (signature == node.signatures.inputs.end())
-                {
-                    if (unresolved)
-                        continue;
-                    invalid("无法保存缺少 type_snapshot 的输入：" + portLabel(id));
-                }
-                QJsonObject saved{{"port_id", static_cast<double>(id)},
-                                  {"mode", static_cast<int>(binding.mode)}};
-                // The draft value belongs to the binding whatever the mode is: an upstream input
-                // keeps the literal it falls back to, and dropping it would turn a plain reload
-                // into a schema change.
-                const auto valueType = typeOf(binding.literal).value_or(signature->second);
-                saved.insert("literal", ValueJson::encode(binding.literal, valueType,
-                                                          ValueJson::Purpose::Stored));
-                if (valueType != signature->second)
-                    saved.insert("value_type", ValueJson::encodeType(valueType));
-                if (binding.mode == BindingMode::Upstream && binding.source)
-                    saved.insert("source", QJsonObject{
-                                               {"node_seq", QString::number(binding.source->node)},
-                                               { "port_id", static_cast<double>(binding.source->port)}
-                    });
-                inputs.append(saved);
-            }
-            if (!unresolved || !inputs.isEmpty())
-                raw.insert("inputs", inputs);
-            nodes.append(raw);
+
+            if (node.selectType)
+                entry.insert("select_type", ValueJson::encodeType(*node.selectType));
+
+            nodes.append(entry);
         }
+
         flows.append(QJsonObject{
-            {     "flow_id",   QString::fromStdString(flow.id)},
+            {          "id", QString::fromStdString(flow.id)},
             {        "name", QString::fromStdString(flow.name)},
-            {"run_selected",                  flow.runSelected},
-            {       "nodes",                             nodes}
+            {"run_selected", flow.runSelected},
+            {       "nodes", nodes},
+            {      "layout", layout},
+            { "connections", connections}
         });
     }
+
+    QJsonObject projectMeta{
+        {             "name", QString::fromStdString(project.name)},
+        {            "notes", QString::fromStdString(project.notes)},
+        {      "app_version", QString::fromStdString(project.appVersion)},
+        {"contracts_version", QString::fromStdString(project.contractsVersion)},
+        {    "next_node_seq", QString::number(project.nextNodeId)},
+        {    "next_flow_seq", QString::number(project.nextFlowId)}
+    };
+
     return {
-        {"format_version",                                                                   projectFormatVersion},
-        {       "project", QJsonObject{{"name", QString::fromStdString(project.name)},
- {"next_node_seq", QString::number(project.nextNodeId)},
- {"next_flow_seq", QString::number(project.nextFlowId)}}                               },
-        {         "flows",                                                                                  flows}
+        {"format_version", projectFormatVersion},
+        {       "project",          projectMeta},
+        {         "flows",                flows}
     };
 }
 
@@ -953,22 +1029,16 @@ QJsonObject encodeProject(const ProjectDefinition &project)
 
 ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
 {
-    const auto absolute = std::filesystem::absolute(path).lexically_normal();
+    const auto absolute  = std::filesystem::absolute(path).lexically_normal();
     const auto extension = qtPath(absolute.extension()).toLower();
-    if (extension == ".yaml" || extension == ".yml")
-        invalid("工程格式不受支持，请使用 JSON 工程：" + utf8Path(absolute));
-    QFile      file(qtPath(absolute));
-    if (!file.open(QIODevice::ReadOnly))
-        throw std::runtime_error("无法打开工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());
-    const auto bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError)
-        throw std::runtime_error("无法读取工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());
+    if (extension != ".vrtapp")
+        invalid("工程格式不受支持，请使用 .vrtapp 工程：" + utf8Path(absolute));
     try
     {
+        const auto                bytes = ProjectArchive::readProgramJson(absolute);
         const ValueJson::Document document(bytes);
         auto                      result = decodeProject(document, registry_);
         result.project.path              = absolute;
-        resolveTrainingAssets(result.project);
         return result;
     }
     catch (const ContractError &error)
@@ -983,7 +1053,6 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
     auto                      result = decodeProject(document, registry_);
     result.project.path              = project.path;
     result.project.dirty             = result.project.dirty || project.dirty;
-    resolveTrainingAssets(result.project);
     for (std::size_t f = 0; f < project.flows.size(); ++f)
     {
         auto &updatedFlow             = result.project.flows[f];
@@ -991,13 +1060,14 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
         bool changedStructure         = false;
         for (std::size_t n = 0; n < project.flows[f].nodes.size(); ++n)
         {
-            auto       &updated        = updatedFlow.nodes[n];
-            const auto &original       = project.flows[f].nodes[n];
-            updated.executionRevision  = original.executionRevision;
-            const bool contractChanged = original.unresolved.isEmpty() != updated.unresolved.isEmpty()
-                                      || original.signatures.initParams != updated.signatures.initParams
-                                      || original.signatures.inputs != updated.signatures.inputs
-                                      || original.signatures.outputs != updated.signatures.outputs;
+            auto       &updated            = updatedFlow.nodes[n];
+            const auto &original           = project.flows[f].nodes[n];
+            updated.executionRevision      = original.executionRevision;
+            updated.initializationRevision = original.initializationRevision;
+            const bool contractChanged     = original.unresolved.isEmpty() != updated.unresolved.isEmpty()
+                                          || original.signatures.initParams != updated.signatures.initParams
+                                          || original.signatures.inputs != updated.signatures.inputs
+                                          || original.signatures.outputs != updated.signatures.outputs;
             changedStructure      = changedStructure || contractChanged;
             bool changedExecution = contractChanged
                 || !std::equal(updated.initParams.begin(), updated.initParams.end(),
@@ -1033,10 +1103,9 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
 std::filesystem::path projectDestination(std::filesystem::path destination)
 {
     if (!destination.has_extension())
-        destination += ".json";
-    // Load accepts any casing of the suffix, so save has to accept the same spellings.
-    if (qtPath(destination.extension()).toLower() != ".json")
-        invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(destination));
+        destination += ".vrtapp";
+    if (qtPath(destination.extension()).toLower() != ".vrtapp")
+        invalid("工程保存路径必须使用 .vrtapp 扩展名：" + utf8Path(destination));
     return std::filesystem::absolute(destination).lexically_normal();
 }
 
@@ -1045,23 +1114,14 @@ void ProjectStorage::save(ProjectDefinition &project, const std::filesystem::pat
     auto target = destination.empty() ? project.path : destination;
     if (target.empty())
         invalid("未命名工程必须指定保存位置");
-    target                      = projectDestination(target);
-    ProjectDefinition candidate = project;
-    candidate.path        = target;
-    candidate.dirty       = false;
-    const auto serialized = QJsonDocument(encodeProject(candidate)).toJson(QJsonDocument::Indented);
-    QSaveFile  file(qtPath(target));
-    file.setDirectWriteFallback(false);
-    if (!file.open(QIODevice::WriteOnly))
-        throw std::runtime_error("无法保存工程 " + utf8Path(target) + "：" + file.errorString().toStdString());
-    if (file.write(serialized) != serialized.size())
-    {
-        const auto error = file.errorString().toStdString();
-        file.cancelWriting();
-        throw std::runtime_error("无法写入工程 " + utf8Path(target) + "：" + error);
-    }
-    if (!file.commit())
-        throw std::runtime_error("无法提交工程文件 " + utf8Path(target) + "：" + file.errorString().toStdString());
+    target                           = projectDestination(target);
+    ProjectDefinition candidate      = project;
+    candidate.path                   = target;
+    candidate.dirty                  = false;
+    candidate.appVersion             = GetVersionString();
+    candidate.contractsVersion       = GetContractsVersion().version;
+    const auto serialized            = QJsonDocument(encodeProject(candidate)).toJson(QJsonDocument::Indented);
+    ProjectArchive::writeProgramJson(target, serialized);
     project = std::move(candidate);
 }
 } // namespace visionrt

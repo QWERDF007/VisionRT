@@ -162,7 +162,7 @@ int main()
 
         QTemporaryDir tmpDir;
         assert(tmpDir.isValid());
-        const auto jsonPath = std::filesystem::path(tmpDir.path().toStdWString()) / "peer_test.json";
+        const auto jsonPath = std::filesystem::path(tmpDir.path().toStdWString()) / "peer_test.vrtapp";
 
         // Create a valid project with node 1 at (0, 0) and node 2 at (5, 2), bound 1 -> 2
         ProjectEditor validEditor;

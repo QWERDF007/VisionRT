@@ -152,7 +152,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
         settingsError = settingsFailure;
         report(settingsFailure);
     }
-    runtime = std::make_unique<RuntimeEngine>(workers);
+    runtime = std::make_unique<RuntimeEngine>(workers, applicationDirectory);
     presentation.setRuntime(runtime.get());
     presentation.setExternalBusy([this] { return assist && assist->busy(); });
     runtime->setReadbackEnabled(true);
@@ -2255,11 +2255,7 @@ bool AppController::save(const QString &path)
     {
         const auto           target    = projectDestination(destination);
         auto                 candidate = impl_->editor.project();
-        // Assets first, project JSON last: a copy that cannot carry a published revision leaves the
-        // existing project and its own files exactly as they were.
-        training::SaveAssets assets(candidate, target, impl_->registry);
         ProjectStorage(impl_->registry).save(candidate, target);
-        assets.accept();
         impl_->editor.replaceProject(std::move(candidate));
         impl_->synchronizeNodes();
         emit projectChanged();

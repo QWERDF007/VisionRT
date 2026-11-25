@@ -231,7 +231,15 @@ struct AppController::Impl : PresentationHost
     QString                        assistDisabledReason;
     ROI                            assistPreviewRois;
     std::optional<AssistContext>   assistPreviewContext;
-    std::optional<AssistContext>   pendingTraining;
+    struct PendingTrainingArtifact
+    {
+        PortId                targetPort = 0;
+        PortId                sourcePort = 0;
+        std::filesystem::path absolutePath;
+        std::string           storedPath;
+    };
+    std::optional<AssistContext>                     pendingTraining;
+    std::map<std::string, PendingTrainingArtifact>   pendingTrainingArtifacts;
     QVariantList parameterRows;
     NodeId       parameterRowsNode = 0;
 
@@ -394,7 +402,7 @@ struct AppController::Impl : PresentationHost
     PortValue            resolvedInput(const NodeDefinition &node, PortId input) const;
     void                 commitRoi(const RoiEditTarget &target, const EncodedRegion *value);
 
-    // Training belongs to the selected tool. The session holds the records and the asset path; the
+    // Training belongs to the selected tool. The session holds its parameters and records; the
     // viewport shows them through the same ROI editor the processing view uses.
     struct TrainingView
     {
@@ -409,7 +417,7 @@ struct AppController::Impl : PresentationHost
     bool                           trainingMode   = false;
     quint64                        trainingSerial = 0;
     const TrainingSpec            *trainingSpec() const;
-    // Binds the session to the selected node, reading its asset when the selection changes.
+    // Binds the session to the selected node's training parameters.
     bool                           ensureTrainingSession();
     // Ends the training view and restores the ordinary processing presentation.
     void                           leaveTraining();
@@ -425,7 +433,9 @@ struct AppController::Impl : PresentationHost
     // and one project transaction; rejected results leave the draft and running configuration intact.
     bool                           requestTraining(const ToolDefinition &tool, const TrainingSpec &spec);
     void                           completeTraining(const AssistOutcome &outcome);
-    bool publishTraining(const ToolDefinition &tool, const TrainingSpec &spec, ToolResult &result);
+    bool publishTraining(const TrainingSpec &spec,
+                         const std::map<std::string, PendingTrainingArtifact> &artifacts,
+                         ToolResult &result);
     void finishRoi();
     void storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 

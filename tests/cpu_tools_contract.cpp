@@ -71,7 +71,7 @@ void geometryCreators(ToolRegistry &registry)
     auto          project = editor.project();
     QTemporaryDir directory;
     assert(directory.isValid());
-    const auto     path = std::filesystem::path(directory.filePath("geometry.json").toStdWString());
+    const auto     path = std::filesystem::path(directory.filePath("geometry.vrtapp").toStdWString());
     ProjectStorage storage(registry);
     storage.save(project, path);
     const auto loaded = storage.load(path);

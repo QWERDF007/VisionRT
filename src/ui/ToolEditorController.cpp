@@ -810,7 +810,7 @@ QVariantList ToolEditorController::supportedTypes() const
         if (t == Type::Array) continue;
         const TypeSpec spec{.type = t};
         QVariantMap item;
-        item.insert("token", ValueJson::encodeType(spec).toVariantMap());
+        item.insert("token", ValueJson::encodeTypeToken(spec).toVariantMap());
         item.insert("label", displayTypeName(spec));
         item.insert("isShape", isShapeType(t));
         item.insert("rank", 0);
@@ -821,7 +821,7 @@ QVariantList ToolEditorController::supportedTypes() const
     for (const auto &spec : Array::supportedTypes())
     {
             QVariantMap item;
-            item.insert("token", ValueJson::encodeType(spec).toVariantMap());
+            item.insert("token", ValueJson::encodeTypeToken(spec).toVariantMap());
             item.insert("label", displayTypeName(spec));
             item.insert("rank", spec.rank);
             item.insert("dtype", static_cast<int>(*spec.dtype));

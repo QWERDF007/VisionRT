@@ -270,6 +270,19 @@ class ToolsDeploymentContract(unittest.TestCase):
 
 
 class ExampleProjectsContract(unittest.TestCase):
+    def test_only_comprehensive_projects_ship(self) -> None:
+        examples = package_app.REPO_ROOT / package_app.EXAMPLES_DIRECTORY
+        projects = {path.relative_to(examples).as_posix() for path in examples.glob("*/*/*.vrtapp")}
+        self.assertEqual(projects, {
+            "综合示例/多分支视觉检测/多分支视觉检测.vrtapp",
+            "综合示例/识别线缆颜色/识别线缆颜色.vrtapp",
+            "综合示例/变距尺子标定测量/变距尺子标定测量.vrtapp",
+        })
+        self.assertEqual(list(examples.glob("*/*/*.json")), [])
+        self.assertEqual({path.name for path in (examples / "images").iterdir()}, {
+            "多分支视觉检测", "识别线缆颜色", "变距尺子标定测量",
+        })
+
     def test_source_images_share_the_examples_images_tree(self) -> None:
         examples = package_app.REPO_ROOT / package_app.EXAMPLES_DIRECTORY
         images = list(examples.rglob("*.png"))
@@ -278,29 +291,30 @@ class ExampleProjectsContract(unittest.TestCase):
             self.assertTrue(image.is_relative_to(examples / "images"), str(image))
         for relative in package_app.REQUIRED_EXAMPLE_PROJECTS:
             project = examples / relative
-            document = json.loads(project.read_text(encoding="utf-8"))
+            document = package_app.read_example_project_json(project)
             references = [text for text in package_app.example_texts(document) if text.startswith("examples/images/")]
             self.assertTrue(references, str(relative))
             self.assertTrue(all((package_app.REPO_ROOT / text).exists() for text in references), references)
 
-    def test_json_projects_are_checked_without_reading_training_assets(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="visionrt-example-json-") as directory:
+    def test_vrtapp_projects_are_checked_without_reading_resource_json(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-example-vrtapp-") as directory:
             root = Path(directory)
-            sample = root / "03_综合示例" / "02_识别线缆颜色"
+            sample = root / "综合示例" / "识别线缆颜色"
             sample.mkdir(parents=True)
-            project = sample / "识别线缆颜色.json"
-            project.write_text(json.dumps({
-                "format_version": 8, "project": {"name": "识别线缆颜色"},
-                "flows": [{"image": "C:/outside/image.png"}],
-            }), encoding="utf-8")
-            assets = sample / "识别线缆颜色.assets" / "training"
+            project = sample / "识别线缆颜色.vrtapp"
+            with zipfile.ZipFile(project, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("program.json", json.dumps({
+                    "format_version": 9, "project": {"name": "识别线缆颜色"},
+                    "flows": [{"image": "C:/outside/image.png"}],
+                }))
+            assets = sample / "assets"
             assets.mkdir(parents=True)
-            (assets / "manifest.json").write_text(
-                '{"source": "C:/training/source.png"}', encoding="utf-8")
+            (assets / "config.json").write_text(
+                '{"source": "C:/resources/source.png"}', encoding="utf-8")
 
             problems = package_app.example_project_problems(root)
             self.assertEqual(len(problems), 1, problems)
-            self.assertIn("识别线缆颜色.json", problems[0])
+            self.assertIn("识别线缆颜色.vrtapp", problems[0])
             self.assertIn("C:/outside/image.png", problems[0])
 
 

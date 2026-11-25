@@ -93,6 +93,7 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
 InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry, const std::filesystem::path &base)
     : toolId(node.toolId)
     , availability(registry.availability(node.toolId).state)
+    , initializationRevision(node.initializationRevision)
     , outputs(node.signatures.outputs)
 {
     if (const auto *definition = registry.find(toolId))
@@ -108,7 +109,8 @@ bool InstanceConfiguration::operator==(const InstanceConfiguration &other) const
 {
     return toolId == other.toolId && version == other.version && kind == other.kind
         && availability == other.availability && outputs == other.outputs
-        && models == other.models && sameParameters(parameters, other.parameters);
+        && models == other.models && initializationRevision == other.initializationRevision
+        && sameParameters(parameters, other.parameters);
 }
 
 void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next,

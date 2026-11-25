@@ -200,7 +200,7 @@ void runPackageReplacement(PythonRuntime &python)
     }
 
     // Saved project path
-    const auto savedProjectFile = installRoot / "test_pipeline.json";
+    const auto savedProjectFile = installRoot / "test_pipeline.vrtapp";
 
     // 2. Package 1 execution: C++ domain DLL, Python tool, and Platform Receiver node in pipeline
     {

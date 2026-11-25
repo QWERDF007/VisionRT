@@ -15,6 +15,7 @@ class VISIONRT_UI_API VisionRTColor final : public QObject
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeGrey)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeRed)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeGreen)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, NodeWarning)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeLine)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeInputLine)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeOutputLine)

@@ -58,7 +58,7 @@ try
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC path did not settle");
     const auto projectDirectory = QStringLiteral(VISIONRT_SOURCE_DIR "/build/unc-project");
     require(QDir().mkpath(projectDirectory), "cannot create the UNC project directory");
-    const auto projectPath = projectDirectory + "/unc.json";
+    const auto projectPath = projectDirectory + "/unc.vrtapp";
     require(app.save(projectPath), "UNC project could not be saved");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC project did not save");
     app.requestOpen(projectPath);

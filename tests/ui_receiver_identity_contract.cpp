@@ -1,6 +1,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/NodeContracts.h"
+#include "core/ProjectArchive.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
@@ -118,8 +119,8 @@ try
     editor.setInitParam("flow_1", target, ReceiveInitPorts::Timeout, std::int64_t{5000});
     ProjectStorage storage(registry);
     auto           project = editor.project();
-    const auto     input   = root + "/宽 ID 工程.json";
-    const auto     output  = root + "/已选择来源.json";
+    const auto     input   = root + "/宽 ID 工程.vrtapp";
+    const auto     output  = root + "/已选择来源.vrtapp";
     storage.save(project, std::filesystem::path(input.toStdU16String()));
     AppController app(2, root);
     const auto    idle = [&]
@@ -247,21 +248,18 @@ try
     auto lines = calls.readAll().trimmed().split('\n');
     if (lines.size() != 8 || lines.count("17") != 4 || lines.count("29") != 4)
         throw std::runtime_error("unexpected source executions: " + lines.join(',').toStdString());
-    QFile saved(output);
-    require(saved.open(QIODevice::ReadOnly), "cannot read receiver project for the unresolved-reference case");
-    auto document   = QJsonDocument::fromJson(saved.readAll()).object();
-    auto flows      = document["flows"].toArray();
-    auto flow       = flows[0].toObject();
-    auto nodes      = flow["nodes"].toArray();
-    auto node       = nodes[0].toObject();
-    // 旧工程只有“按名引用”可写：这里模拟它的等价残留——源流程/源节点参数已不在声明中，
-    // 值以 retired_init_params 保留，必须由用户重新选择来源，宿主不得猜号。
+    auto document = QJsonDocument::fromJson(ProjectArchive::readProgramJson(std::filesystem::path(output.toStdWString()))).object();
+    auto flows    = document["flows"].toArray();
+    auto flow     = flows[0].toObject();
+    auto nodes    = flow["nodes"].toArray();
+    auto node     = nodes[0].toObject();
+    auto params   = node["params"].toObject();
     const auto withoutPorts = [](QJsonArray items, std::initializer_list<int> dropped)
     {
         QJsonArray kept;
         for (const auto &item : items)
         {
-            const int id = item.toObject().value("port_id").toInt();
+            const int id   = item.toObject().value("port").toInt();
             bool      drop = false;
             for (const int candidate : dropped)
                 drop = drop || candidate == id;
@@ -271,33 +269,25 @@ try
         return kept;
     };
     const std::initializer_list<int> references{ReceiveInitPorts::SourceFlow, ReceiveInitPorts::SourceNode};
-    auto parameters = withoutPorts(node["init_params"].toArray(), references);
-    parameters.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"value", "旧来源"}});
-    auto types     = node["type_snapshot"].toObject();
-    auto initTypes = withoutPorts(types["init_params"].toArray(), references);
-    initTypes.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"type", QJsonObject{{"type", static_cast<int>(Type::String)}}}});
-    types.insert("init_params", initTypes);
-    node.insert("init_params", parameters);
-    node.insert("type_snapshot", types);
+    auto parameters = withoutPorts(params["init"].toArray(), references);
+    parameters.append(QJsonObject{{"port", static_cast<int>(kRetiredInitPort)}, {"type", "string"}, {"value", "旧来源"}});
+    params.insert("init", parameters);
+    node.insert("params", params);
     nodes[0] = node;
     flow.insert("nodes", nodes);
     flows[0] = flow;
     document.insert("flows", flows);
-    const auto legacyPath = root + "/待重新选择的来源.json";
-    QFile      legacy(legacyPath);
-    const auto bytes = QJsonDocument(document).toJson();
-    require(legacy.open(QIODevice::WriteOnly) && legacy.write(bytes) == bytes.size(),
-            "cannot write unresolved-reference project");
-    legacy.close();
+    const auto legacyPath = root + "/待重新选择的来源.vrtapp";
+    ProjectArchive::writeProgramJson(std::filesystem::path(legacyPath.toStdWString()), QJsonDocument(document).toJson());
     app.requestOpen(legacyPath);
     idle();
     require(replacements.size() == 3, "name-based source project was not actually opened");
     app.selectNode(targetId);
-    require(app.diagnosticsJson().contains("重新选择"), "name-based source did not explain the required repair");
+    require(app.diagnosticsJson().contains("需要选择源流程"), "missing source did not explain the required repair");
     app.runOnce();
     idle();
     require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 8,
-            "an unresolved name-based reference started the graph");
+            "an unresolved reference started the graph");
     require(app.setParameter(ReceiveInitPorts::SourceFlow, true, QString::fromStdString(sourceFlow)),
             "cannot repair source flow identity");
     idle();
@@ -309,9 +299,8 @@ try
     require(lines.size() == 10 && lines.count("17") == 5 && lines.count("29") == 5,
             "repair did not enable exactly one real graph execution");
     require(app.save(legacyPath), "repaired receiver project save failed");
-    QFile repaired(legacyPath);
-    require(repaired.open(QIODevice::ReadOnly), "cannot reopen the repaired receiver project");
-    const auto repairedNode = QJsonDocument::fromJson(repaired.readAll())
+    const auto repairedNode = QJsonDocument::fromJson(
+                                  ProjectArchive::readProgramJson(std::filesystem::path(legacyPath.toStdWString())))
                                   .object()["flows"]
                                   .toArray()[0]
                                   .toObject()["nodes"]
@@ -319,17 +308,16 @@ try
                                   .toObject();
     const auto repairedValue = [&](PortId id)
     {
-        for (const auto &item : repairedNode["init_params"].toArray())
-            if (item.toObject().value("port_id").toInt() == static_cast<int>(id))
+        for (const auto &item : repairedNode["params"].toObject()["init"].toArray())
+            if (item.toObject().value("port").toInt() == static_cast<int>(id))
                 return item.toObject().value("value");
-        return QJsonValue{};
+        return QJsonValue(QJsonValue::Undefined);
     };
-    const auto retired = repairedNode["retired_init_params"].toArray();
     require(repairedValue(ReceiveInitPorts::SourceFlow).toString() == QString::fromStdString(sourceFlow)
                 && repairedValue(ReceiveInitPorts::SourceNode).toString() == QString::number(first)
-                && retired.size() == 1
-                && retired[0].toObject().value("port_id").toInt() == static_cast<int>(kRetiredInitPort),
-            "repair/save dropped a retained value or changed the selected stable IDs");
+                && repairedValue(kRetiredInitPort).isUndefined()
+                && !repairedNode.contains("retired_init_params"),
+            "repair/save failed to drop undeclared parameter or changed the selected stable IDs");
     std::cout << "RECEIVER_IDENTITY_PASS first=" << first << " second=" << second << " target=" << target
               << " keyboard=3 source_executions=10 restored=29 repaired=17 rejected_execution=0\n";
     app.renameFlow(QString::fromStdString(sourceFlow), "已改名的流程");
@@ -345,7 +333,7 @@ try
                 && renamedChoice->property("displayText").toString().startsWith("已改名的来源-"),
             "source rename changed the receiver identity or left its selector label stale");
     run("17");
-    const auto renamedPath = root + "/改名后的稳定引用.json";
+    const auto renamedPath = root + "/改名后的稳定引用.vrtapp";
     require(app.save(renamedPath), "renamed receiver project save failed");
     const auto renamed = storage.load(std::filesystem::path(renamedPath.toStdU16String())).project;
     const auto &renamedReceiver = renamed.flows[0].nodes[0];

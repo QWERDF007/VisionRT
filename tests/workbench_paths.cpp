@@ -206,7 +206,7 @@ void pathEditorsContract()
                 return entry.toMap().value("valueText").toString();
         return QString{};
     };
-    const auto project = root.filePath("paths.json");
+    const auto project = root.filePath("paths.vrtapp");
     for (const auto &[name, field] : std::array<std::pair<const char *, PortId>, 3>{{{"file", kFilePath}, {"folder", kFolderInput}, {"path", kDynamicPath}}})
     {
         editor->setProperty("fieldId", static_cast<uint>(field));
@@ -332,7 +332,7 @@ void pathEditorsContract()
     require(quickui::QuiNativeFileDialog::toFileUrl(testLocal) == testUrl,
             "QuiNativeFileDialog::toFileUrl damaged local file path");
 
-    const auto unsavedProject = root.filePath("unsaved_paths.json");
+    const auto unsavedProject = root.filePath("unsaved_paths.vrtapp");
     require(app.save(unsavedProject), "Unsaved path project could not save");
     app.requestOpen(unsavedProject);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "Relative path project did not reopen");
@@ -367,7 +367,7 @@ void readImageToolUiContract()
     const auto nodeId = app.nodes().front().toMap().value("id").toString();
     app.selectNode(nodeId);
 
-    const auto baselineProject = installation.directory() + "/baseline_read_image.json";
+    const auto baselineProject = installation.directory() + "/baseline_read_image.vrtapp";
     require(app.save(baselineProject), "cannot save baseline project");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "baseline save did not settle");
     require(!app.dirty(), "baseline project is dirty");
@@ -525,7 +525,7 @@ void readImageToolUiContract()
     // 5. Save and Reopen project
     QTemporaryDir tempSaveDir;
     require(tempSaveDir.isValid(), "temporary save dir invalid");
-    const auto savedProjectPath = tempSaveDir.filePath("test_image_read.json");
+    const auto savedProjectPath = tempSaveDir.filePath("test_image_read.vrtapp");
     require(app.save(savedProjectPath), "failed to save image read project");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "save did not finish");
 

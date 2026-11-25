@@ -134,7 +134,7 @@ try
     require(!app.trainingAvailable() && app.parameterTabs().size() == 4 && !app.trainingMode(),
             "an ordinary tool retained training tabs");
     const auto calibration = testing::copyExample(VISIONRT_SOURCE_DIR, installation.directory(),
-        std::filesystem::path(u8"examples/03_综合示例/03_变距尺子标定测量"), std::filesystem::path(u8"变距尺子标定测量.json"));
+        std::filesystem::path(u8"examples/综合示例/变距尺子标定测量"), std::filesystem::path(u8"变距尺子标定测量.vrtapp"));
     app.requestOpen(calibration);
     app.resolveUnsaved(UnsavedDecision::Discard);
     settle();
@@ -149,9 +149,10 @@ try
     require(std::get<double>(outputs->capture(PortId{5})->value) < 0.5, "real plate satisfies the declared quality threshold");
     require(std::get<CoordinateFrame2D>(outputs->capture(PortId{6})->value).count(0) == 1, "training publishes the reusable coordinate frame");
     require(std::get<Circle>(outputs->capture(PortId{4})->value).get().front().size() > 500, "training locates the real plate marks");
-    const auto modelPath = std::filesystem::weakly_canonical(app.project().path.parent_path()
-        / std::filesystem::u8path(std::get<std::string>(app.project().flows.front().nodes.at(1).trainParams.at(2))));
-    const auto relativeModel = modelPath.lexically_relative(std::filesystem::path(installation.directory().toStdWString()));
+    const auto installRoot = std::filesystem::path(installation.directory().toStdWString());
+    const auto configuredModel = std::filesystem::u8path(std::get<std::string>(app.project().flows.front().nodes.at(1).trainParams.at(2)));
+    const auto modelPath = std::filesystem::weakly_canonical(configuredModel.is_absolute() ? configuredModel : installRoot / configuredModel);
+    const auto relativeModel = modelPath.lexically_relative(std::filesystem::weakly_canonical(installRoot));
     require(!relativeModel.empty() && *relativeModel.begin() != "..", "training assets belong to the controller installation");
     trainingTab = button(panel, "训练");
     QTest::mouseClick(window, Qt::LeftButton, {}, trainingTab->mapToScene(trainingTab->boundingRect().center()).toPoint());

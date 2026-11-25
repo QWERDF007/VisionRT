@@ -122,7 +122,7 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         case IdRole:          return static_cast<quint32>(port.id);
         case NameZhRole:      return QString::fromStdString(port.nameZh);
         case NameEnRole:      return QString();
-        case TypeRole:        return ValueJson::encodeType(port.type).toVariantMap();
+        case TypeRole:        return ValueJson::encodeTypeToken(port.type).toVariantMap();
         case DisplayTypeRole: return displayTypeName(port.type);
         case DefaultValueRole:return isMissing(port.defaultValue) ? QString() : ValueJson::text(port.defaultValue, port.type);
         case IsFixedRole:     return true;
@@ -160,7 +160,7 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
     case NameEnRole:
         return QString::fromStdString(port.nameEn);
     case TypeRole:
-        return ValueJson::encodeType(port.type).toVariantMap();
+        return ValueJson::encodeTypeToken(port.type).toVariantMap();
     case DisplayTypeRole:
         return displayTypeName(port.type);
     case DefaultValueRole:
@@ -251,7 +251,7 @@ bool ToolPortListModel::addPort(const QString &nameZh, const QVariantMap &type, 
     port.nameZh = nameZh.trimmed().toStdString();
     try
     {
-        port.type = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
+        port.type = ValueJson::decodeTypeToken(QJsonObject::fromVariantMap(type));
         port.defaultValue = defaultValue.isEmpty() ? portDefault(port) : parseEditorValue(defaultValue, port.type);
     }
     catch (const std::exception &error)
@@ -507,7 +507,7 @@ QStringList ToolPortListModel::typeChangeImpact(int row, const QVariantMap &type
     TypeSpec spec;
     try
     {
-        spec = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
+        spec = ValueJson::decodeTypeToken(QJsonObject::fromVariantMap(type));
     }
     catch (const std::exception &)
     {
@@ -545,7 +545,7 @@ bool ToolPortListModel::changeType(int row, const QVariantMap &type)
     TypeSpec spec;
     try
     {
-        spec = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
+        spec = ValueJson::decodeTypeToken(QJsonObject::fromVariantMap(type));
     }
     catch (const std::exception &error)
     {

@@ -1,12 +1,8 @@
-#include "ui/TrainingAssets.h"
 #include "ui/TrainingSession.h"
 #include "visionrt/contracts/ValueJson.h"
 
 #include <QDir>
-#include <QFile>
 #include <QGuiApplication>
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
@@ -82,26 +78,19 @@ int main(int argc, char **argv)
         require(std::get<std::int64_t>(std::get<DataRef<TrainingSet>>(parameters.at(2)).get().records.at(9).fields.at(0)) == 15,
                 "second dataset reaches its number");
         require(QDir(temporary.path()).entryList(QDir::Files).empty(), "editing writes no files");
-        const auto base = std::filesystem::path(temporary.path().toStdWString()) / L"published";
-        training::Revision revision(base, session, {});
-        revision.accept();
         auto restored = declaration();
-        restored.asset = revision.directory() / L"manifest.json";
         for (const auto &[id, value] : session.parameters())
             restored.parameters[id] = readValueJson(writeValueJson(value, *typeOf(value)), *typeOf(value));
         TrainingSession reopened;
         reopened.begin(restored);
-        require(reopened.error().isEmpty() && reopened.savable(), "multiple datasets reload through real assets");
+        require(reopened.error().isEmpty() && reopened.savable(), "multiple datasets reload from persisted values");
         require(reopened.records().size() == 2 && reopened.images().size() == 1, "shared frame reloads once");
         require(reopened.selectRoiParameter(0) && reopened.regions(0).size() == 1, "circle field reloads");
         require(reopened.selectDataset(2) && reopened.records().size() == 1 && !reopened.records()[0].image,
                 "imageless dataset reloads");
         require(std::get<std::int64_t>(*reopened.value(0, 0)) == 15, "record number and type persist");
-        QFile manifest(QString::fromStdWString(restored.asset.wstring()));
-        require(manifest.open(QIODevice::ReadOnly), "manifest exists");
-        const auto json = QJsonDocument::fromJson(manifest.readAll()).object();
-        require(!json.contains("datasets") && !json.contains("parameters"),
-                "record values belong to project parameters; model manifests do not duplicate them");
+        require(QDir(temporary.path()).entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot).empty(),
+                "training values round trip without external storage");
         TrainingSession valuesOnly;
         TrainingSession::Begin simple;
         simple.node = 2;

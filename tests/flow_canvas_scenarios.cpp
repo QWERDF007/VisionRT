@@ -72,7 +72,7 @@ void flowCanvasContract()
     };
     auto *surface = findItem(findItem, canvas, QStringLiteral("flowSurface"));
     require(surface != nullptr, "canvas surface is missing");
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
+    app.requestOpen(visionrt::testing::copyProjectFixture(VISIONRT_SOURCE_DIR, installation.directory(), u8"Python图像统计.vrtapp"));
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     if (!QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000))
         throw std::runtime_error("canvas did not open the real example project: " + app.diagnostic().toStdString()

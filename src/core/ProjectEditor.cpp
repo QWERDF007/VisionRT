@@ -821,10 +821,10 @@ bool ProjectEditor::setLiteral(std::string_view flowId, NodeId id, PortId input,
 }
 
 bool ProjectEditor::setLiteralWrites(std::string_view flowId, NodeId id, std::span<const LiteralWrite> writes,
-                                     std::function<std::filesystem::path()> prepareTrainingAsset)
+                                     std::function<void()> prepare)
 {
     requireIdle();
-    if (writes.empty() && !prepareTrainingAsset)
+    if (writes.empty() && !prepare)
         return false;
     ProjectEditor edit(project_);
     auto         &node = findNode(edit.flow(flowId), id);
@@ -859,20 +859,15 @@ bool ProjectEditor::setLiteralWrites(std::string_view flowId, NodeId id, std::sp
         mutableBinding.literal = copyProjectLiteral(write.value);
         changed                = true;
     }
-    if (!changed && !prepareTrainingAsset)
+    if (!changed && !prepare)
         return false;
     requireIncrement(node.executionRevision);
-    if (prepareTrainingAsset)
+    if (prepare)
     {
-        auto asset = prepareTrainingAsset();
-        if (node.trainingAsset != asset)
-        {
-            node.trainingAsset = std::move(asset);
-            changed            = true;
-        }
+        requireIncrement(node.initializationRevision);
+        prepare();
+        ++node.initializationRevision;
     }
-    if (!changed)
-        return false;
     ++node.executionRevision;
     commit(std::move(edit.project_));
     return true;
@@ -904,7 +899,9 @@ bool ProjectEditor::reloadNode(std::string_view flowId, NodeId id)
     auto         &node = findNode(edit.flow(flowId), id);
     requireEditable(node);
     requireIncrement(node.executionRevision);
+    requireIncrement(node.initializationRevision);
     ++node.executionRevision;
+    ++node.initializationRevision;
     commit(std::move(edit.project_));
     return true;
 }

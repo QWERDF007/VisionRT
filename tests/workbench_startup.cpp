@@ -1,6 +1,7 @@
 #include "log/LogService.h"
 #include "ui/AppController.h"
 #include "WorkbenchFixtures.h"
+#include "core/ProjectArchive.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/UiTypes.h"
@@ -40,7 +41,7 @@ void startupProjectContract()
         visionrt::testing::WorkbenchInstallation installation;
         visionrt::AppController                  app(1, installation.directory());
         require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
+        app.requestOpen(visionrt::testing::copyProjectFixture(VISIONRT_SOURCE_DIR, installation.directory(), u8"Python图像统计.vrtapp"));
         app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         if (projectReadyBeforeWindow)
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
@@ -68,11 +69,11 @@ void startupProjectContract()
                 && title != QStringLiteral("保存工程"))
                 continue;
             require(dialog->property("nameFilters").toStringList()
-                        == QStringList{QStringLiteral("VisionRT 工程 (*.json)")},
-                    "project dialogs must offer the .json project format");
+                        == QStringList{QStringLiteral("VisionRT 工程 (*.vrtapp)")},
+                    "project dialogs must offer the .vrtapp project format");
             if (title == QStringLiteral("保存工程"))
-                require(dialog->property("defaultSuffix").toString() == QStringLiteral("json"),
-                        "saving without an extension must append only .json");
+                require(dialog->property("defaultSuffix").toString() == QStringLiteral("vrtapp"),
+                        "saving without an extension must append only .vrtapp");
             ++projectDialogs;
         }
         require(projectDialogs == 3, "open, example and save project dialogs must all be available");
@@ -160,16 +161,12 @@ void startupProjectContract()
         {
             QTemporaryDir directory;
             require(directory.isValid(), "project diagnostic directory is unavailable");
-            const auto badPath = directory.filePath(QStringLiteral("错误 工程.json"));
-            QFile      badProject(badPath);
-            require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({
-  "format_version": 8,
+            const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrtapp"));
+            visionrt::ProjectArchive::writeProgramJson(std::filesystem::path(badPath.toStdWString()), R"json({
+  "format_version": 9,
   "project": {},
   "flows": {}
-})json") > 0,
-                    "cannot populate malformed project fixture");
-            badProject.close();
+})json");
             const auto oldNodes   = app.nodes();
             const auto oldFlows   = app.flows();
             const auto oldTitle   = app.title();
@@ -194,35 +191,37 @@ void startupProjectContract()
                     "the project failure has no log surface");
             require(window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/project_load_failure.png")),
                     "cannot capture project failure diagnostic");
-            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
-            require(example.open(QIODevice::ReadOnly), "cannot read project warning fixture");
-            auto document     = QJsonDocument::fromJson(example.readAll()).object();
+            const auto examplePath
+                = visionrt::testing::copyProjectFixture(VISIONRT_SOURCE_DIR, installation.directory(), u8"Python图像统计.vrtapp");
+            auto document
+                = QJsonDocument::fromJson(
+                      visionrt::ProjectArchive::readProgramJson(std::filesystem::path(examplePath.toStdWString())))
+                      .object();
             auto projectFlows = document.value("flows").toArray();
             auto projectFlow  = projectFlows.at(0).toObject();
             auto projectNodes = projectFlow.value("nodes").toArray();
             auto configured   = projectNodes.at(3).toObject();
-            require(configured.value("node_seq").toString() == "4", "project warning node identity changed");
+            require(configured.value("id").toString() == "4", "project warning node identity changed");
             // Ports are numeric: 高斯核大小 is input 3 of PreprocessImage.
-            auto inputs = configured.value("inputs").toArray();
+            auto params = configured.value("params").toObject();
+            auto inputs = params.value("inputs").toArray();
             for (qsizetype index = 0; index < inputs.size(); ++index)
             {
                 auto binding = inputs[index].toObject();
-                if (binding.value("port_id").toInt() != 3)
+                if (binding.value("port").toInt() != 3)
                     continue;
-                binding.insert("literal", 0);
+                binding.insert("value", 0);
                 inputs[index] = binding;
             }
-            configured.insert("inputs", inputs);
+            params.insert("inputs", inputs);
+            configured.insert("params", params);
             projectNodes[3] = configured;
             projectFlow.insert("nodes", projectNodes);
             projectFlows[0] = projectFlow;
             document.insert("flows", projectFlows);
-            const auto warningPath = directory.filePath(QStringLiteral("越界 工程.json"));
-            QFile      warningProject(warningPath);
-            require(
-                warningProject.open(QIODevice::WriteOnly) && warningProject.write(QJsonDocument(document).toJson()) > 0,
-                "cannot write project warning fixture");
-            warningProject.close();
+            const auto warningPath = directory.filePath(QStringLiteral("越界 工程.vrtapp"));
+            visionrt::ProjectArchive::writeProgramJson(std::filesystem::path(warningPath.toStdWString()),
+                                                       QJsonDocument(document).toJson());
             app.requestOpen(warningPath);
             app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
             const auto warningDiagnostic = [&]

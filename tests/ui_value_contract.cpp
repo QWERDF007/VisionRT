@@ -1,3 +1,4 @@
+#include "core/ProjectArchive.h"
 #include "ui/UiState.h"
 #include "TestPythonConfiguration.h"
 #include "ui/AppController.h"
@@ -272,7 +273,7 @@ try
     const auto values = QJsonDocument::fromJson(OutputModel::fullText(*outputs->capture(3)).toUtf8()).array();
     require(values[0].toArray()[0].toInteger() == 9007199254740993LL && values[1].toArray().isEmpty(),
             "workbench lost nested native output values");
-    const auto projectPath = directory.path() + "/project.json";
+    const auto projectPath = directory.path() + "/project.vrtapp";
     require(app.save(projectPath), "initial project save failed");
     idle();
     {
@@ -303,10 +304,9 @@ try
     require(app.save(), "idle save after the run failed");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project did not settle");
     {
-        QFile file(projectPath);
-        require(file.open(QIODevice::ReadOnly), "saved project file unavailable");
-        const auto saved = QJsonDocument::fromJson(file.readAll());
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 8,
+        const auto saved = QJsonDocument::fromJson(
+            ProjectArchive::readProgramJson(std::filesystem::path(projectPath.toStdWString())));
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 9,
                 "idle save after the run produced an incomplete project");
     }
     app.addNode("test.ui.editor", 100, 100);

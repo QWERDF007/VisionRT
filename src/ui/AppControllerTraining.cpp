@@ -16,21 +16,6 @@
 namespace visionrt {
 namespace {
 
-// A node's published revisions. A named project owns them beside its file, so copying the project
-// copies what it runs; an unnamed project or an installed example has no such home and publishes
-// into the workspace until the user saves a copy of its own.
-std::filesystem::path trainingBase(const ProjectDefinition &project, const NodeDefinition &node,
-                                   const ToolDefinition &tool, const std::filesystem::path &applicationDirectory)
-{
-    if (!project.path.empty() && !ExampleProject::owns(applicationDirectory, project.path))
-        return training::projectBase(project.path, project.name, node.id);
-    const auto name = QStringLiteral("training/%1-%2-%3")
-                          .arg(QString::fromStdString(training::assetName(project.name)))
-                          .arg(node.id)
-                          .arg(QString::fromStdString(tool.nameEn));
-    return applicationDirectory / std::filesystem::path(name.toStdWString());
-}
-
 std::optional<TrainingFieldValue> trainingValue(const TypeSpec &type, const QVariant &value)
 {
     if (type.type == Type::String)
@@ -57,32 +42,26 @@ bool AppController::Impl::ensureTrainingSession()
 {
     const auto *spec = trainingSpec();
     const auto *node = currentNode();
-    if (!spec || !node)
+    const auto *tool = effectiveTool();
+    if (!spec || !node || !tool)
         return false;
-    auto      &view  = trainingViews[node->id];
-    const auto asset = node->trainingAsset.empty() ? std::filesystem::path{} : node->trainingAsset / L"manifest.json";
-    // An unsaved draft may already name the asset it will be written to; only a project that points
-    // somewhere else forces a rebind.
-    const bool load
-        = !view.session.active() || view.session.spec() != *spec || (!asset.empty() && view.session.asset() != asset);
+    auto      &view = trainingViews[node->id];
+    const bool load = !view.session.active() || view.session.spec() != *spec;
     if (training != &view.session || load)
         ++trainingSerial;
     training = &view.session;
     if (load)
     {
-        // A project saved under another name moves its asset reference with it. The records the user
-        // has not applied yet are still theirs and are in no file to read back, so the session
-        // follows the new path instead of starting over.
-        if (!asset.empty() && view.session.active() && view.session.spec() == *spec && view.session.dirty())
-            view.session.setAsset(asset);
-        else
-            training->begin({node->id, *spec, asset, effectiveTool()->trainParams, node->trainParams});
-        if (!training->error().isEmpty())
-        {
-            LogService::write(LogLevel::Error, LogSource::Ui, QStringLiteral("训练数据：") + training->error());
-            return false;
-        }
+        std::string hydrateError;
+        auto        hydrated = hydrateNodeTrainingSets(*node, *tool, applicationDirectory, &hydrateError);
+        if (!hydrateError.empty())
+            LogService::write(LogLevel::Warn, LogSource::Ui,
+                              QString::fromUtf8(hydrateError.c_str(), static_cast<qsizetype>(hydrateError.size())));
+        training->begin({node->id, *spec, tool->trainParams, std::move(hydrated)});
     }
+    else
+        for (const auto &artifact : spec->artifacts)
+            training->synchronizeParameter(artifact.target.id, node->trainParams.at(artifact.target.id));
     return true;
 }
 
@@ -99,16 +78,40 @@ bool AppController::Impl::requestTraining(const ToolDefinition &tool, const Trai
 
     try
     {
-        auto inputs = training->parameters();
+        auto                                           inputs = training->parameters();
+        std::map<std::string, PendingTrainingArtifact> plannedArtifacts;
+        for (const auto &artifact : spec.artifacts)
+        {
+            const auto found = inputs.find(artifact.target.id);
+            if (found == inputs.end())
+                throw ContractError("训练参数缺少模型路径端口：" + portLabel(artifact.target.id));
+            const auto configuredText = std::get<std::string>(found->second);
+            const auto configured     = pathFromUtf8(configuredText);
+            const auto absolutePath   = configured.empty()
+                                          ? training::newTrainingArchivePath(applicationDirectory,
+                                                                             pathFromUtf8(artifact.id + ".zip"))
+                                          : (configured.is_absolute()
+                                                 ? configured.lexically_normal()
+                                                 : (applicationDirectory / configured).lexically_normal());
+            const auto storedText     = configured.empty()
+                                          ? workbench::pathText(absolutePath.lexically_relative(applicationDirectory))
+                                                .toStdString()
+                                          : configuredText;
+            found->second = workbench::pathText(absolutePath).toStdString();
+            plannedArtifacts.emplace(artifact.id,
+                                     PendingTrainingArtifact{artifact.target.id, artifact.sourcePort, absolutePath,
+                                                             storedText});
+        }
         AssistRequest request;
-        request.context = {projectEpoch, generation, flow.toStdString(), node->id, node->executionRevision};
+        request.context                = {projectEpoch, generation, flow.toStdString(), node->id, node->executionRevision};
         request.context.trainingSerial = trainingSerial;
         request.training               = true;
         request.learn                  = true;
         request.inputs                 = std::move(inputs);
         if (!assist->request(request, std::make_shared<const ToolRegistry>(registry), tool))
             throw ContractError("已有计算尚未结束，请稍后重试");
-        pendingTraining = request.context;
+        pendingTraining          = request.context;
+        pendingTrainingArtifacts = std::move(plannedArtifacts);
         editor.setBusy(true);
         assistEnabled = false;
         if (auto *viewport = presentation.viewport())
@@ -127,27 +130,31 @@ bool AppController::Impl::requestTraining(const ToolDefinition &tool, const Trai
 
 void AppController::Impl::completeTraining(const AssistOutcome &outcome)
 {
-    const auto expected = *pendingTraining;
+    const auto expected  = *pendingTraining;
+    const auto artifacts = std::move(pendingTrainingArtifacts);
     pendingTraining.reset();
+    pendingTrainingArtifacts.clear();
     editor.setBusy(state != RuntimeState::Idle);
-    const auto *node    = currentNode();
+    const auto *node       = currentNode();
     const auto *definition = effectiveTool();
-    const auto tool = definition ? std::optional<ToolDefinition>{*definition} : std::nullopt;
-    const bool  current = outcome.context == expected && projectEpoch == expected.projectEpoch && node
-                      && node->id == expected.node && node->executionRevision == expected.executionRevision
-                      && trainingSerial == expected.trainingSerial && training && tool;
+    const auto  tool       = definition ? std::optional<ToolDefinition>{*definition} : std::nullopt;
+    const bool  current    = outcome.context == expected && projectEpoch == expected.projectEpoch && node
+                          && node->id == expected.node && node->executionRevision == expected.executionRevision
+                          && trainingSerial == expected.trainingSerial && training && tool;
     if (current)
     {
-        auto result = ToolResult{outcome.outputs, outcome.status.detail, outcome.artifacts};
-        if (outcome.status) publishTraining(*tool, training->spec(), result);
-        if (result.outputs.empty()) result = toolResult({}, outcome.status);
-        auto snapshot = std::make_shared<NodeSnapshot>();
-        snapshot->node = expected.node;
-        snapshot->toolId = tool->nameEn;
-        snapshot->generation = generation;
+        auto result = ToolResult{outcome.outputs, outcome.status.detail};
+        if (outcome.status)
+            publishTraining(training->spec(), artifacts, result);
+        if (result.outputs.empty())
+            result = toolResult({}, outcome.status);
+        auto snapshot               = std::make_shared<NodeSnapshot>();
+        snapshot->node              = expected.node;
+        snapshot->toolId            = tool->nameEn;
+        snapshot->generation        = generation;
         snapshot->executionRevision = currentNode()->executionRevision;
-        snapshot->invocation = ProducedBy::Train;
-        snapshot->outputs = std::move(result.outputs);
+        snapshot->invocation        = ProducedBy::Train;
+        snapshot->outputs           = std::move(result.outputs);
         snapshot->status = validateToolExecution(tool->outputs, snapshot->outputs, result.detail, ProducedBy::Train);
         snapshot->toolResultPublished = true;
         presentation.present(expected.node, std::move(snapshot));
@@ -161,10 +168,12 @@ void AppController::Impl::completeTraining(const AssistOutcome &outcome)
     refreshAssist();
 }
 
-bool AppController::Impl::publishTraining(const ToolDefinition &tool, const TrainingSpec &spec, ToolResult &result)
+bool AppController::Impl::publishTraining(const TrainingSpec &spec,
+                                          const std::map<std::string, PendingTrainingArtifact> &artifacts,
+                                          ToolResult &result)
 {
     const auto *node = currentNode();
-    const auto fail = [&](const QString &detail)
+    const auto  fail = [&](const QString &detail)
     {
         result = toolResult({}, makeStatus(ErrorCode::Internal, "训练模型保存失败", detail.toStdString()));
         LogService::write(LogLevel::Error, LogSource::Ui, detail);
@@ -172,41 +181,28 @@ bool AppController::Impl::publishTraining(const ToolDefinition &tool, const Trai
     };
     try
     {
-        if (result.artifacts.size() != spec.artifacts.size()) throw ContractError("训练模型产物数量不匹配");
-        std::map<std::string, std::filesystem::path> destinations;
-        const auto &project = editor.project();
-        const auto base = project.path.empty() ? trainingBase(project, *node, tool, applicationDirectory)
-                                                : project.path.parent_path();
-        for (const auto &artifact : spec.artifacts)
-        {
-            const auto found = result.artifacts.find(artifact.id);
-            if (found == result.artifacts.end() || found->second.bytes.empty())
-                throw ContractError("训练模型不能为空：" + artifact.id);
-            const auto value = training->parameter(artifact.target.id);
-            const auto path = pathFromUtf8(std::get<std::string>(*value));
-            if (!path.empty()) destinations.emplace(artifact.id, path.is_absolute() ? path : base / path);
-        }
-        std::optional<training::Revision> publication;
-        // Prepare the complete revision before committing model references to the project.
-        if (!spec.artifacts.empty())
-            publication.emplace(trainingBase(project, *node, tool, applicationDirectory), *training, result.artifacts, destinations);
         std::vector<LiteralWrite> writes;
-        for (const auto &[id, value] : training->parameters()) writes.push_back({PortStage::Train, id, value});
+        for (const auto &[id, value] : training->parameters())
+            writes.push_back({PortStage::Train, id, value});
         for (const auto &artifact : spec.artifacts)
         {
-            auto path = destinations.contains(artifact.id) ? destinations.at(artifact.id)
-                : publication->directory() / L"models" / pathFromUtf8(artifact.id + ".bin");
-            if (!project.path.empty()) path = path.lexically_relative(project.path.parent_path());
-            const auto text = workbench::pathText(path).toStdString();
-            std::ranges::find(writes, artifact.target.id, &LiteralWrite::port)->value = text;
-            result.outputs.insert_or_assign(artifact.sourcePort, text);
+            const auto found = artifacts.find(artifact.id);
+            if (found == artifacts.end())
+                throw ContractError("训练模型产物配置缺失：" + artifact.id);
+            if (!std::filesystem::is_regular_file(found->second.absolutePath))
+                throw ContractError("训练工具未生成模型资源包："
+                                    + workbench::pathText(found->second.absolutePath).toStdString());
+            std::ranges::find(writes, found->second.targetPort, &LiteralWrite::port)->value = found->second.storedPath;
+            result.outputs.insert_or_assign(found->second.sourcePort, found->second.storedPath);
         }
-        if (publication && !editor.setLiteralWrites(flow.toStdString(), node->id, writes, [&] { return publication->directory(); }))
-            throw ContractError("训练引用提交失败");
-        if (!publication) editor.setLiteralWrites(flow.toStdString(), node->id, writes);
-        if (publication) publication->accept();
-        for (const auto &write : writes) training->setParameter(write.port, write.value);
-        training->adoptAsset(publication ? publication->directory() / L"manifest.json" : training->asset());
+        // Pass a non-empty prepare callback when training artifacts were written so ProjectEditor
+        // advances initializationRevision even when retraining overwrote the same model path.
+        const auto bumpInitialization
+            = spec.artifacts.empty() ? std::function<void()>{} : std::function<void()>([] {});
+        editor.setLiteralWrites(flow.toStdString(), node->id, writes, bumpInitialization);
+        for (const auto &write : writes)
+            training->setParameter(write.port, write.value);
+        training->accept();
         emit q->projectChanged();
         emit q->parametersChanged();
         return true;
@@ -214,7 +210,7 @@ bool AppController::Impl::publishTraining(const ToolDefinition &tool, const Trai
     catch (const std::filesystem::filesystem_error &failure)
     {
         return fail(QStringLiteral("%1：%2").arg(workbench::pathText(failure.path1()),
-            QString::fromLocal8Bit(failure.code().message().c_str())));
+                                                QString::fromLocal8Bit(failure.code().message().c_str())));
     }
     catch (const std::exception &failure)
     {

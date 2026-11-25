@@ -396,30 +396,17 @@ private:
         metrics_.pythonOutputMeasured   = true;
         Values      outputs;
         std::string detail;
-        std::map<std::string, ModelArtifact> artifacts;
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
             try
             {
                 auto envelope = resultDictionary(returned);
-                if ((envelope.size() != 2 && envelope.size() != 3) || !envelope.contains("outputs") || !envelope.contains("detail")
-                    || (envelope.size() == 3 && !envelope.contains("artifacts")))
-                    throw ContractError("工具调用必须返回 outputs、detail，以及可选的 artifacts");
+                if (envelope.size() != 2 || !envelope.contains("outputs") || !envelope.contains("detail"))
+                    throw ContractError("工具调用必须返回 outputs 和 detail");
                 if (!py::isinstance<py::dict>(envelope["outputs"]) || !py::isinstance<py::str>(envelope["detail"]))
                     throw ContractError("outputs 必须是字典且 detail 必须是字符串");
                 const auto outputsDictionary = py::reinterpret_borrow<py::dict>(envelope["outputs"]);
                 detail = envelope["detail"].cast<std::string>();
-                if (envelope.contains("artifacts"))
-                {
-                    const auto models = resultDictionary(envelope["artifacts"]);
-                    for (const auto item : models)
-                    {
-                        if (!py::isinstance<py::str>(item.first) || !py::isinstance<py::bytes>(item.second))
-                            throw ContractError("模型产物必须是字符串标识到 bytes 的字典");
-                        const auto bytes = item.second.cast<std::string>();
-                        artifacts.emplace(item.first.cast<std::string>(), ModelArtifact{{bytes.begin(), bytes.end()}});
-                    }
-                }
                 // Only what the tool actually returned is converted: the host's completion entry owns
                 // the declared defaults, so an omitted business port is not an author error here.
                 // Keys are port numbers; a string, a bool or a float key is an author error, never a
@@ -467,7 +454,7 @@ private:
             }
         }
 
-        return ToolResult{std::move(outputs), std::move(detail), std::move(artifacts)};
+        return ToolResult{std::move(outputs), std::move(detail)};
     }
 
 public:

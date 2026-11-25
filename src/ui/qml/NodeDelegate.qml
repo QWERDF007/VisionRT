@@ -27,24 +27,29 @@ Rectangle {
     height: VisionRTSize.NodeHeight
     radius: 2
     antialiasing: true
-    color: QuiColor.Primary
+    color: root.isMissing ? QuiColor.Background : QuiColor.Primary
+    opacity: root.isMissing ? 0.78 : 1.0
     objectName: "flowNode_" + nodeId
 
     readonly property int nodeState: root.nodeStatus
-    readonly property bool isError: root.nodeState === NodeState.Failed || root.nodeMissing === true
-    readonly property bool runningNow: root.nodeState === NodeState.Running
+    readonly property bool isMissing: root.nodeMissing === true
+    readonly property bool isError: !root.isMissing && root.nodeState === NodeState.Failed
+    readonly property bool runningNow: !root.isMissing && root.nodeState === NodeState.Running
     readonly property color headerBg: {
+        if (root.isMissing)
+            return VisionRTColor.NodeWarning;
         if (root.runningNow)
             return VisionRTColor.NodeGreen;
         if (root.isError)
             return VisionRTColor.NodeRed;
         return VisionRTColor.NodeGrey;
     }
-    readonly property color headerText: root.runningNow || root.isError ? QuiColor.White : QuiColor.FontPrimary
+    readonly property color headerText: root.runningNow || root.isError || root.isMissing ? QuiColor.White : QuiColor.FontPrimary
 
     // The running border is its own layer: selecting a node must not hide that it is running.
+    // Missing-plugin nodes render a dashed warning border via Shape below instead of a solid frame.
     border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? VisionRTColor.NodeRed : QuiColor.Border)
-    border.width: root.runningNow ? 2 : 1
+    border.width: root.isMissing ? 0 : (root.runningNow ? 2 : 1)
 
     function getIcon(title, category) {
         let t = (title + " " + category).toLowerCase();
@@ -93,7 +98,7 @@ Rectangle {
                 color: root.headerText
             }
             QuiText {
-                text: root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0"
+                text: root.isMissing ? "缺失" : (root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0")
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
                 color: root.headerText
@@ -101,7 +106,7 @@ Rectangle {
         }
     }
 
-    // Body content: Icon directly placed on left, Title on top, Timing below
+    // Body content: Icon directly placed on left, Title on top, Timing/status below
     RowLayout {
         anchors.top: nodeHeader.bottom
         anchors.left: parent.left
@@ -116,9 +121,9 @@ Rectangle {
             Layout.preferredWidth: 16
             Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
-            iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
+            iconSource: root.isMissing ? QuiFontIcon.Warning : root.getIcon(root.nodeToolName, root.nodeCategory || "")
             iconSize: VisionRTSize.IconSize
-            iconColor: root.isError ? VisionRTColor.NodeRed : (root.runningNow ? VisionRTColor.NodeGreen : QuiColor.FontCaption)
+            iconColor: root.isMissing ? VisionRTColor.NodeWarning : (root.isError ? VisionRTColor.NodeRed : (root.runningNow ? VisionRTColor.NodeGreen : QuiColor.FontCaption))
             renderType: Text.QtRendering
         }
         ColumnLayout {
@@ -130,13 +135,46 @@ Rectangle {
                 elide: Text.ElideRight
                 renderType: Text.QtRendering
                 font: QuiFont.Body
-                color: QuiColor.FontPrimary
+                color: root.isMissing ? QuiColor.FontCaption : QuiColor.FontPrimary
             }
             QuiText {
-                text: root.nodeTimingText
+                text: root.isMissing ? "插件缺失，请删除" : root.nodeTimingText
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
-                color: QuiColor.FontCaption
+                color: root.isMissing ? VisionRTColor.NodeWarning : QuiColor.FontCaption
+            }
+        }
+    }
+
+    Shape {
+        anchors.fill: parent
+        visible: root.isMissing && !root.selected
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            id: missingBorderPath
+            readonly property real inset: 0.75 / Math.max(0.01, root.viewScale)
+            strokeColor: VisionRTColor.NodeWarning
+            strokeWidth: 1.5 / Math.max(0.01, root.viewScale)
+            strokeStyle: ShapePath.DashLine
+            dashPattern: [5, 3]
+            fillColor: "transparent"
+            startX: missingBorderPath.inset
+            startY: missingBorderPath.inset
+            PathLine {
+                x: root.width - missingBorderPath.inset
+                y: missingBorderPath.inset
+            }
+            PathLine {
+                x: root.width - missingBorderPath.inset
+                y: root.height - missingBorderPath.inset
+            }
+            PathLine {
+                x: missingBorderPath.inset
+                y: root.height - missingBorderPath.inset
+            }
+            PathLine {
+                x: missingBorderPath.inset
+                y: missingBorderPath.inset
             }
         }
     }
@@ -193,7 +231,7 @@ Rectangle {
             root.pointerReleased(mouse, root);
         }
         onDoubleClicked: function (mouse) {
-            if (mouse.button === Qt.LeftButton && app.workspaceEnabled)
+            if (mouse.button === Qt.LeftButton && app.workspaceEnabled && !root.isMissing)
                 root.executeRequested();
         }
         onEntered: root.hoverEntered(Qt.point(mouseX, mouseY))

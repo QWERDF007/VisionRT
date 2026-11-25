@@ -42,9 +42,11 @@ public:
         ValueJsonDocument typed_;
     };
 
-    static TypeSpec    decodeType(const QJsonObject &object);
-    static QJsonObject encodeType(const TypeSpec &type);
-    static PortValue   decode(const QJsonValue &json, const TypeSpec &type);
+    static TypeSpec   decodeType(const QJsonValue &json);
+    static QJsonValue encodeType(const TypeSpec &type);
+    static TypeSpec   decodeTypeToken(const QJsonObject &object);
+    static QJsonObject encodeTypeToken(const TypeSpec &type);
+    static PortValue  decode(const QJsonValue &json, const TypeSpec &type);
     static QJsonValue  encode(const PortValue &value, const TypeSpec &type, Purpose purpose = Purpose::Literal);
     static PortValue   parse(const QString &text, const TypeSpec &type);
     static QString     text(const PortValue &value, const TypeSpec &type, Purpose purpose = Purpose::Literal);

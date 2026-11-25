@@ -4,7 +4,6 @@
 #include "core/ToolDefinition.h"
 #include "ui/Export.h"
 
-#include <QJsonObject>
 #include <QString>
 #include <QVariantList>
 #include <map>
@@ -41,7 +40,6 @@ public:
     {
         NodeId node = 0;
         TrainingSpec spec;
-        std::filesystem::path asset;
         std::vector<PortDefinition> trainParams;
         Values parameters;
     };
@@ -51,9 +49,8 @@ public:
     bool active() const noexcept { return active_; }
     NodeId node() const noexcept { return start_.node; }
     const TrainingSpec &spec() const noexcept { return start_.spec; }
-    const std::filesystem::path &asset() const noexcept { return start_.asset; }
-    void setAsset(std::filesystem::path asset);
-    void adoptAsset(std::filesystem::path asset);
+    void synchronizeParameter(PortId parameter, const PortValue &value);
+    void accept();
     bool dirty() const noexcept { return dirty_; }
     QString error() const { return error_; }
 
@@ -82,7 +79,6 @@ public:
     QVariantList fields(int index) const;
     DataRef<TrainingSet> trainingSet() const;
     std::map<PortId, DataRef<TrainingSet>> trainingSets() const;
-    QJsonObject manifest(const std::map<std::string, QString> &artifacts) const;
     bool savable() const;
     bool validate();
 

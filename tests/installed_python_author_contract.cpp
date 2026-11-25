@@ -96,7 +96,7 @@ try
     editor.setLiteral(flow, addNode, 2, std::string("inplace"));
 
     auto project  = editor.project();
-    project.path  = std::filesystem::path(temporary.path().toStdWString()) / "author.json";
+    project.path  = std::filesystem::path(temporary.path().toStdWString()) / "author.vrtapp";
     ProjectStorage storage(registry);
     storage.save(project);
     const auto reopened = storage.load(project.path);

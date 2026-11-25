@@ -6,7 +6,7 @@
 .gitignore[FV5T]: F:排除构建、缓存、本机宿主配置、临时交付文件和本地方案 | R:code:.aoci/.gitignore | A:- | S:AOCI认知资产保持可追踪，只有宿主配置按机器忽略
 .gitmodules[FV7T]: F:声明六个依赖子模块的来源与跟踪分支 | R:code:CMakeLists.txt | A:- | S:adaptagrams使用用户派生仓库的visionrt分支；实际检出版本由父仓gitlink固定
 AGENTS.md[SG8S]: F:定义项目工程纪律、任务账本规则及AOCI认知使用边界 | R:code:WORKLOG.md,code:aoci.meta.txt | A:- | S:索引语义须依据真实证据由模型创作，专项流程以实时Guide和机器契约为准
-CMakeLists.txt[FV9S]: F:编排模块、桌面入口、原生枚举生成器、校验器、部署和测试的根构建 | R:code:cmake/AddModule.cmake,code:tools/export_ui_enums.cpp,code:tests/CMakeLists.txt,code:cmake/Deploy.cmake.in | A:VisionRT,visionrt_enum_export,visionrt_validate_tool,visionrt_examples,deploy | S:版本只由project声明；桥接仅为构建依赖，不进入宿主启动链接；CTest先于Contracts启用；示例清空后复制，避免退役文件残留
+CMakeLists.txt[FV9S]: F:编排模块、桌面入口、原生枚举生成器、校验器、部署和测试的根构建 | R:code:cmake/AddModule.cmake,code:tools/export_ui_enums.cpp,code:tests/CMakeLists.txt,code:cmake/Deploy.cmake.in | A:VisionRT,visionrt_enum_export,visionrt_validate_tool,visionrt_examples,deploy | S:启用C与CXX以支持Contracts内置miniz；版本只由project声明；桥接仅作构建依赖不进启动链接；CTest先于Contracts启用；示例清空后复制
 CMakePresets.json[FV5T]: F:提供启用或关闭推理的Release配置、构建与测试预设 | R:code:CMakeLists.txt | A:release,cpu-release | S:两个预设共享build目录
 LICENSE[SG3M]: F:提供项目Apache 2.0许可正文 | R:- | A:- | S:-
 README.md[SG4T]: F:介绍工业视觉低代码平台并指向工程文档与常用构建入口 | R:code:docs/README.md,code:tools/build.cmd | A:- | S:-
@@ -39,54 +39,10 @@ WriteBuildInfo.cmake[OV7T]: F:通过共享CMake与Git查询生成组件身份、
 check_git_workspace.py[XV6T]: F:为Python打包代码适配共享CMake的Git工作区查询 | R:code:3rdparty/VisionRTContracts/cmake/GitWorkspace.cmake,code:tools/package_app.py | A:check_git_workspace | S:Git状态策略只在共享CMake实现；失败保留unknown，不把查询失败判成干净
 
 ===/<repository>/docs/===
-README.md[SG7T]: F:索引共享契约、具体形状、参数页、训练、标定和构建验证入口 | R:code:WORKLOG.md,code:src/ui/qml/ParameterPage.qml | A:- | S:只维护实现索引；运行证据归WORKLOG，避免重复维护代码事实
-
-===/<repository>/examples/01_基础入门/01_图像读取/===
-README.md[SA3T]: F:说明双图批次读取示例的操作及预期索引与总数 | R:- | A:- | S:-
-图像读取.json[FA4S]: F:配置ReadImage顺序读取两张图片，输出批次、索引与总数 | R:- | A:- | S:图片来自软件目录下examples/images/图像读取
-
-===/<repository>/examples/02_工具示例/01_ROI定位与裁剪/===
-README.md[SA3T]: F:索引亮条投影裁剪工程并说明输出尺寸及阈值调节的观察结果 | R:- | A:- | S:-
-ROI定位与裁剪.json[FA4M]: F:配置读图、亮条投影和矩形裁剪，投影矩形连接裁剪区域 | R:- | A:- | S:裁剪读取原图；资源来自examples/images
-
-===/<repository>/examples/02_工具示例/02_图像预处理/===
-README.md[SA3T]: F:说明增益偏移与自适应二值化示例的调参效果 | R:- | A:- | S:-
-图像预处理.json[FA4M]: F:编排集中读图、亮度调整与自适应二值化 | R:- | A:- | S:亮度输入分开声明矩形、圆和多边形；对齐使用六系数单位变换
-
-===/<repository>/examples/02_工具示例/03_圆测量/===
-README.md[SA3T]: F:说明圆ROI引导卡尺拟合及有效点参数的预期影响 | R:- | A:- | S:-
-圆测量.json[FA4L]: F:配置圆参数引导的64卡尺拟合并输出圆和有效点 | R:- | A:- | S:形状值只保存坐标；图像来自examples/images，对齐为六系数单位变换
-
-===/<repository>/examples/02_工具示例/04_行间距测量/===
-README.md[SA3T]: F:说明矩形区域内亮条宽度、间隙与节距测量 | R:- | A:- | S:-
-行间距测量.json[FA4L]: F:配置矩形内亮条宽度、间隙和中心距测量及范围判定 | R:- | A:- | S:区域为固定矩形类型；空标定输入采用固定像素尺度
-
-===/<repository>/examples/03_综合示例/01_多分支视觉检测/===
-README.md[SA3T]: F:说明同源图像分支裁剪二值化与圆测量的独立结果 | R:- | A:- | S:-
-多分支视觉检测.json[FA4L]: F:将同一集中原图分接矩形投影裁剪二值化及圆测量 | R:- | A:- | S:裁剪和圆测量读取各自声明的具体形状；圆分支使用六系数单位对齐
-
-===/<repository>/examples/03_综合示例/02_识别线缆颜色/===
-README.md[SA5T]: F:索引线缆对齐、五工位识色、集中图片和训练发布实现与验证 | R:code:tests/example_pipelines.cpp,code:src/ui/TrainingAssets.cpp | A:- | S:复制工程需携带模型资产目录；训练记录存于工程参数
-识别线缆颜色.json[FA5L]: F:编排双直边对齐和五工位识色，保存矩形训练样本及模型引用 | R:code:tests/example_pipelines.cpp,code:src/ui/TrainingAssets.cpp | A:- | S:检测圆与训练矩形分开声明；原像素归TrainingSet，模型相对工程；对齐为六系数
-
-===/<repository>/examples/04_扩展示例/01_Python图像统计/===
-Python图像统计.json[FA4L]: F:编排原图的矩形裁剪、二值化和Python均值统计分支 | R:- | A:- | S:均值读取裁剪前原图；裁剪矩形为固定类型，图片来自examples/images
-README.md[SA3T]: F:说明Python均值示例的解释器前提、运行结果与集中图片入口 | R:- | A:- | S:需选择含NumPy的外部解释器
-
-===/<repository>/examples/04_扩展示例/02_逻辑表达式与条件分支/===
-README.md[SA3T]: F:说明表达式、亮暗条件分支和集中图片的使用入口 | R:- | A:- | S:逻辑节点也需要Python环境
-逻辑表达式与条件分支.json[FA4L]: F:配置读图、原图均值和亮度阈值表达式，将布尔结果绑定至条件分支 | R:- | A:- | S:图片引用软件目录下examples/images
-
-===/<repository>/examples/04_扩展示例/03_GPU目标检测/===
-GPU目标检测.json[FA4L]: F:配置YOLO检测与同源原图上的矩形检测结果过滤 | R:- | A:- | S:需另备bus.jpg、权重及GPU环境；检测和过滤端口均为矩形
-README.md[SA3T]: F:说明GPU示例的图片、权重和运行环境准备及首轮引擎构建 | R:- | A:- | S:图片归examples/images，模型归工程models目录
-
-===/<repository>/examples/04_扩展示例/04_错误诊断/===
-README.md[SR3T]: F:说明缺输入、缺引擎与缺工具定义的预期失败及集中图像入口 | R:- | A:- | S:失败是示例目的，不计成功运行示例
-错误诊断.json[FR4L]: F:配置缺裁剪矩形、缺YOLO模型和工具未定义的诊断负例 | R:- | A:- | S:工程预期失败；正常读图资源来自examples/images
+README.md[SG7T]: F:索引共享契约、工程容器、参数页、训练资源包、标定和构建验证入口 | R:code:WORKLOG.md,code:src/core/include/core/ProjectArchive.h,code:src/ui/include/ui/TrainingAssets.h | A:- | S:只维护实现索引，运行证据归WORKLOG，避免重复维护代码事实
 
 ===/<repository>/examples/===
-README.md[SA5T]: F:索引CPU、Python、标定、GPU和诊断示例及集中图片与验证入口 | R:code:tests/example_pipelines.cpp,code:src/core/ExampleProject.cpp | A:- | S:安装示例修改须另存；原图引用软件examples/images，模型资产随工程保存
+README.md[SA5T]: F:索引无编号三个综合示例的.vrtapp工程、集中图片、训练资源包和验证入口 | R:code:src/core/include/core/ProjectArchive.h,code:tools/package_app.py | A:- | S:修改安装示例须另存；原图存examples/images，训练资源包与描述文件存assets，相对路径均基于安装目录
 
 ===/<repository>/src/common/===
 CMakeLists.txt[FV5T]: F:构建共享common模块并生成公共版本头 | R:code:cmake/AddModule.cmake,code:src/common/Version.cpp | A:visionrt_common | S:-
@@ -98,23 +54,24 @@ Singleton.h[CU4T]: F:提供QML单例注册所需的实例与工厂声明宏 | R:
 Version.h[LV5T]: F:定义组件构建信息、结构化版本及导出查询接口 | R:code:src/common/Version.cpp | A:ComponentBuildInfo,VersionInfo,GetVersion | S:built_at_epoch为零表示未知，组件时间来自构建产物
 
 ===/<repository>/src/core/===
-CMakeLists.txt[FV5T]: F:汇集工具声明、集成登记、工程编辑和存储源码构建core模块 | R:code:cmake/AddModule.cmake,code:src/core/ToolIntegrations.cpp | A:visionrt_core | S:-
+CMakeLists.txt[FV5T]: F:汇集工具声明、集成登记、工程编辑、容器和存储源码构建core模块 | R:code:cmake/AddModule.cmake,code:src/core/ProjectArchive.cpp,code:src/core/ToolIntegrations.cpp | A:visionrt_core | S:-
 CustomToolStore.cpp[PE7L]: F:发现、保存、复制和删除用户Python工具及其资源和宿主集成登记 | R:code:src/core/DefinitionJson.cpp,code:src/core/ToolIntegrations.cpp,code:src/core/include/core/CustomToolStore.h | A:saveCustomTool,cloneCustomTool,deleteCustomTool,discoverCustomTools,integrations | S:先源码和登记后声明，声明失败恢复登记；不覆盖已有脚本，共享或归属未明的资源不删
 DefinitionJson.cpp[IC8S]: F:把SDK声明读写接入宿主元数据、声明归一及原子文件保存 | R:code:src/core/ToolDefinition.cpp,code:src/core/include/core/DefinitionJson.h | A:parseToolDefinitionJson,parseToolDefinitionFile,emitNormalizedToolJson,writeToolDefinitionFile | S:目录决定分类；写入禁用QSaveFile直接写回退，避免提交半文件
 Error.cpp[CR5T]: F:从统一错误定义表取得宿主错误码的默认中文消息 | R:code:src/core/include/core/Errors.def,code:src/core/include/core/Error.h | A:defaultMessage | S:-
 ExampleProject.cpp[PD5T]: F:判断工程是否属于安装目录下的示例资源树 | R:code:src/core/include/core/ExampleProject.h | A:ExampleProject::directory,ExampleProject::owns | S:Windows路径分量比较使用Qt大小写折叠
 InputNormalizer.cpp[DD7S]: F:按类型、默认值、范围和选项内部值归一参数并报告调整 | R:code:src/core/ToolValueValidation.cpp | A:normalizeInput,normalizeInputs | S:上游Missing不填手动默认；非法选项拒绝且不回退；浮点值必须有限
 ModuleIndex.cpp[IE6T]: F:解析工具包模块、定义路径、运行资源及工作台定位登记 | R:code:src/core/include/core/ModuleIndex.h,code:src/core/ToolIntegrations.cpp | A:parseModuleIndexJson,parseModuleIndexFile | S:索引版本独立于工具声明；拒绝越包路径、重复身份、未知模块引用及无工具模块
-NodeContracts.cpp[DD8M]: F:派生动态节点契约、跨节点输出类型和初始化参数，并独立解析训练模型引用 | R:code:src/core/include/core/NodeContracts.h,code:src/core/include/core/Project.h,code:src/core/ProjectStorage.cpp | A:nodeContract,nodeParameters,nodeModelReferences,resolveOutputTypes,setOutputDeclarations | S:动态输出整体解析后才发布并推进修订；动态端口保留Missing并统一分组；模型路径取工具级训练参数，相对路径按工程目录解析，不读取训练清单
-ProjectEditor.cpp[DW9L]: F:以受约束事务编辑工程节点、绑定、各阶段字面量与训练资产引用 | R:code:src/core/ProjectValues.cpp,code:src/core/include/core/Project.h | A:ProjectEditor,setLiteralWrites,validateBinding | S:运行或管理期间禁改；各目标和类型校验后才准备训练资产并一次提交修订；初始化、训练和输入均可保存完整图像字面量，上游绑定拒绝手动写入
-ProjectStorage.cpp[PD9L]: F:读写格式8工程，协调工具契约并保存各阶段类型化参数及训练修订引用 | R:code:src/core/ValueJsonDocument.cpp,code:src/core/NodeContracts.cpp | A:ProjectStorage::load,ProjectStorage::reconcile,ProjectStorage::save,projectDestination | S:TrainingSet参数携带记录与原像素；模型使用工程相对路径；无扩展名补.json；原子文件提交成功才替换工程状态，未知工具保留原JSON
-ProjectValues.cpp[DD6T]: F:深拷贝节点四阶段参数、绑定字面量和训练记录字段 | R:code:src/core/include/core/Project.h | A:copyProjectLiteral,copyNodeConfiguration | S:图像克隆像素，TrainingSet递归复制原图与字段；具体形状和数组克隆存储
+NodeContracts.cpp[DD8L]: F:派生动态节点契约、输出类型和初始化参数，解析模型引用并从训练包回填原图 | R:code:src/core/include/core/NodeContracts.h,code:src/core/include/core/Project.h,code:src/core/ProjectStorage.cpp | A:nodeContract,nodeParameters,nodeModelReferences,hydrateNodeTrainingSets,resolveOutputTypes | S:动态输出整体解析后才发布并推进修订；模型路径取训练参数且相对软件安装目录解析；hydrate按数据集端口和图像编号从.zip回填缺失像素
+ProjectArchive.cpp[PD7T]: F:通过Contracts的ZipArchive读写.vrtapp容器内的唯一program.json条目 | R:code:src/core/include/core/ProjectArchive.h | A:ProjectArchive::readProgramJson,ProjectArchive::writeProgramJson | S:写入前检查父目录已存在以免静默建目录，随后经ZipArchive原子替换落盘
+ProjectEditor.cpp[DW9L]: F:事务编辑工程节点、绑定和各阶段字面量，并协调关联资源保存 | R:code:src/core/ProjectValues.cpp,code:src/core/include/core/Project.h | A:ProjectEditor,setLiteralWrites,validateBinding | S:运行或管理期间禁改；全部目标校验后才调用prepare并提交配置；资源保存成功推进初始化和执行修订，普通输入只推进执行修订；上游绑定拒绝手动写入
+ProjectStorage.cpp[PD9L]: F:读写格式9的.vrtapp工程容器，协调工具契约并正交序列化节点、布局与连线 | R:code:src/core/ProjectArchive.cpp,code:src/core/ValueJsonDocument.cpp,code:src/core/NodeContracts.cpp | A:ProjectStorage::load,ProjectStorage::reconcile,ProjectStorage::save,projectDestination | S:强制.vrtapp后缀与format_version=9，无后缀保存补.vrtapp；加载期resolveOutputTypes不改写clean脏标志；未知工具保留原JSON；TrainingSet不存像素，执行与初始化修订仅在内存
+ProjectValues.cpp[DD6T]: F:深拷贝节点四阶段参数、绑定字面量和训练记录字段 | R:code:src/core/include/core/Project.h | A:copyProjectLiteral,copyNodeConfiguration | S:图像克隆像素，TrainingSet跳过空像素并递归复制非空图与字段；具体形状和数组克隆存储
 ToolDefinition.cpp[DC8L]: F:统一参数页顺序并归一校验四阶段声明、训练数据集、编辑器与几何关系 | R:code:src/core/include/core/ToolDefinition.h,code:3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h | A:toolTabs,normalizeToolDefinition,validateToolDefinition,retypePort,erasePort,nextFreePortId | S:基本输入先于初始化与训练；阶段编号独立且可为0；矩形专用编辑器只接受Rectangle，形状约束只用于具体形状；数据集不强制图像或画布字段，对齐为二维六系数
 ToolIntegrations.cpp[IE7S]: F:读写工作台定位器、参数建议和训练数据集目标登记 | R:code:src/core/include/core/ToolIntegrations.h | A:readToolIntegrations,writeToolIntegrations | S:登记独立于工具声明；dataset_parameter明确训练集身份，参数目标分阶段，未知字段拒绝
 ToolPackage.cpp[IE7S]: F:组合包索引、内建及用户声明并关联定位登记和原生模块资源 | R:code:src/core/ModuleIndex.cpp,code:src/core/DefinitionJson.cpp,code:src/core/CustomToolStore.cpp | A:readToolsPackage,validateToolsPackage | S:外部用户目录只用自身登记，不借用包级登记；工具身份跨来源唯一，内建声明必须与索引一致；发现不加载DLL
 ToolRegistry.cpp[DE8M]: F:注册工具声明与原生、Python、宿主实现并统一判定创建可用性 | R:code:src/core/include/core/ToolRegistry.h,code:src/core/include/core/NativeImplementationProvider.h | A:ToolRegistry::create,ToolRegistry::availability,ToolRegistry::registerPackage | S:不可用状态在调用任何工厂或resolver前拒绝；Python按节点派生契约解析工厂，失败更新共享加载状态
 ToolValueValidation.cpp[DD8S]: F:校验参数类型和形状数量，并按调用阶段验证工具输出与状态 | R:code:src/core/include/core/ToolValueValidation.h | A:validateToolValue,validateToolOutput,validateToolExecution | S:Draft仅放宽形状数量下限；成功必须发布本阶段全部业务输出；其他阶段或失败缺值保持Missing，禁止补默认；状态文本须为UTF8
-ValueJson.cpp[ID7L]: F:转换QtJSON与标量、数组、具体形状及图像训练值，提供展示摘要 | R:code:src/core/ValueJsonDocument.cpp,code:3rdparty/VisionRTContracts/include/visionrt/contracts/ValueJson.h | A:ValueJson::encode,ValueJson::decode,ValueJson::parse,ValueJson::text | S:具体形状JSON不携带形状编号；图像和TrainingSet存储复用SDK精确codec，展示只取摘要；Missing编码null
+ValueJson.cpp[ID7L]: F:转换QtJSON与类型化值及摘要，提供可读线名与QML数字编码两套TypeSpec编解码 | R:code:src/core/ValueJsonDocument.cpp,code:src/core/include/core/ValueJson.h | A:ValueJson::encode,ValueJson::decode,ValueJson::encodeType,ValueJson::decodeType,ValueJson::encodeTypeToken,ValueJson::decodeTypeToken | S:encodeType/decodeType使用DeclarationNames可读线名供工程存储；encodeTypeToken/decodeTypeToken保留数字编码供QML；Missing编码null
 ValueJsonDocument.cpp[ID7T]: F:将QtJSON结构访问与Contracts精确路径解码组合为宿主文档 | R:code:src/core/include/core/ValueJson.h,code:3rdparty/VisionRTContracts/include/visionrt/contracts/ValueJson.h | A:ValueJson::Document | S:类型化读值委托原始字节上的SDK文档，避免Qt浮点舍入损失整数
 
 ===/<repository>/src/core/include/core/===
@@ -128,10 +85,11 @@ InputNormalizer.h[LD6T]: F:公开带输入来源的端口值归一接口及调�
 JsonFields.h[IC6T]: F:提供严格JSON字段、枚举、文本与相对路径读取原语 | R:code:src/core/DefinitionJson.cpp,code:src/core/ModuleIndex.cpp | A:json::fields,json::enumeration,json::relativePath,json::read | S:未知字段直接拒绝；relativePath只检查相对性，包边界由调用层验证
 ModuleIndex.h[LE5T]: F:定义模块库、工具声明和定位登记以及运行资源的包级索引结构 | R:code:src/core/ModuleIndex.cpp,code:src/core/include/core/ToolIntegrations.h | A:ModuleIndex,ModuleEntry,ToolIndexEntry,parseModuleIndexFile | S:包索引版本与工具声明版本分别管理，工具条目携带宿主登记
 NativeImplementationProvider.h[LE7T]: F:定义原生工具注册、加载、可用性与适配器创建的抽象边界 | R:code:src/plugins/include/plugins/PluginLoader.h,code:src/core/ToolRegistry.cpp | A:NativeImplementationProvider,ToolAvailability,Availability | S:core通过接口依赖原生实现提供者，不反向链接plugins
-NodeContracts.h[LD7T]: F:集中动态端口编号、节点契约、初始化参数、模型引用及输出类型解析接口 | R:code:src/core/NodeContracts.cpp | A:nodeContract,nodeParameters,nodeModelReferences,resolveOutputTypes,SelectPorts,ReceiveInitPorts | S:同一端口数字可在不同阶段合法复用；模型引用与普通初始化值分别传递
-Project.h[DD8S]: F:定义工程、流程、节点、绑定、动态契约、独立训练参数与发布训练引用的配置模型 | R:code:src/core/ProjectEditor.cpp,code:src/core/ProjectStorage.cpp | A:ProjectDefinition,FlowDefinition,NodeDefinition,InputBinding,ExpressionConfig,TypeSnapshot | S:执行与结构修订分离；trainParams独立于initParams，模型路径存于训练参数，trainingAsset指向已发布训练数据修订；未解析定义保留原JSON，可变字面量需深拷贝
-ProjectEditor.h[LW8S]: F:公开工程编辑事务、绑定规则、复制粘贴及训练发布参数提交接口 | R:code:src/core/ProjectEditor.cpp | A:ProjectEditor,LiteralWrite,validateBinding,dependencyEdges,CopiedSelection | S:全部写入目标校验后才调用资产准备回调，一次推进执行修订；busy时禁改，上游绑定只有Upstream模式生效
-ProjectStorage.h[LD7T]: F:公开工程加载、协调、保存和目的路径归一及结构化更新诊断接口 | R:code:src/core/ProjectStorage.cpp | A:ProjectStorage,projectDestination,ProjectLoadResult,ToolUpdate,ProjectStorageDiagnostic | S:加载与协调在候选内完成，保存提交文件后才替换调用方状态；保存和资产复制共用目的路径规则
+NodeContracts.h[LD7T]: F:集中动态端口编号、节点契约、模型引用解析、训练图回填及输出类型解析接口 | R:code:src/core/NodeContracts.cpp | A:nodeContract,nodeParameters,nodeModelReferences,hydrateNodeTrainingSets,resolveOutputTypes | S:同一端口数字可在不同阶段复用；资源路径均相对resourceRoot解析，训练图回填委托TrainingArchive
+Project.h[DD8S]: F:定义工程元数据、流程、节点、绑定、动态契约和四阶段参数的配置模型 | R:code:src/core/ProjectEditor.cpp,code:src/core/ProjectStorage.cpp | A:ProjectDefinition,FlowDefinition,NodeDefinition,InputBinding,ExpressionConfig,TypeSnapshot | S:模型路径只存训练参数；执行和初始化修订分离；notes与版本字段归ProjectDefinition；未解析工具保留原JSON，可变字面量需深拷贝
+ProjectArchive.h[LD6T]: F:公开.vrtapp工程ZIP容器的唯一program.json条目读写接口 | R:code:src/core/ProjectArchive.cpp | A:ProjectArchive,kProgramEntry,readProgramJson,writeProgramJson | S:固定单条目program.json，写入要求目标父目录已存在并原子提交
+ProjectEditor.h[LW8S]: F:公开工程事务、绑定规则、复制粘贴及关联资源准备接口 | R:code:src/core/ProjectEditor.cpp | A:ProjectEditor,LiteralWrite,validateBinding,dependencyEdges,CopiedSelection | S:全部写入校验后才调用prepare；资源准备成功推进初始化与执行修订；busy禁改，上游绑定仅在Upstream模式生效
+ProjectStorage.h[LD7T]: F:公开.vrtapp工程加载、协调、保存和目的路径归一及结构化更新诊断接口 | R:code:src/core/ProjectStorage.cpp | A:ProjectStorage,projectDestination,ProjectLoadResult,ToolUpdate,ProjectStorageDiagnostic | S:加载与协调在候选内完成，保存原子写归档后才替换调用方状态；projectDestination强制并补全.vrtapp
 PythonLoadState.h[CR6T]: F:同步持有Python实现状态及修订号，支持条件更新 | R:code:src/core/ToolRegistry.cpp | A:PythonLoadState,PythonLoadState::Snapshot | S:状态和修订快照在同一互斥区读取，预期修订不符时更新不生效
 Sequence.h[CD6T]: F:严格解析无前导零的uint64十进制身份文本 | R:code:src/core/ProjectStorage.cpp | A:parseSequence | S:拒绝空串、符号、非十进制字符和溢出
 Tool.h[LE7T]: F:定义宿主工具工厂、结果读取上下文及生命周期诊断来源 | R:code:src/core/ToolRegistry.cpp,code:src/core/include/core/PythonLoadState.h | A:ToolFactory,PythonFactoryFunctor,HostToolContext,ILifecycleDiagnostics | S:Python工厂封装共享加载状态和节点契约resolver
@@ -141,7 +99,7 @@ ToolPackage.h[LE5T]: F:定义工具包读取结果与包内容校验接口 | R:c
 ToolPaths.h[CE6T]: F:确定软件数据根并把UTF-8工具路径约束在明确根目录内 | R:code:src/core/CustomToolStore.cpp | A:softwareDataDir,pathFromUtf8,resolveToolPath | S:无法确定软件目录时拒绝写入；弱规范化后逐分量验证归属
 ToolRegistry.h[LE8S]: F:公开声明注册、三类实现工厂、可用性及工具创建接口 | R:code:src/core/ToolRegistry.cpp | A:ToolRegistry,RegistryError | S:注册错误携带原始ToolStatus；原生加载由抽象提供者承担，Python状态跨工厂共享
 ToolValueValidation.h[LD6T]: F:公开参数完整性及调用阶段输出状态的统一验证接口 | R:code:src/core/ToolValueValidation.cpp | A:ValueCompleteness,validateToolValue,validateToolValues,validateToolExecution | S:默认Complete和Execute；Draft仅供渐进绘制，完整发布仍验证区域下限
-ValueJson.h[LD6T]: F:公开Qt类型化JSON编解码及复用SDK精确读值的文档接口 | R:code:src/core/ValueJson.cpp,code:src/core/ValueJsonDocument.cpp | A:ValueJson,ValueJson::Document,ValueJson::Purpose | S:Literal与Stored保存完整数据，Display汇总图像和训练集
+ValueJson.h[LD6T]: F:公开Qt类型化JSON编解码、双形态TypeSpec编解码及SDK精确读值文档接口 | R:code:src/core/ValueJson.cpp,code:src/core/ValueJsonDocument.cpp | A:ValueJson,ValueJson::Document,ValueJson::Purpose,encodeType,encodeTypeToken | S:encodeType供工程可读线名存储，encodeTypeToken供QML数字编码；Display汇总图像和训练集
 
 ===/<repository>/src/log/===
 CMakeLists.txt[FV5T]: F:构建日志模块与启用测试钩子的隔离静态测试库 | R:code:src/log/LogService.cpp | A:visionrt_log,visionrt_log_testing | S:测试钩子仅测试库启用
@@ -184,7 +142,7 @@ PythonImages.cpp[ID7M]: F:在OpenCV图像与NumPy数组之间建立持有底层�
 PythonImages.h[LD5T]: F:声明图像批次与NumPy列表的桥接入口 | R:code:src/python_bridge/PythonImages.cpp | A:imageViews,imageHeaders | S:-
 PythonInterop.cpp[ID8L]: F:在Python和原生间转换具体形状、方向、坐标系、图像及训练参数 | R:code:src/python_bridge/PythonStorage.cpp,code:src/python_bridge/PythonImages.cpp | A:toPython,fromPython | S:形状使用声明限定的无编号坐标列表，入口错误保留路径；None保持Missing；训练字段类型随编号字典传递，NumPy与像素视图持有Owner
 PythonLoader.h.in[FE4T]: F:把受管Python包加载器源码嵌入C++字符串 | R:code:src/python_bridge/managed_packages.py | A:python::loaderSource | S:-
-PythonRuntime.cpp[RE8L]: F:持有解释器和受管工具代际，统一执行函数或类的初始化、运行与Values训练 | R:code:src/python_bridge/PythonInterop.cpp,code:src/python_bridge/managed_packages.py | A:PythonRuntime,pythonToolFactory | S:声明初始化或训练能力才要求对应方法；函数通过属性提供生命周期，models独立传递；返回可含bytes产物；工厂绑定generation，关闭等待外部存储释放
+PythonRuntime.cpp[RE8L]: F:持有解释器和受管工具代际，统一执行函数或类的初始化、运行与Values训练 | R:code:src/python_bridge/PythonInterop.cpp,code:src/python_bridge/managed_packages.py | A:PythonRuntime,pythonToolFactory | S:声明初始化或训练能力才要求对应方法；函数通过属性提供生命周期，models独立传递；返回仅含outputs和detail，模型直接由工具写盘；工厂绑定generation，关闭等待外部存储释放
 PythonStorage.cpp[RP7T]: F:把Python对象引用封装为可跟踪的宿主Owner并等待外部存储释放 | R:code:src/python_bridge/include/python_bridge/PythonStorage.h | A:PythonStorage::retain,PythonStorage::waitForRelease | S:增减Python引用需GIL；等待引用归零时释放当前GIL以免阻塞析构
 managed_packages.py[IE7T]: F:用隔离命名空间导入受管Python包并清理代际模块缓存 | R:code:src/python_bridge/PythonRuntime.cpp | A:ManagedPackages,FreshSourceLoader | S:包来源与generation构成身份；源码每次直接编译，不读写pyc；解析后的模块路径必须留在包根内
 
@@ -196,16 +154,16 @@ PythonStorage.h[LP6T]: F:公开Python对象保留、外部引用计数及关闭�
 
 ===/<repository>/src/runtime/===
 CMakeLists.txt[FV5T]: F:构建基于Taskflow的运行时模块 | R:code:cmake/AddModule.cmake | A:visionrt_runtime | S:-
-NodeRuntime.cpp[RW9L]: F:准备工具配置并初始化、调用、校验结果及发布不可变节点快照 | R:code:src/runtime/RuntimeInternal.h,code:src/core/ToolValueValidation.cpp | A:NodeRuntime::run,NodeRuntime::configure,NodeRuntime::release | S:模型引用独立参与配置复用；关联输出保留当轮所有几何输入；业务失败与框架失败分开，框架失败清空业务值和几何；取消依赖真实stop事实
+NodeRuntime.cpp[RW9L]: F:配置并初始化工具，执行和校验结果后发布不可变节点快照 | R:code:src/runtime/RuntimeInternal.h,code:src/core/ToolValueValidation.cpp | A:NodeRuntime::run,NodeRuntime::configure,NodeRuntime::release | S:模型路径与初始化修订共同决定实例复用，同路径模型更新须改变初始化修订；关联输出保留当轮几何输入；框架失败清空业务值和几何，业务失败保留工具结果；取消依赖真实stop事实
 Receiver.cpp[RW8M]: F:预检跨流程接收计划并等待当前会话的新结果 | R:code:src/runtime/RuntimeInternal.h,code:src/runtime/include/runtime/Receiver.h | A:validateReceiverPlan,NodeReader::receive | S:禁止同流程接收与接收等待闭环；仅接受同generation/session且publication前进的结果；阻塞最多占workers减一的容量
-RuntimeEngine.cpp[AW9L]: F:冻结工程并调度节点与流程轮次，协调模型配置同步、停止、读回和完成确认 | R:code:src/runtime/RuntimeInternal.h,code:src/runtime/NodeRuntime.cpp,code:src/runtime/Receiver.cpp | A:RuntimeEngine::start,RuntimeEngine::pollLatest,RuntimeEngine::acknowledgeCompletion | S:完成在GUI最终拉取并确认前仍Busy；未完成读回阻止新运行；单节点复用须验证上游当前发布与类型；模型相对路径以工程目录解析，流程耗时由节点窗口派生
-RuntimeInternal.h[RW7S]: F:定义冻结运行、轮上下文、分离普通参数与模型的实例配置和接收等待预算 | R:code:src/runtime/RuntimeEngine.cpp,code:src/runtime/NodeRuntime.cpp | A:FrozenRun,RoundContext,InstanceConfiguration,NodeRuntime,WaitBudget,NodeReader | S:等待容量预留一个生产者线程；冻结节点指针随FrozenRun存活；模型引用参与配置相等判断
+RuntimeEngine.cpp[AW9L]: F:冻结工程并调度节点与流程轮次，协调模型配置同步、停止、读回和完成确认 | R:code:src/runtime/RuntimeInternal.h,code:src/runtime/NodeRuntime.cpp,code:src/runtime/Receiver.cpp | A:RuntimeEngine::start,RuntimeEngine::pollLatest,RuntimeEngine::acknowledgeCompletion,RuntimeEngine::setResourceRoot | S:完成在GUI最终拉取并确认前仍Busy；未完成读回阻止新运行；含缺失插件节点时阻断整条流程与单节点执行；模型相对路径以安装目录resourceRoot解析，无QCoreApplication时回退可执行文件目录
+RuntimeInternal.h[RW7S]: F:定义冻结运行、轮上下文、实例配置和接收等待预算 | R:code:src/runtime/RuntimeEngine.cpp,code:src/runtime/NodeRuntime.cpp | A:FrozenRun,RoundContext,InstanceConfiguration,NodeRuntime,WaitBudget,NodeReader | S:等待容量预留生产者线程；冻结节点随FrozenRun存活；实例配置比较模型路径与初始化修订，普通输入不参与
 
 ===/<repository>/src/runtime/include/runtime/===
 NodeActivity.h[RW6S]: F:传递带运行身份的节点进出执行事件并合并GUI唤醒 | R:code:src/runtime/RuntimeEngine.cpp | A:NodeActivityEvent,ActivityMailbox | S:邮箱溢出只影响新鲜度；最终状态必须从pollLatest快照恢复，事件不携带业务数据
 Receiver.h[LW7T]: F:定义跨流程接收请求、消费游标及只读结果通道 | R:code:src/runtime/Receiver.cpp,code:src/tools/ReceiveTool.cpp | A:IResultReader,ReceiveRequest,ReceiveCursor,ReceiveOutcome | S:传输保留源业务状态与已有值，是否接受该值由接收工具裁决
 RuntimeEngine.def[FW6T]: F:集中声明运行模式、运行状态与运行诊断阶段的枚举数值 | R:code:src/runtime/include/runtime/RuntimeEngine.h,code:tools/export_ui_enums.cpp | A:RunMode,RuntimeState,RuntimePhase | S:-
-RuntimeEngine.h[LW8S]: F:公开运行状态机、快照拉取、读回和完成确认协议并展开运行枚举 | R:code:src/runtime/include/runtime/RuntimeEngine.def,code:src/runtime/RuntimeEngine.cpp | A:RuntimeEngine,RuntimeUpdate,RuntimeReadback,RuntimeCompletion,RuntimeState | S:工作线程不访问QObject；回调仅唤醒；完成需GUI确认后才释放Busy
+RuntimeEngine.h[LW8S]: F:公开运行状态机、资源根配置、快照拉取、读回和完成确认协议并展开运行枚举 | R:code:src/runtime/include/runtime/RuntimeEngine.def,code:src/runtime/RuntimeEngine.cpp | A:RuntimeEngine,RuntimeUpdate,RuntimeReadback,RuntimeCompletion,RuntimeState | S:工作线程不访问QObject；回调仅唤醒；完成需GUI确认后才释放Busy；构造或setResourceRoot指定相对路径解析根
 Snapshot.def[FD6T]: F:集中声明节点执行处置与调用阶段的枚举数值 | R:code:src/runtime/include/runtime/Snapshot.h,code:tools/export_ui_enums.cpp | A:NodeDisposition,NodePhase | S:-
 Snapshot.h[RD8S]: F:定义节点诊断、发布身份、几何输入快照和不可变结果等待槽 | R:code:src/runtime/NodeRuntime.cpp,code:src/runtime/Receiver.cpp | A:NodeSnapshot,ResultSlot,NodeDiagnostic,InputUse | S:快照绑定运行代际、会话、轮次及发布；geometryInputs保留输出所属图像的当轮几何，invocation区分训练与运行
 
@@ -220,22 +178,22 @@ SelectTool.h[LW4T]: F:声明合流宿主绑定的注册入口 | R:code:src/tools
 
 ===/<repository>/src/ui/===
 AboutReport.cpp[IU5T]: F:生成宿主、工具包、Contracts与运行环境的关于文本 | R:code:src/ui/include/ui/AboutReport.h | A:aboutReportText | S:组件构建时间缺失显示未知，不能借用其他组件时间；本地时间附UTC偏移
-AppController.cpp[AU9L]: F:装配工作台服务并协调工程、运行读回、声明驱动参数页签和设置生命周期 | R:code:src/ui/AppController_p.h,code:src/ui/ResultPresentation.cpp,code:src/ui/AppControllerTraining.cpp | A:AppController,AppController::save,AppController::applySettings | S:初始化页仅显示作者可编辑初始化参数，训练页按能力出现；运行前提交草稿模型路径；示例保存要求另存；资产准备先于原子JSON提交，失败回撤；销毁排空读者与后台任务
+AppController.cpp[AU9L]: F:装配工作台服务并协调工程、运行读回、声明驱动页签和设置生命周期 | R:code:src/ui/AppController_p.h,code:src/ui/ResultPresentation.cpp,code:src/ui/AppControllerTraining.cpp | A:AppController,AppController::save,AppController::applySettings | S:初始化页按可编辑声明出现，训练页按能力出现；示例保存要求另存；RuntimeEngine以应用安装目录为资源根；工程原子写.vrtapp后才切换内存状态，另存不复制模型；运行前提交草稿模型路径；销毁排空读者与后台任务
 AppControllerAssist.cpp[AU7L]: F:按声明组织定位预览和点选请求，事务提交区域及配套参数建议 | R:code:src/ui/AssistPreview.cpp,code:src/ui/AppControllerTraining.cpp | A:assistHover,assistClick,applyAssistOutcome | S:搜索区固定为圆，候选与目标形状必须匹配；训练定位匹配数据集及字段；六系数对齐不以Missing代替单位阵；追加保留兼容共享参数
 AppControllerBindings.cpp[IU6M]: F:为端口菜单生成绑定候选并以捕获上下文执行连断操作 | R:code:src/core/ProjectEditor.cpp,code:src/ui/OutputModel.cpp | A:portDeclarationContext,portResultContext,bindInput,bindOutputTo | S:上下文绑定工程、节点、结构与交互身份，过期菜单不能操作新结果
 AppControllerDiagnostics.cpp[IO6S]: F:统一发布应用诊断、工具更新提示和日志窗口操作 | R:code:src/ui/Diagnostics.cpp,code:src/log/LogService.cpp | A:diagnosticsJson,copyAllLogs,publishToolUpdates | S:诊断同时写日志且内存历史限制100条；RegistryError保留其原始状态
 AppControllerDisplay.cpp[IU6S]: F:接入视口与只读缩略图，按目标路由具体形状的预览和提交 | R:code:src/ui/ResultPresentation.cpp,code:src/ui/RoiEditSession.cpp | A:attachViewport,updateDisplay,updateResults | S:训练记录与普通参数由target.kind区分；上游形状仅查看；预览只改会话草稿，缩略图不可编辑
-AppControllerExpression.cpp[IU6M]: F:编辑表达式、条件与合流类型，并从共享类型目录投影选择器及中文名称 | R:code:src/core/ProjectEditor.cpp,code:src/ui/DisplayTypes.cpp | A:expressionConfig,applySelectType,parameterTypes,arrayElementTypes | S:端口编号高水位不回收；类型列表来自Contracts，新增几何与训练集无需另维护目录
+AppControllerExpression.cpp[IU6M]: F:编辑表达式、条件与合流类型，并从共享类型目录投影选择器及中文名称 | R:code:src/core/ProjectEditor.cpp,code:src/core/ValueJson.cpp,code:src/ui/DisplayTypes.cpp | A:expressionConfig,applySelectType,parameterTypes,arrayElementTypes | S:端口编号高水位不回收；QML往返使用encodeTypeToken/decodeTypeToken；类型列表来自Contracts
 AppControllerMetadata.cpp[IU6L]: F:把四阶段契约和训练草稿投影为参数行、分组、选项和输出标题 | R:code:src/ui/ValueDisplay.cpp,code:src/ui/qml/ParameterEditor.qml | A:parameters,parameterGroups,outputTitle,toolMetadata | S:形状名称和绘制模式来自声明类型；行身份包含阶段、数据集及记录；图像与TrainingSet仅给摘要，其他literal保留原精度
 AppControllerParameters.cpp[IU6S]: F:解析手动参数与路径，跨阶段载入原图并按准确整数运算提交步进 | R:code:src/core/InputNormalizer.cpp,code:src/ui/AppControllerTraining.cpp | A:setParameter,loadParameterImage,stepIntegerParameter | S:图像保留原深度；记录整数按字段声明寻址，训练写入只改草稿且不触发初始化；整数不经JS浮点，越界及上游编辑拒绝
-AppControllerReadback.cpp[IU6T]: F:委托展示所有者处理读回、异步输出文本和工程管理排空 | R:code:src/ui/ResultPresentation.cpp,code:src/ui/AssistPreview.cpp | A:beginDrain,requestOutputText,updateReadback | S:管理排空清除待训练提交并使预览失效；普通排空不反复销毁持久算法实例
+AppControllerReadback.cpp[IU6T]: F:委托展示所有者处理读回、异步输出文本和工程管理排空 | R:code:src/ui/ResultPresentation.cpp,code:src/ui/AssistPreview.cpp | A:beginDrain,requestOutputText,updateReadback | S:管理排空清除待训练提交与暂存产物计划并使预览失效；普通排空不反复销毁持久算法实例
 AppControllerRoi.cpp[IU7M]: F:统一初始化、训练、普通输入和记录字段的形状编辑启动、提交与清空 | R:code:src/ui/RoiEditSession.cpp,code:src/ui/AppControllerTraining.cpp | A:editRoi,startParameterRoi,startTrainingRoi,clearRoi | S:绘制模式必须匹配声明的具体形状；记录字段须显式选择；会话仅持有草稿，控制器按阶段提交，上游值显式复制后可编辑
 AppControllerRouting.cpp[IU5T]: F:把QML节点几何与有效绑定交给连线器并转换路径和诊断 | R:code:src/ui/WireRouter.cpp,code:src/core/ProjectEditor.cpp | A:routeWires | S:重复连线路由错误按当前集合去重报告
-AppControllerTraining.cpp[AU8L]: F:组织训练参数和数据集草稿、后台训练、模型发布及具体形状展示 | R:code:src/ui/TrainingSession.cpp,code:src/ui/TrainingAssets.cpp,code:src/ui/AssistPreview.cpp | A:addTrainingImage,addTrainingRecord,applyTraining,selectTrainingDataset,setTrainingParameter | S:applyTrainingValue为草稿写入口；训练可无图或形状；模型资产准备后一次提交参数，纯参数训练不建模型修订；展示只取声明的公开输出；示例资产归注入应用目录
-AppController_p.h[AU7L]: F:集中控制器服务所有权、参数投影、训练草稿和ROI协调接口 | R:code:src/ui/ResultPresentation.h,code:src/ui/TrainingSession.cpp | A:AppController::Impl | S:展示与ROI草稿各有唯一所有者；applyTrainingValue统一训练写入，beginParameterRoi统一阶段启动；待训练期间禁编
-AssistPreview.cpp[RU7L]: F:通过单工作线程执行定位预览、点选和普通Values训练并传回类型化结果 | R:code:src/ui/include/ui/AssistPreview.h,code:src/ui/AppControllerTraining.cpp | A:AssistPreview::request,AssistPreview::configure,AssistPreview::shutdown | S:训练直接调用train并按Train输出阶段校验；形状预览从具体值抽取内部记录；悬停合并且epoch筛旧结果，释放需GUI确认才解除Busy
+AppControllerTraining.cpp[AU8L]: F:组织训练参数草稿、训练图回填、后台训练、资源包发布和具体形状展示 | R:code:src/ui/TrainingSession.cpp,code:src/ui/TrainingAssets.cpp,code:src/ui/AssistPreview.cpp,code:src/core/NodeContracts.cpp | A:addTrainingImage,addTrainingRecord,applyTraining,selectTrainingDataset,setTrainingParameter | S:打开训练会话时经hydrateNodeTrainingSets从.zip回填原图；默认按安装目录assets分配.zip绝对路径交给工具写盘，发布验证文件落地后提交trainParams并推进initializationRevision
+AppController_p.h[AU7L]: F:集中控制器服务所有权、参数投影、训练草稿、待发布资源包和ROI协调接口 | R:code:src/ui/ResultPresentation.h,code:src/ui/TrainingSession.cpp | A:AppController::Impl | S:展示与ROI草稿各有唯一所有者；PendingTrainingArtifact保存绝对写盘路径与持久化相对路径；待训练期间禁编
+AssistPreview.cpp[RU7L]: F:通过单工作线程执行定位预览、点选和普通Values训练并传回类型化结果 | R:code:src/ui/include/ui/AssistPreview.h,code:src/ui/AppControllerTraining.cpp | A:AssistPreview::request,AssistPreview::configure,AssistPreview::shutdown | S:训练直接调用train并按Train输出阶段校验，不再经outcome回传模型字节；形状预览从具体值抽取内部记录；悬停合并且epoch筛旧结果，释放需GUI确认才解除Busy
 CMakeLists.txt[FV6T]: F:构建工作台、数值展示、图像ROI与训练模块，用原生目标生成枚举并嵌入QML | R:code:tools/export_ui_enums.cpp,code:src/ui/UiTypes.cpp,code:cmake/ConfigLibavoid.cmake | A:visionrt_ui | S:QML以NO_PLUGIN嵌入同一DLL；生成头依赖原生生成器目标，不在配置阶段执行Python
-Color.cpp[CU4T]: F:初始化工作台、ROI及红X轴、绿Y轴、紫色原点的统一颜色 | R:code:src/ui/include/ui/Color.h | A:VisionRTColor::getInstance,VisionRTColor::create | S:单例由C++持有
+Color.cpp[CU4T]: F:初始化工作台、节点状态、缺失告警、ROI及二维坐标轴和原点的统一颜色 | R:code:src/ui/include/ui/Color.h | A:VisionRTColor::getInstance,VisionRTColor::create | S:单例由C++持有；NodeWarning(#D97706)专用于缺失插件节点
 Diagnostics.cpp[IO6M]: F:将工具、节点、运行与存储诊断转换为完整中文消息及结构化JSON | R:code:src/ui/include/ui/Diagnostics.h | A:statusDisplay,diagnosticMessage,diagnosticObject,diagnosticJson | S:message与detail分别保留，不从消息文本反推错误分类；大身份数字用字符串编码
 DisplayConverter.cpp[IU7L]: F:后台转换图像批次为QImage并保留原始OpenCV类型，按请求身份丢弃过期结果 | R:code:src/ui/include/ui/DisplayConverter.h | A:DisplayConverter::requestBatch,DisplayConverter::convert,DisplayConverter::waitForReads | S:仅一个运行请求和一个最新待办；8位颜色保真，归一化图像仍带原类型；非有限像素显示黑色，源变更前排空读者
 DisplayTypes.cpp[CU4T]: F:按声明类型生成标量、数组及具体形状的中文显示名称 | R:code:src/ui/include/ui/DisplayTypes.h | A:displayTypeName,displayDtypeName | S:形状名称取Contracts标签，不依据当前值猜测或混合类型
@@ -254,11 +212,11 @@ RoiGeometry.h[CU6S]: F:共用ROI几何、逆序命中及中心手柄和矩形旋
 RoiOverlay.cpp[IU6M]: F:绘制ROI装饰、悬浮尺寸及随图像变换的方向箭头和二维坐标系 | R:code:src/ui/include/ui/ImageViewport.h,code:src/ui/include/ui/Color.h | A:RoiOverlay::paint,RoiOverlay::fade,RoiOverlay::clear | S:几何端点先经对齐再图像变换，描边及箭头头部用逻辑像素；红X绿Y紫色透明原点；ROI数值仅中心悬浮显示
 RoiOverlay.h[IU5T]: F:声明归视口所有的ROI绘制子项及退选动画接口 | R:code:src/ui/RoiOverlay.cpp | A:RoiOverlay,paint,fade,clear | S:只负责绘制，不接管鼠标或悬停
 Size.cpp[CU4T]: F:初始化控件及ROI描边、手柄、旋转图标、命中和标签留白的默认逻辑尺寸 | R:code:src/ui/include/ui/Size.h | A:VisionRTSize::getInstance,VisionRTSize::create | S:单例由C++拥有，QML不得回收
-ToolEditorController.cpp[AU7L]: F:管理工具声明草稿、目录和保存，并从SDK投影具体参数类型目录 | R:code:src/core/CustomToolStore.cpp,code:src/ui/ToolPortListModel.cpp | A:ToolEditorController::saveAll,ToolEditorController::cloneTool,ToolEditorController::supportedTypes | S:类型和形状标记来自Contracts；草稿身份含训练参数和元数据；保存先验证全部草稿，资源复制延迟到实际保存
-ToolPortListModel.cpp[IU6L]: F:投影四阶段工具声明端口并编辑类型、约束、标签选项及几何关系 | R:code:src/core/ToolDefinition.cpp,code:src/ui/include/ui/ToolPortListModel.h | A:addPort,updatePort,changeType,relationCandidates | S:选项对象保留value与label往返；候选关系复用实际校验，几何跨阶段关联图像及六系数对齐；固定宿主端口不可编辑
+ToolEditorController.cpp[AU7L]: F:管理工具声明草稿、目录和保存，并从SDK投影具体参数类型目录 | R:code:src/core/CustomToolStore.cpp,code:src/ui/ToolPortListModel.cpp,code:src/core/ValueJson.cpp | A:ToolEditorController::saveAll,ToolEditorController::cloneTool,ToolEditorController::supportedTypes | S:类型和形状标记来自Contracts并经encodeTypeToken投影；草稿身份含训练参数和元数据；保存先验证全部草稿，资源复制延迟到实际保存
+ToolPortListModel.cpp[IU6L]: F:投影四阶段工具声明端口并编辑类型、约束、标签选项及几何关系 | R:code:src/core/ToolDefinition.cpp,code:src/core/ValueJson.cpp,code:src/ui/include/ui/ToolPortListModel.h | A:addPort,updatePort,changeType,relationCandidates | S:类型角色经encodeTypeToken/decodeTypeToken与QML交互；候选关系复用实际校验，几何跨阶段关联图像及六系数对齐；固定宿主端口不可编辑
 ToolTreeModel.cpp[IU5M]: F:按注册表生成分类工具树、搜索过滤与可用状态的Qt模型 | R:code:src/ui/include/ui/ToolTreeModel.h,code:src/core/ToolRegistry.cpp | A:ToolTreeModel::setRegistry,ToolTreeModel::setFilter,ToolTreeModel::updateToolStatus | S:Internal算法不进入普通菜单；状态更新只通知实际变化角色，目录稳定键使用完整父路径
-TrainingAssets.cpp[PU8S]: F:准备训练模型修订和清单，在另存时复制模型并重定位工程引用 | R:code:src/ui/TrainingSession.cpp,code:src/ui/include/ui/TrainingAssets.h | A:Revision,SaveAssets,assetName,projectBase | S:原帧与记录不另存文件，归工程TrainingSet；修订先暂存后改名，不覆盖已有编号；指定模型用原子文件保存，accept前RAII回撤本次修订
-TrainingSession.cpp[DU7M]: F:管理训练参数、多数据集记录、原像素和固定形状字段草稿 | R:code:src/ui/include/ui/TrainingSession.h,code:src/core/ToolValueValidation.cpp | A:TrainingSession::begin,TrainingSession::addRecord,TrainingSession::setField,TrainingSession::parameters,TrainingSession::savable,TrainingSession::manifest | S:画布字段显式选择且不强制存在；按字段声明重建具体形状，同源记录共用原像素；Draft放宽数量下限，发布验证完整约束；格式5清单只索引模型
+TrainingAssets.cpp[PU7T]: F:按安装目录assets子目录分配不冲突的默认训练资源包(.zip)路径 | R:code:src/ui/include/ui/TrainingAssets.h | A:newTrainingArchivePath | S:仅负责路径去重分配，重名追加数字后缀；模型和原图读写归工具层TrainingArchive
+TrainingSession.cpp[DU7M]: F:管理训练参数、多数据集记录和原像素草稿，并同步工程模型路径 | R:code:src/ui/include/ui/TrainingSession.h,code:src/core/ToolValueValidation.cpp | A:TrainingSession::begin,TrainingSession::addRecord,TrainingSession::setField,TrainingSession::parameters,TrainingSession::savable,TrainingSession::synchronizeParameter | S:draft允许空像素占位而不触发缩略图转换；同源记录共用原像素；Draft仅放宽区域数量下限；同步已提交模型路径保留用户已修改草稿
 UiPreferences.cpp[PC7M]: F:在安装目录原子读写平台设置、EasyTouch偏好和最近工程列表 | R:code:src/ui/include/ui/UiPreferences.h,code:src/core/include/core/ToolPaths.h | A:UiPreferences::loadSettings,UiPreferences::saveSettings,UiPreferences::setRecentProjects | S:各写者只合并自己的键；损坏、不可读或未知schema的文件不能以默认文档覆写；仅首次缺失允许新建
 UiTypes.cpp[IU6T]: F:注册工作台样式单例、协议及运行枚举和视口绘图枚举供QML使用 | R:code:src/ui/CMakeLists.txt,code:src/ui/include/ui/ImageViewport.h,code:src/ui/Size.cpp | A:registerUiTypes | S:注册幂等，QuickUI主题统一Light；绘图模式取视口元对象，不要求参数控件加载图像视口模块
 ValueDisplay.cpp[CU6T]: F:统一标量、数组、具体形状、方向和坐标系的界面数值格式 | R:code:src/core/ValueJson.cpp,code:src/ui/include/ui/ValueDisplay.h | A:displayValueText | S:最多六位小数并去尾零、归一负零；形状展示无编号坐标列表；不改原值，整数不经double
@@ -267,8 +225,8 @@ WireRouter.cpp[KU6S]: F:按节点几何与逻辑边生成缓存的正交避障�
 ===/<repository>/src/ui/include/ui/===
 AboutReport.h[LU4T]: F:定义关于面板的组件事实输入与纯文本渲染接口 | R:code:src/ui/AboutReport.cpp | A:AboutReport,aboutReportText | S:-
 AppController.h[LU8M]: F:向QML公开工程操作、四阶段参数页、通用值编辑、数据集与ROI训练接口 | R:code:src/ui/AppController.cpp,code:src/ui/AppControllerParameters.cpp,code:src/ui/AppControllerTraining.cpp | A:AppController | S:参数页与图像训练模式独立；图像和ROI按阶段与记录身份寻址；整数步进可显式指定记录字段，训练草稿编辑不启动执行
-AssistPreview.h[LU6S]: F:定义普通Values定位或训练请求、模型产物及有界后台生命周期接口 | R:code:src/ui/AssistPreview.cpp | A:AssistPreview,AssistContext,AssistRequest,AssistOutcome | S:training只标识调用阶段，训练数据本身位于inputs；手势标记不传算法，快照与草稿身份共同防止旧结果提交
-Color.h[CU4T]: F:公开ROI、辅助标签及二维坐标轴和原点颜色的QML单例属性 | R:code:src/ui/Color.cpp | A:VisionRTColor | S:-
+AssistPreview.h[LU6S]: F:定义普通Values定位或训练请求、结果及有界后台生命周期接口 | R:code:src/ui/AssistPreview.cpp | A:AssistPreview,AssistContext,AssistRequest,AssistOutcome | S:training只标识调用阶段，训练数据位于inputs且结果不再携带模型字节；手势标记不传算法，快照与草稿身份共同防止旧结果提交
+Color.h[CU4T]: F:公开节点状态、缺失告警、ROI、辅助标签及二维坐标轴和原点颜色的QML单例属性 | R:code:src/ui/Color.cpp | A:VisionRTColor | S:-
 Def.h[CU5T]: F:提供样式属性的Qt读写、变更信号与去重赋值宏 | R:code:src/ui/include/ui/Color.h,code:src/ui/include/ui/Size.h | A:VISIONRT_Q_PROPERTY_AUTO | S:值未变化时不发通知
 Diagnostics.h[LO6T]: F:声明应用诊断联合类型及摘要、结构化序列化接口 | R:code:src/ui/Diagnostics.cpp | A:ApplicationDiagnostic,StatusDisplay,diagnosticObject,diagnosticMessage | S:-
 DisplayConverter.h[LU6T]: F:定义保留源像素类型的显示帧及后台转换、身份失效和读者排空接口 | R:code:src/ui/DisplayConverter.cpp | A:DisplayConverter,DisplayFrame | S:sourceType为原OpenCV类型，未知为-1；帧绑定generation、requestId及展示批次位置
@@ -285,8 +243,8 @@ Size.h[CU4T]: F:公开工作台控件、ROI输入输出描边及装饰命中参�
 ToolEditorController.h[LU6S]: F:公开多草稿工具编辑器、目录操作和统一保存取消接口 | R:code:src/ui/ToolEditorController.cpp | A:ToolEditorController | S:稳定草稿键不随未保存工具ID变化；内建编辑开关不能隐藏未保存草稿
 ToolPortListModel.h[LU6S]: F:定义声明端口编辑角色及类型、关系变更接口 | R:code:src/ui/ToolPortListModel.cpp | A:ToolPortListModel,typeChangeImpact,changeType,relationCandidates | S:只读草稿拒绝全部修改；fixed前缀不能移动或删除
 ToolTreeModel.h[LU5T]: F:定义分类工具树的角色、过滤和可用性更新接口 | R:code:src/ui/ToolTreeModel.cpp | A:ToolTreeModel | S:-
-TrainingAssets.h[LU8T]: F:公开模型发布修订、另存资产复制及工程资产路径归一接口 | R:code:src/ui/TrainingAssets.cpp | A:Revision,SaveAssets,assetName,projectBase | S:Revision和SaveAssets不可复制，accept前持有并回撤本次修订；数据记录由工程参数持久化，资产层只管模型
-TrainingSession.h[LU6S]: F:公开普通训练参数、多数据集草稿、可选图像记录和显式字段编辑接口 | R:code:src/ui/TrainingSession.cpp | A:TrainingSession,TrainingDraftImage,TrainingDraftRecord,trainingFieldVariant | S:记录文本身份派生于唯一数字编号；图像可空，数据集及ROI字段编号用optional以支持0；缩略图仅供展示，参数快照才是训练调用值
+TrainingAssets.h[LU7T]: F:公开安装目录assets常量与默认训练资源包(.zip)路径分配接口 | R:code:src/ui/TrainingAssets.cpp | A:kAssetsDirectory,newTrainingArchivePath | S:路径基于安装目录resourceRoot分配，不随工程另存复制或改写路径
+TrainingSession.h[LU6S]: F:公开训练参数、多数据集草稿、可选图像记录和字段编辑接口 | R:code:src/ui/TrainingSession.cpp | A:TrainingSession,TrainingDraftImage,TrainingDraftRecord,trainingFieldVariant | S:记录文本身份派生数字编号，0是合法数据集和字段编号；缩略图仅供展示，参数快照才是训练供值；同步模型路径保留未应用修改
 UiPreferences.h[LC6T]: F:公开平台设置、用户交互偏好及共享设置文档写入接口 | R:code:src/ui/UiPreferences.cpp | A:Settings,SettingsState,UiPreferences | S:空解释器是合法未配置；FirstRun与Unreadable必须区分，损坏文件不能覆盖
 UiState.def[FU5T]: F:集中声明节点状态、目录类型、端口关系、未保存决策与设置页的枚举数值 | R:code:src/ui/include/ui/UiState.h,code:tools/export_ui_enums.cpp | A:NodeState,CatalogEntryKind,RelationKind,UnsavedDecision,SettingsPage | S:-
 UiState.h[FU5T]: F:向宿主代码公开由统一定义表展开的界面状态与决策枚举 | R:code:src/ui/include/ui/UiState.def,code:src/ui/UiTypes.cpp | A:NodeState,CatalogEntryKind,RelationKind,UnsavedDecision,SettingsPage | S:-
@@ -306,9 +264,9 @@ InitializationParameterPage.qml[IU4T]: F:将公共参数页特化为初始化参
 InputParameterPage.qml[IU4T]: F:复用公共参数页呈现普通输入的各业务页签 | R:code:src/ui/qml/ParameterPage.qml | A:InputParameterPage | S:具体页签由父参数面板传入
 IntegerParameterEditor.qml[IU5T]: F:以文本草稿编辑整数并把步进交给C++精确计算 | R:code:src/ui/AppControllerParameters.cpp | A:sync | S:拒绝后保留草稿，不用JS Number重算int64
 LogDialog.qml[IU5S]: F:展示可选择复制的日志文本与清空操作 | R:code:src/log/LogModel.cpp,code:src/ui/LogHighlighter.cpp,code:src/ui/qml/BoundedScrollView.qml | A:- | S:文本为PlainText，日志可见性驱动服务的窗口批量投递
-Main.qml[AU7L]: F:装配主窗口、菜单、工作台区域及工程和设置对话入口 | R:code:src/ui/qml/MainToolbar.qml,code:src/ui/qml/FlowCanvas.qml,code:src/ui/qml/ParameterPanel.qml,code:src/ui/qml/ResultsPanel.qml | A:saveProject | S:工程对话框共用.json筛选，保存默认补json；工程和执行行为委托app控制器，不在QML维护第二份业务状态
+Main.qml[AU7L]: F:装配主窗口、菜单、工作台区域及工程和设置对话入口 | R:code:src/ui/qml/MainToolbar.qml,code:src/ui/qml/FlowCanvas.qml,code:src/ui/qml/ParameterPanel.qml,code:src/ui/qml/ResultsPanel.qml | A:saveProject | S:工程对话框统一筛选.vrtapp并默认补vrtapp后缀；工程和执行行为委托app控制器，不在QML维护第二份业务状态
 MainToolbar.qml[IU4S]: F:显示文件、设置、工具、帮助菜单及重置入口 | R:code:src/ui/qml/Main.qml | A:openFileMenu,openToolsMenu,resetRequested | S:-
-NodeDelegate.qml[IU5M]: F:渲染节点卡片状态、图标与选择框，传递指针交互及局部悬停位置 | R:code:src/ui/NodeListModel.cpp,code:src/ui/qml/FlowCanvas.qml | A:executeRequested,pointerPressed,pointerMoved,pointerReleased,hoverEntered,hoverExited | S:运行边框独立于选择层；悬停信号传节点局部坐标，画布负责空间转换
+NodeDelegate.qml[IU5M]: F:渲染节点卡片状态、缺失插件告警样式、图标与选择框，传递指针交互及局部悬停位置 | R:code:src/ui/NodeListModel.cpp,code:src/ui/qml/FlowCanvas.qml | A:executeRequested,pointerPressed,pointerMoved,pointerReleased,hoverEntered,hoverExited | S:缺失节点显示琥珀色虚线边框、半透明卡片与“插件缺失，请删除”提示并禁止双击执行；运行边框独立于选择层
 OutputPanel.qml[IU6L]: F:展示当前训练或运行的共享输出表，提供结果复制和连接关系菜单 | R:code:src/ui/OutputModel.cpp,code:src/ui/AppControllerBindings.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:showNameMenu,showDataMenu | S:标题取控制器当前结果阶段；复制在菜单关闭后读取，过期上下文或Missing不能生成伪数据
 ParameterActionButton.qml[CU3T]: F:统一参数行操作按钮尺寸与焦点策略 | R:code:src/ui/qml/WorkbenchActionButton.qml | A:ParameterActionButton | S:-
 ParameterComboBox.qml[CU3T]: F:将参数下拉框高度及通用箭头尺寸属性绑定到工作台尺寸，统一内容留白 | R:code:src/ui/include/ui/Size.h | A:ParameterComboBox | S:-
@@ -349,32 +307,28 @@ WorkbenchTextField.qml[CU3T]: F:统一工作台文本字段高度、留白和边
 WorkbenchWindow.qml[CU5T]: F:封装带正文页脚的模态子窗口、居中唤起及关闭控制 | R:- | A:showAndRaise,body,footer | S:应用整体关闭可越过普通closeEnabled限制，避免子窗口阻挡退出
 
 ===/<repository>/tools/===
-README.md[SV5T]: F:索引构建、依赖、部署、验证与发布证据工具 | R:code:tools/build.cmd,code:tools/package_app.py,code:tools/release_evidence.py | A:- | S:运行环境事实以实际报告与实现为准
+README.md[SV5T]: F:索引构建、依赖、部署、验证和发布证据工具 | R:code:tools/build.cmd,code:tools/package_app.py,code:tools/verify_ui_notifications.cjs | A:- | S:运行环境事实以实际报告与实现为准
 archive_evidence.py[XQ4T]: F:把构建证据目录中的普通文件复制归档到文档证据目录 | R:- | A:main | S:测试默认写build/evidence，本工具显式归档而非测试污染源码
 build.cmd[XV7M]: F:初始化MSVC x64环境并代理命令或编排配置、分组测试和打包 | R:code:CMakeLists.txt,code:tools/package_app.py | A:--config,--group,--test,--package,--build-dir | S:命令代理返回实际退出码；开发优先按成本组构建和验证
 dependencies.json[FV6T]: F:集中声明Qt、OpenCV和开发Python的本机默认路径及部署模式 | R:code:cmake/ConfigDependencyDefaults.cmake,code:tools/dependency_utils.py | A:dependencies | S:Python默认值是构建依赖，不代表发行应用运行环境
 dependency_utils.py[XV6M]: F:共享严格JSON、依赖路径解析、文件链接与DLL配置筛选原语 | R:code:tools/dependencies.json | A:load_dependencies,resolve_dependency_root,link_file,link_dir,dll_matches_config | S:成对识别Debug与Release库，避免把名称尾部d误判为调试依赖
 export_ui_enums.cpp[XV6T]: F:组合协议、界面、运行、Python环境和日志定义表并调用共享原生导出器 | R:code:src/ui/CMakeLists.txt,code:3rdparty/VisionRTContracts/tools/EnumExport.cpp | A:main,wmain | S:只编译定义表，不链接Qt或业务DLL，避免生成器与被生成模块形成构建循环；Windows入口接收宽字符路径
 link_dependencies.py[OV5M]: F:把开发依赖、Qt运行资源和工具包链接到构建bin目录 | R:code:tools/dependency_utils.py,code:tools/dependencies.json | A:link_external_dependencies,link_qt_runtime,link_tools | S:仅用于开发运行树，不等同可分发安装包
-package_app.py[OV8L]: F:生成并验证便携安装，部署工具包、Qt、运行依赖及含集中图片的示例并记录产品所有权 | R:code:tools/runtime_dependencies.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,verify_examples,example_project_problems,main | S:示例逐文件比较安装内容，并验证工程中examples/images引用；仅扫描两级分类目录的工程JSON；清理依旧产品清单保留用户文件，工具包先暂存校验，拒绝捆绑解释器
+package_app.py[OV8L]: F:生成并验证便携安装，部署工具包、Qt、运行依赖和综合示例并记录产品所有权 | R:code:tools/runtime_dependencies.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,verify_examples,example_project_problems,main | S:无编号三个.vrtapp综合工程为必装集合，校验program.json、集中图片与.zip训练包manifest.json并拒绝遗留.json和绝对路径；清理依旧产品清单保留用户文件，工具包先暂存校验，拒绝捆绑解释器
 release_evidence.py[XV7M]: F:汇总双仓提交、Contracts身份、构建及测试解释器配置、包证据与实际加载报告 | R:code:tools/package_app.py,code:src/main.cpp | A:audit,build_facts,summarize_report,main | S:缺少必要场景、Contracts不同或实际NumPy与解释器越出所选环境时不标记complete并退出2；allow-dirty只能作本地核对
 runtime_dependencies.py[XV7S]: F:读取模块清单和PE导入表，计算随包依赖闭包与CPython启动链违规 | R:code:tools/package_app.py,code:cmake/AddModule.cmake | A:load_modules,runtime_closure,read_pe_imports,python_runtime_imports | S:同时读取普通和延迟导入；仅从宿主可达的链判断启动CPython，动态加载的桥接不自动算违规
-verify_ui_notifications.cjs[TU6T]: F:从CTest环境启动CDB取证静默通知、像素读取、视口销毁和训练写入调用 | R:code:tests/ui_notifications_contract.cpp,code:tests/viewport_lifetime_contract.cpp,code:tests/workbench_training_publish_contract.cpp | A:capture | S:要求Windows及匹配PDB；像素访问含负对照，草稿和拒绝阶段训练写入为零、成功发布一次，不能只看退出码
+verify_ui_notifications.cjs[TU6T]: F:从CTest环境启动CDB取证静默通知、像素负对照、视口销毁和模型保存调用 | R:code:tests/ui_notifications_contract.cpp,code:tests/viewport_lifetime_contract.cpp,code:tests/workbench_training_publish_contract.cpp | A:capture | S:要求Windows及匹配PDB，禁用调试堆；除退出码外校验通知静默、像素负对照和实际模型保存调用次数
 visionrt_validate_tool.cpp[EE7S]: F:提供工具声明、模块索引、整包及实际原生工厂注册的命令行校验 | R:code:src/core/ToolPackage.cpp,code:src/plugins/PluginLoader.cpp | A:--package,--index,--emit-normalized-json,--load | S:load只用于package且不创建工具实例或加载模型；参数错误退出1，校验失败退出2
 
-===/<repository>/examples/03_综合示例/02_识别线缆颜色/识别线缆颜色.assets/training/3/1/===
-manifest.json[FD5T]: F:索引线缆颜色模型产物的文件、格式与版本 | R:code:src/ui/TrainingAssets.cpp | A:- | S:清单格式5不重复保存记录、标签或原图，路径相对本修订
+===/<repository>/examples/综合示例/变距尺子标定测量/===
+README.md[SA4T]: F:索引变距尺子.vrtapp工程、集中图片、标定训练资源包和测量验证 | R:code:tests/calibration_example_contract.cpp | A:- | S:参考线长55mm，标定图与模型打包在assets/calibration-model.zip；相对路径基于安装目录
 
-===/<repository>/examples/03_综合示例/02_识别线缆颜色/识别线缆颜色.assets/training/2/1/===
-manifest.json[FD5T]: F:索引线缆双直边模型产物的文件、格式与版本 | R:code:src/ui/TrainingAssets.cpp | A:- | S:清单格式5只存模型索引；训练记录与像素归工程TrainingSet参数
+===/<repository>/examples/综合示例/变距尺子标定测量/assets/===
+calplate_80mm.cpd[FA5L]: F:提供Version3六角网格标定板尺寸、极性、定位标记和物理圆心坐标 | R:code:tests/calibration_example_contract.cpp | A:- | S:坐标单位为米，27行31列亮标记，首个定位标记索引15,13
 
-===/<repository>/examples/03_综合示例/03_变距尺子标定测量/===
-README.md[SA4T]: F:索引变距尺子工程、集中图片、标定板训练和测量验证 | R:code:tests/calibration_example_contract.cpp | A:- | S:参考线长度55mm，统计节点需要含NumPy的Python环境
-calplate_80mm.cpd[FA5L]: F:提供Version3六角网格标定板的尺寸、极性、定位标记与物理圆心坐标 | R:code:tests/calibration_example_contract.cpp | A:- | S:坐标单位为米，27行31列亮标记，首个定位标记索引15,13
+===/<repository>/examples/综合示例/多分支视觉检测/===
+README.md[SA3T]: F:说明同源图像分支裁剪二值化与圆测量的操作和预期结果 | R:code:examples/综合示例/多分支视觉检测/多分支视觉检测.json | A:- | S:-
 
-===/<repository>/examples/03_综合示例/03_变距尺子标定测量/变距尺子标定测量.assets/training/2/1/===
-manifest.json[FD5T]: F:索引版本2平面标定模型的文件及格式 | R:code:src/ui/TrainingAssets.cpp | A:- | S:清单格式5只保存模型索引；原图与训练参数归工程TrainingSet
-
-===/<repository>/examples/03_综合示例/03_变距尺子标定测量/变距尺子标定测量.assets/training/2/1/models/===
-calibration-model.bin[FD5T]: F:保存真实板图训练的基准平面、division畸变与重投影质量 | R:code:tests/calibration_example_contract.cpp | A:- | S:模型版本2以毫米表示物理平面，正X向右、正Y向上；内容为类型化JSON
+===/<repository>/examples/综合示例/识别线缆颜色/===
+README.md[SA5T]: F:索引线缆对齐与五工位识色.vrtapp工程、集中图片和训练发布入口 | R:code:src/ui/AppControllerTraining.cpp,code:src/ui/qml/ParameterPanel.qml | A:- | S:训练原图与模型打包在assets的.zip资源包，工程仅保留元数据与区域；相对路径基于安装目录
 

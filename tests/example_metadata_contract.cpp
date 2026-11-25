@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         {
             if (file.depth() == 2 && file->is_directory())
                 file.disable_recursion_pending();
-            if (file.depth() != 2 || !file->is_regular_file() || file->path().extension() != ".json")
+            if (file.depth() != 2 || !file->is_regular_file() || file->path().extension() != ".vrtapp")
                 continue;
             const auto loaded = storage.load(file->path());
             for (const auto &diagnostic : loaded.diagnostics)

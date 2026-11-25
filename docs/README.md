@@ -5,7 +5,7 @@
 - [任务账本](../WORKLOG.md)：实际进度、运行证据与后续入口。
 - [工作台训练](../tests/workbench_training_contract.cpp)、[训练发布](../tests/workbench_training_publish_contract.cpp)、[点选交互](../tests/workbench_assist_contract.cpp)、[随包示例](../tests/example_pipelines.cpp)。
 - [动态节点与事务](../tests/logic_node_execution_test.cpp)、[表达式工作台](../tests/workbench_expression_contract.cpp)。
-- [工程保存与重开](../tests/project_storage_contract.cpp)、[工程文件对话框](../tests/workbench_startup.cpp)、[示例另存](../tests/example_project_contract.cpp)、[随包示例检查](../tests/example_metadata_contract.cpp)、[发行示例检查](../tests/test_package_app.py)。
+- [工程保存与重开](../tests/project_storage_contract.cpp)、[工程容器](../tests/project_archive_contract.cpp)、[工程文件对话框](../tests/workbench_startup.cpp)、[示例另存](../tests/example_project_contract.cpp)、[随包示例检查](../tests/example_metadata_contract.cpp)、[发行示例检查](../tests/test_package_app.py)。
 
 ## 契约与核心模块
 
@@ -15,14 +15,14 @@
 | 工具声明、JSON 读写及名称 | [声明接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[编解码](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[语义名称](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationNames.def) |
 | 公共枚举与 QML/Python 导出 | [枚举源](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.def)、[原生生成器](../3rdparty/VisionRTContracts/tools/EnumExport.cpp)、[宿主枚举目录](../tools/export_ui_enums.cpp)、[Qt 注册](../src/ui/UiTypes.cpp) |
 | 工具发现及工作台适配 | [工具包](../src/core/ToolPackage.cpp)、[注册表](../src/core/ToolRegistry.cpp)、[集成登记](../src/core/include/core/ToolIntegrations.h) |
-| 工程配置与持久化 | [工程模型](../src/core/include/core/Project.h)、[编辑事务](../src/core/ProjectEditor.cpp)、[存储](../src/core/ProjectStorage.cpp)、[动态契约](../src/core/NodeContracts.cpp) |
+| 工程配置与持久化 | [工程模型](../src/core/include/core/Project.h)、[编辑事务](../src/core/ProjectEditor.cpp)、[容器](../src/core/include/core/ProjectArchive.h)、[存储](../src/core/ProjectStorage.cpp)、[动态契约](../src/core/NodeContracts.cpp) |
 | 执行、快照与读回 | [运行时](../src/runtime/include/runtime/RuntimeEngine.h)、[快照](../src/runtime/include/runtime/Snapshot.h)、[结果展示](../src/ui/ResultPresentation.h) |
 | 原生与 Python 工具 | [插件加载](../src/plugins/PluginLoader.cpp)、[环境状态](../src/python/include/python/PythonEnvironment.h)、[探测](../src/python/PythonProbe.cpp)、[后端](../src/python/PythonBackend.cpp)、[值桥](../src/python_bridge/PythonInterop.cpp) |
-| 训练草稿与发布 | [实例接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[统一参数声明](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[会话](../src/ui/include/ui/TrainingSession.h)、[资产所有权](../src/ui/include/ui/TrainingAssets.h)、[工作台接线](../src/ui/AppControllerTraining.cpp) |
+| 训练草稿与发布 | [实例接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[训练资源包](../3rdparty/VisionRTContracts/include/visionrt/contracts/TrainingArchive.h)、[统一参数声明](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[会话](../src/ui/include/ui/TrainingSession.h)、[默认路径分配](../src/ui/include/ui/TrainingAssets.h)、[工作台接线](../src/ui/AppControllerTraining.cpp) |
 | 可复用参数页与阶段编辑 | [公共页](../src/ui/qml/ParameterPage.qml)、[初始化页](../src/ui/qml/InitializationParameterPage.qml)、[训练页](../src/ui/qml/TrainingParameterPage.qml)、[普通输入页](../src/ui/qml/InputParameterPage.qml)、[实际控制器验证](../tests/workbench_parameter_stages_contract.cpp) |
 | 具体形状参数 | [类型映射](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeKinds.def)、[类型化批次](../3rdparty/VisionRTContracts/include/visionrt/contracts/ShapeValues.h)、[形状和连接验证](../3rdparty/VisionRTContracts/tests/test_geometry_values_contract.cpp)、[实际窗口编辑与连接限制](../tests/workbench_roi.cpp) |
 | 方向与二维坐标系 | [共享值](../3rdparty/VisionRTContracts/include/visionrt/contracts/GeometryValues.h)、[叠加绘制](../src/ui/RoiOverlay.cpp)、[缩放平移验证](../tests/geometry_overlay_contract.cpp) |
-| 平面标定与测量示例 | [示例入口](../examples/03_综合示例/03_变距尺子标定测量/README.md)、[原生训练与完整流程验证](../tests/calibration_example_contract.cpp)、[集中图片](../examples/images/) |
+| 平面标定与测量示例 | [示例入口](../examples/综合示例/变距尺子标定测量/README.md)、[原生训练与完整流程验证](../tests/calibration_example_contract.cpp)、[集中图片](../examples/images/) |
 | 日志与诊断 | [日志服务](../src/log/include/log/LogService.h)、[宿主错误](../src/core/include/core/Errors.def)、[诊断投影](../src/ui/Diagnostics.cpp) |
 
 ## 工作台

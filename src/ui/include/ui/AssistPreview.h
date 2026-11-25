@@ -57,7 +57,6 @@ struct AssistOutcome
     QString       quality;
     ROI           preview;  // current image coordinates, preview only
     ROI           proposal; // reference coordinates, ready for a literal commit
-    std::map<std::string, ModelArtifact> artifacts;
     Values        outputs;  // helper outputs, used for the mapped suggestions
 };
 

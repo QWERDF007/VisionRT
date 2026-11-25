@@ -21,7 +21,9 @@ PortValue copyProjectLiteral(const PortValue &value)
             else if constexpr (std::is_same_v<Payload, DataRef<TrainingSet>>)
             {
                 auto set = payload.get();
-                for (auto &[id, image] : set.images) image.pixels = image.pixels.clone();
+                for (auto &[id, image] : set.images)
+                    if (!image.pixels.empty())
+                        image.pixels = image.pixels.clone();
                 for (auto &[id, record] : set.records)
                     for (auto &[field, value] : record.fields) value = copyProjectLiteral(value);
                 return DataRef<TrainingSet>(std::move(set));

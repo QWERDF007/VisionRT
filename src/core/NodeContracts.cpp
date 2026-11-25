@@ -3,6 +3,7 @@
 #include "core/Sequence.h"
 #include "core/ToolPaths.h"
 #include "visionrt/contracts/ProtocolEnums.h"
+#include "visionrt/contracts/TrainingArchive.h"
 
 #include <algorithm>
 #include <functional>
@@ -110,9 +111,7 @@ void resolveOutputTypes(ProjectDefinition &project)
         const bool   sourcePortOk = sourcePort != 0;
         std::optional<TypeSpec> type;
         if (flowId.empty() || nodeSeq.empty() || !sourcePortOk)
-            fail(node.retiredInitParams.isEmpty()
-                     ? "需要选择源流程、源节点和输出端口"
-                     : "初始化参数定义已变更，原参数已保留；请重新选择源流程、源节点和输出端口");
+            fail("需要选择源流程、源节点和输出端口");
         else
         {
             try
@@ -324,7 +323,7 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
 }
 
 std::map<std::string, std::filesystem::path> nodeModelReferences(
-    const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &base)
+    const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &resourceRoot)
 {
     std::map<std::string, std::filesystem::path> result;
     if (!definition.training) return result;
@@ -332,11 +331,94 @@ std::map<std::string, std::filesystem::path> nodeModelReferences(
     {
         const auto parameter = node.trainParams.find(artifact.target.id);
         if (parameter == node.trainParams.end()) continue;
-        const auto &text = std::get<std::string>(parameter->second);
-        if (text.empty()) continue;
-        const auto file = pathFromUtf8(text);
-        result.emplace(artifact.id, file.is_absolute() ? file : base / file);
+        const auto *text = std::get_if<std::string>(&parameter->second);
+        if (!text || text->empty()) continue;
+        const auto file = pathFromUtf8(*text);
+        result.emplace(artifact.id, (file.is_absolute() ? file : resourceRoot / file).lexically_normal());
     }
     return result;
+}
+
+Values hydrateNodeTrainingSets(const NodeDefinition &node, const ToolDefinition &definition,
+                               const std::filesystem::path &resourceRoot, std::string *error)
+{
+    Values hydrated;
+    for (const auto &[id, value] : node.trainParams)
+        hydrated.emplace(id, copyProjectLiteral(value));
+    if (!definition.training || definition.training->datasets.empty())
+        return hydrated;
+
+    auto appendError = [&](const std::string &message)
+    {
+        if (!error || message.empty())
+            return;
+        if (!error->empty())
+            *error += "；";
+        *error += message;
+    };
+
+    const auto models = nodeModelReferences(node, definition, resourceRoot);
+    std::map<std::filesystem::path, std::vector<TrainingArchiveImage>> cache;
+    std::set<std::filesystem::path>                                            failedArchives;
+
+    for (const auto &datasetSpec : definition.training->datasets)
+    {
+        const auto paramIt = hydrated.find(datasetSpec.parameter);
+        if (paramIt == hydrated.end())
+            continue;
+        const auto *existing = std::get_if<DataRef<TrainingSet>>(&paramIt->second);
+        if (!existing)
+            continue;
+        const auto &srcSet = existing->get();
+        bool        needsPixels = false;
+        for (const auto &[imgId, img] : srcSet.images)
+            if (img.pixels.empty())
+            {
+                needsPixels = true;
+                break;
+            }
+        if (!needsPixels)
+            continue;
+
+        TrainingSet updated = srcSet;
+        for (auto &[imgId, img] : updated.images)
+            if (!img.pixels.empty())
+                img.pixels = img.pixels.clone();
+
+        bool loadedFromArchive = false;
+        for (const auto &[artifactId, archivePath] : models)
+        {
+            if (failedArchives.contains(archivePath))
+                continue;
+            if (!cache.contains(archivePath))
+            {
+                try
+                {
+                    cache.emplace(archivePath, TrainingArchive::readImages(archivePath));
+                }
+                catch (const std::exception &ex)
+                {
+                    failedArchives.insert(archivePath);
+                    appendError("无法从训练资源包加载原图（" + artifactId + "）：" + ex.what());
+                    continue;
+                }
+            }
+            for (const auto &stored : cache.at(archivePath))
+            {
+                if (stored.datasetPort != datasetSpec.parameter)
+                    continue;
+                if (const auto target = updated.images.find(stored.imageId); target != updated.images.end())
+                {
+                    target->second.pixels     = stored.pixels.clone();
+                    target->second.colorOrder = stored.colorOrder;
+                    loadedFromArchive         = true;
+                }
+            }
+        }
+        if (!loadedFromArchive && models.empty())
+            appendError("节点尚未配置训练资源包路径，无法还原训练原图");
+        paramIt->second = DataRef<TrainingSet>(std::move(updated));
+    }
+    return hydrated;
 }
 } // namespace visionrt

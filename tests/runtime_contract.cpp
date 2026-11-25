@@ -1121,7 +1121,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         QTemporaryDir temporary;
         assert(temporary.isValid());
         auto project = editor.project();
-        const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.json");
+        const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.vrtapp");
         storage.save(project, file);
         const auto loaded = storage.load(file);
         for (const auto &d : loaded.diagnostics) std::cerr << "DIAG " << d.message << "\n";
@@ -1690,6 +1690,40 @@ void activityEventsFollowExecution()
         assert(events[index].sequence > events[index - 1].sequence);
 }
 
+void missingPluginBlocksEntireFlow()
+{
+    ToolRegistry registry;
+    auto         good = definition("test.good_node");
+    install(registry, good, [](const Values &) { return toolResult({{2, std::int64_t{42}}}, {}); });
+
+    auto validNode = node(1, good);
+    NodeDefinition missingNode;
+    missingNode.id                  = 2;
+    missingNode.toolId              = "missing.plugin.tool";
+    missingNode.toolNameSnapshot    = "缺失工具";
+    missingNode.toolVersionSnapshot = "1.0.0";
+    missingNode.position            = {0, 1};
+
+    ProjectDefinition project;
+    project.flows.front().nodes = {validNode, missingNode};
+
+    RuntimeEngine engine(2);
+    // Entire flow is blocked in Once, Loop, and even single-node execution on a different valid node.
+    const auto onceBlocked = engine.start(project, registry, RunMode::Once);
+    assert(!onceBlocked && onceBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
+    const auto loopBlocked = engine.start(project, registry, RunMode::Loop);
+    assert(!loopBlocked && loopBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
+    const auto singleBlocked = engine.start(project, registry, RunMode::Node, 1);
+    assert(!singleBlocked && singleBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
+
+    // Deleting the missing-plugin node restores execution.
+    project.flows.front().nodes.pop_back();
+    assert(engine.start(project, registry, RunMode::Once));
+    const auto result = finish(engine);
+    assert(snapshot(result, 1) && snapshot(result, 1)->status.code == 0
+           && std::get<std::int64_t>(snapshot(result, 1)->outputs.at(2)) == 42);
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -1716,6 +1750,7 @@ try
     std::cout << "20\n"; businessNegativeIsNotCancellation();
     std::cout << "21\n"; authorContractErrorPassesThroughBusinessBoundary();
     std::cout << "22\n"; activityEventsFollowExecution();
+    std::cout << "23\n"; missingPluginBlocksEntireFlow();
     std::cout << "runtime contracts passed\n";
     return 0;
 }

@@ -5,7 +5,6 @@
 #include "ui/ValueDisplay.h"
 
 #include <QBuffer>
-#include <QJsonArray>
 #include <algorithm>
 
 namespace visionrt {
@@ -34,12 +33,12 @@ QVariant trainingFieldVariant(const PortValue &value)
 
 void TrainingSession::begin(Begin start)
 {
-    if (active_ && start_.node == start.node && start_.spec == start.spec && start_.asset == start.asset) return;
     end();
     start_ = std::move(start);
     active_ = true;
     for (const auto &p : start_.trainParams) parameters_[p.id] = copyProjectLiteral(p.defaultValue);
     for (const auto &[id, value] : start_.parameters) parameters_[id] = copyProjectLiteral(value);
+    start_.parameters = parameters_;
     for (const auto &spec : start_.spec.datasets)
     {
         datasets_.emplace(spec.parameter, Dataset{});
@@ -60,17 +59,18 @@ void TrainingSession::end()
     dataset_.reset();
 }
 
-void TrainingSession::adoptAsset(std::filesystem::path asset)
+void TrainingSession::accept()
 {
-    start_.asset = std::move(asset);
+    start_.parameters = parameters();
     dirty_ = false;
     error_.clear();
 }
 
-void TrainingSession::setAsset(std::filesystem::path asset)
+void TrainingSession::synchronizeParameter(PortId id, const PortValue &value)
 {
-    if (asset == start_.asset) return;
-    start_.asset = std::move(asset);
+    if (equalValues(*parameter(id), start_.parameters.at(id)))
+        parameters_[id] = copyProjectLiteral(value);
+    start_.parameters[id] = copyProjectLiteral(value);
 }
 
 TrainingSession::Dataset *TrainingSession::data()
@@ -262,7 +262,9 @@ TrainingSession::Dataset TrainingSession::draft(const TrainingSet &value)
     Dataset d;
     for (const auto &[id, image] : value.images)
     {
-        d.images.push_back({id, {}, image.pixels.clone(), image.colorOrder, thumbnailOf(image.pixels, image.colorOrder)});
+        const bool hasPixels = !image.pixels.empty();
+        d.images.push_back({id, {}, hasPixels ? image.pixels.clone() : cv::Mat{}, image.colorOrder,
+                            hasPixels ? thumbnailOf(image.pixels, image.colorOrder) : QString{}});
         d.nextImage = std::max(d.nextImage, id + 1);
     }
     for (const auto &[id, record] : value.records)
@@ -334,13 +336,4 @@ bool TrainingSession::validate()
     if (error_.isEmpty()) error_ = QStringLiteral("训练参数不满足声明约束");
     return false;
 }
-QJsonObject TrainingSession::manifest(const std::map<std::string, QString> &artifacts) const
-{
-    QJsonArray files;
-    for (const auto &a : start_.spec.artifacts)
-        files.append(QJsonObject{{"id", QString::fromStdString(a.id)}, {"format", QString::fromStdString(a.format)},
-                                 {"version", a.version}, {"file", artifacts.at(a.id)}});
-    return {{"schema_version", kTrainingManifestVersion}, {"artifacts", files}};
-}
-
 } // namespace visionrt

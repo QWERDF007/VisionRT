@@ -135,7 +135,6 @@ int main(int argc, char **argv)
         begin.node  = 1;
         begin.spec  = *color.training;
         begin.trainParams = color.trainParams;
-        begin.asset = std::filesystem::path(installation.path().toStdU16String()) / "colors.json";
         session.begin(begin);
         fillDraft(session);
 
@@ -152,22 +151,18 @@ int main(int argc, char **argv)
             require(trainerTool->release().code == 0, "the trainer must release after a refusal");
         }
 
-        // The trainer reads the draft the host would hand it and answers with the model the node
-        // loads. Both field numbers travel as declared values, never as assumptions about order.
-        auto   trainerTool = createTrainer(registry);
-        const auto trained = trainerTool->train(session.parameters());
+        // The trainer reads the draft the host would hand it and writes the training resource ZIP
+        // directly to the configured model path.
+        const auto modelFile = packaged.root / "trained-color.zip";
+        const auto modelUtf8 = modelFile.generic_u8string();
+        require(session.setParameter(3, std::string(reinterpret_cast<const char *>(modelUtf8.data()), modelUtf8.size())),
+                "model archive path can be configured");
+        auto       trainerTool = createTrainer(registry);
+        const auto trained     = trainerTool->train(session.parameters());
         require(testview::status(trained).code == 0,
                 "the real trainer refused the draft: " + testview::status(trained).message);
         require(trainerTool->release().code == 0, "the trainer must release after training");
-
-        const auto &model = trained.artifacts.at("color-model").bytes;
-        const auto modelFile = packaged.root / "trained-color.bin";
-        QFile      file(QString::fromStdWString(modelFile.wstring()));
-        require(file.open(QIODevice::WriteOnly), "model file must be writable");
-        require(file.write(reinterpret_cast<const char *>(model.data()), static_cast<qint64>(model.size()))
-                    == static_cast<qint64>(model.size()),
-                "model bytes must be written completely");
-        file.close();
+        require(std::filesystem::is_regular_file(modelFile), "trainer wrote training resource ZIP");
         auto consumer = registry.create(color);
         require(consumer != nullptr, "color consumer is available");
         require(consumer->initialize(ToolConfiguration{{}, {{"color-model", modelFile}}})

@@ -8,6 +8,7 @@
 #include "ui/ToolTreeModel.h"
 #include "ui/LogHighlighter.h"
 #include "runtime/Snapshot.h"
+#include "core/ProjectArchive.h"
 #include "core/ValueJson.h"
 
 #include <QFile>
@@ -250,7 +251,7 @@ void pendingContract()
     app.resolveUnsaved(visionrt::UnsavedDecision::Cancel);
     require(closes == 0 && app.dirty(), "cancel changes project or closes");
     app.requestClose();
-    app.resolveUnsaved(visionrt::UnsavedDecision::Save, directory.path() + "/absent/project.json");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Save, directory.path() + "/absent/project.vrtapp");
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
@@ -269,7 +270,7 @@ void pendingContract()
         saveApp.addFlow(QStringLiteral("流程2"));
         saveApp.requestClose();
         require(saveApp.dirty(), "edited project should be dirty");
-        const QString validSavePath = saveDir.path() + "/saved_on_close.json";
+        const QString validSavePath = saveDir.path() + "/saved_on_close.vrtapp";
         saveApp.resolveUnsaved(visionrt::UnsavedDecision::Save, validSavePath);
         require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
         require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
@@ -534,108 +535,56 @@ void nodeDiagnosticsContract()
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    QFile projectFile(directory.path() + "/initial.json");
-    if (projectFile.open(QIODevice::WriteOnly))
-    {
-        projectFile.write(
-            R"json({
-  "format_version": 8,
+    const QString initialPath = directory.path() + "/initial.vrtapp";
+    ProjectArchive::writeProgramJson(
+        std::filesystem::path(initialPath.toStdWString()),
+        R"json({
+  "format_version": 9,
   "project": {
     "name": "诊断工程",
+    "notes": "",
+    "app_version": "0.2.0",
+    "contracts_version": "0.1.0",
     "next_node_seq": "4",
     "next_flow_seq": "2"
   },
   "flows": [
     {
-      "flow_id": "flow_1",
+      "id": "flow_1",
       "name": "流程1",
       "run_selected": true,
       "nodes": [
         {
-          "node_seq": "1",
-          "tool_id": "test.diag.python",
-          "tool_name_snapshot": "诊断测试",
+          "id": "1",
+          "tool": { "id": "test.diag.python", "name": "诊断测试", "version": "1.0.0" },
           "alias": "",
-          "pos": [
-            100,
-            100
-          ],
-          "init_params": [],
-          "type_snapshot": {
-            "init_params": [],
+          "params": {
             "inputs": [
-              {
-                "port_id": 1,
-                "type": {
-                  "type": 0
-                }
-              }
-            ],
-            "outputs": [
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 0
-                }
-              }
+              { "port": 1, "type": "int", "value": 1 }
             ]
-          },
-          "inputs": [
-            {
-              "port_id": 1,
-              "mode": 0,
-              "literal": 1
-            }
-          ]
+          }
         },
         {
-          "node_seq": "2",
-          "tool_id": "test.diag.unfulfilled",
-          "tool_name_snapshot": "未提供实现测试",
-          "alias": "",
-          "pos": [
-            200,
-            200
-          ],
-          "init_params": [],
-          "type_snapshot": {
-            "init_params": [],
-            "inputs": [],
-            "outputs": []
-          },
-          "inputs": []
+          "id": "2",
+          "tool": { "id": "test.diag.unfulfilled", "name": "未提供实现测试", "version": "1.0.0" },
+          "alias": ""
         },
         {
-          "node_seq": "3",
-          "tool_id": "test.diag.fail",
-          "tool_name_snapshot": "诊断失败",
-          "alias": "",
-          "pos": [
-            300,
-            200
-          ],
-          "init_params": [],
-          "type_snapshot": {
-            "init_params": [],
-            "inputs": [],
-            "outputs": [
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 0
-                }
-              }
-            ]
-          },
-          "inputs": []
+          "id": "3",
+          "tool": { "id": "test.diag.fail", "name": "诊断失败", "version": "1.0.0" },
+          "alias": ""
         }
-      ]
+      ],
+      "layout": [
+        { "node": "1", "col": 100, "row": 100 },
+        { "node": "2", "col": 200, "row": 200 },
+        { "node": "3", "col": 300, "row": 200 }
+      ],
+      "connections": []
     }
   ]
 })json");
-        projectFile.close();
-    }
-    app.requestOpen(directory.path() + "/initial.json");
+    app.requestOpen(initialPath);
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 3; }, 5000),
             "project with unfulfilled tool did not open");
@@ -1050,7 +999,7 @@ void packageDrivenCatalogAndRefreshContract()
         indexFile.close();
     }
 
-    const QString projectFile = dirPath + "/test_project.json";
+    const QString projectFile = dirPath + "/test_project.vrtapp";
     {
         AppController app(1, dirPath);
         for (int i = 0; i < 50 && app.busy(); ++i)

@@ -146,10 +146,10 @@ public:
     // One transaction for a proposal that touches several values (ROI plus recommended parameters,
     // or an initialization parameter and the input it initializes). Every target is validated before
     // anything is written, inputs currently fed from upstream are refused instead of being silently
-    // disconnected, and the whole proposal raises exactly one node execution revision. A training
-    // publication also names the revision the node will read from that point on.
+    // disconnected, and the whole proposal raises exactly one node execution revision. The optional
+    // preparation saves associated files after validation and before committing the configuration.
     bool setLiteralWrites(std::string_view flowId, NodeId node, std::span<const LiteralWrite> writes,
-                          std::function<std::filesystem::path()> prepareTrainingAsset = {});
+                          std::function<void()> prepare = {});
     bool setInitParam(std::string_view flowId, NodeId node, PortId parameter, PortValue value);
     // Raises the node's execution revision without touching its configuration. Used when an
     // external asset the node reads (trained data) changed and the tool must initialize again.

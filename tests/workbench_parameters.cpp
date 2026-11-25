@@ -317,7 +317,7 @@ void parameterEditorsContract()
             pathSaved = row.value("valueText").toString() == path;
     }
     require(pathSaved, "text parameter did not preserve Unicode, whitespace and quotes");
-    const auto project = directory.path() + "/parameters.json";
+    const auto project = directory.path() + "/parameters.vrtapp";
     app.save(project);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(!app.dirty(), "parameter save failed");

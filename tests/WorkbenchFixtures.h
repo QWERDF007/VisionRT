@@ -1,8 +1,9 @@
 #pragma once
 
-#include <QTemporaryDir>
-#include <QFile>
+#include "ProjectFixtures.h"
+
 #include <QString>
+#include <QTemporaryDir>
 #include <filesystem>
 #include <stdexcept>
 
@@ -26,7 +27,7 @@ inline void copyToolsPackage(const std::filesystem::path &source, const std::fil
 }
 
 inline QString copyExample(const std::filesystem::path &source, const QString &installation,
-                             const std::filesystem::path &sample, const std::filesystem::path &projectFile)
+                           const std::filesystem::path &sample, const std::filesystem::path &projectFile)
 {
     const auto root = std::filesystem::path(installation.toStdWString());
     std::filesystem::create_directories((root / sample).parent_path());
@@ -35,21 +36,19 @@ inline QString copyExample(const std::filesystem::path &source, const QString &i
     std::filesystem::create_directories((root / images).parent_path());
     std::filesystem::copy(source / images, root / images, std::filesystem::copy_options::recursive);
     const auto fileName = root / sample / projectFile;
-    QFile file(QString::fromStdWString(fileName.wstring()));
-    if (!file.open(QIODevice::ReadOnly)) throw std::runtime_error("example could not be read");
-    auto content = file.readAll();
-    file.close();
+    auto       content  = ProjectArchive::readProgramJson(fileName);
     const auto relativeImages = QString::fromStdWString(images.generic_wstring()).toUtf8();
     content.replace(relativeImages, installation.toUtf8() + '/' + relativeImages);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(content) != content.size())
-        throw std::runtime_error("example could not be relocated");
-    return file.fileName();
+    const auto relativeSample = QString::fromStdWString(sample.generic_wstring()).toUtf8();
+    content.replace(relativeSample, installation.toUtf8() + '/' + relativeSample);
+    ProjectArchive::writeProgramJson(fileName, content);
+    return QString::fromStdWString(fileName.generic_wstring());
 }
 
 inline QString copyCableExample(const std::filesystem::path &source, const QString &installation)
 {
-    return copyExample(source, installation, std::filesystem::path(u8"examples/03_综合示例/02_识别线缆颜色"),
-                       std::filesystem::path(u8"识别线缆颜色.json"));
+    return copyExample(source, installation, std::filesystem::path(u8"examples/综合示例/识别线缆颜色"),
+                       std::filesystem::path(u8"识别线缆颜色.vrtapp"));
 }
 
 class WorkbenchInstallation
@@ -72,4 +71,4 @@ private:
     QTemporaryDir directory_;
 };
 
-}
+} // namespace visionrt::testing

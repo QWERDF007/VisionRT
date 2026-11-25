@@ -98,6 +98,7 @@ struct InstanceConfiguration
     ToolAvailability      availability;
     Values                parameters;
     std::map<std::string, std::filesystem::path> models;
+    std::uint64_t         initializationRevision = 0;
     TypeMap               outputs;
 };
 

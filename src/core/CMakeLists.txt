@@ -12,6 +12,7 @@ visionrt_add_module(core SOURCES
     ToolRegistry.cpp
     ProjectEditor.cpp
     ProjectValues.cpp
+    ProjectArchive.cpp
     ProjectStorage.cpp
     ExampleProject.cpp
     CustomToolStore.cpp

@@ -27,7 +27,7 @@ ApplicationWindow {
     property real leftRatio: 0.362
     property real libraryRatio: 0.38
     property real resultsRatio: 0.59
-    readonly property list<string> projectNameFilters: ["VisionRT 工程 (*.json)"]
+    readonly property list<string> projectNameFilters: ["VisionRT 工程 (*.vrtapp)"]
 
     function localPath(url) {
         let text = decodeURIComponent(url.toString());
@@ -559,7 +559,7 @@ ApplicationWindow {
         title: "保存工程"
         fileMode: FileDialog.SaveFile
         nameFilters: window.projectNameFilters
-        defaultSuffix: "json"
+        defaultSuffix: "vrtapp"
         onAccepted: {
             if (window.unsavedSaving)
                 app.resolveUnsaved(UnsavedDecision.Save, window.localPath(selectedFile));

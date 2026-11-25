@@ -8,6 +8,7 @@
 #include "core/ToolRegistry.h"
 #include "runtime/Snapshot.h"
 
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
@@ -90,11 +91,13 @@ struct RuntimeUpdate
 class VISIONRT_RUNTIME_API RuntimeEngine
 {
 public:
-    explicit RuntimeEngine(std::size_t workers = 0);
+    explicit RuntimeEngine(std::size_t workers = 0, std::filesystem::path resourceRoot = {});
     ~RuntimeEngine();
     RuntimeEngine(const RuntimeEngine &)            = delete;
     RuntimeEngine &operator=(const RuntimeEngine &) = delete;
     std::size_t    workers() const noexcept;
+    const std::filesystem::path &resourceRoot() const noexcept;
+    void           setResourceRoot(std::filesystem::path root);
     RuntimeState   state() const;
     // Every rejection names one catalog code: a caller can tell "busy" from "target missing" from
     // "this state does not allow it" without reading the message.

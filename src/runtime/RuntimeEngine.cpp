@@ -1,5 +1,6 @@
 #include "core/ProjectEditor.h"
 #include "core/NodeContracts.h"
+#include "core/ToolPaths.h"
 #include "core/ToolValueValidation.h"
 #include "RuntimeInternal.h"
 
@@ -11,11 +12,42 @@
 #include <limits>
 #include <set>
 #include <thread>
+#ifdef _WIN32
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#    endif
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <windows.h>
+#endif
 
 namespace visionrt {
 namespace {
 using namespace runtime_detail;
 using Clock = std::chrono::steady_clock;
+
+std::filesystem::path defaultResourceRoot()
+{
+    if (QCoreApplication::instance() != nullptr)
+        return softwareDataDir();
+#ifdef _WIN32
+    std::wstring buffer(MAX_PATH, L'\0');
+    for (;;)
+    {
+        const auto written = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (written == 0)
+            break;
+        if (written < buffer.size())
+        {
+            buffer.resize(written);
+            return std::filesystem::path(buffer).parent_path().lexically_normal();
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+#endif
+    return std::filesystem::current_path().lexically_normal();
+}
 
 struct CompiledFlow
 {
@@ -183,8 +215,10 @@ struct RuntimeEngine::Impl
         Synchronize
     };
 
-    explicit Impl(std::size_t requested)
-        : executor(requested ? requested : std::max(2u, std::thread::hardware_concurrency()))
+    explicit Impl(std::size_t requested, std::filesystem::path requestedRoot)
+        : resourceRoot(requestedRoot.empty() ? defaultResourceRoot()
+                                             : std::filesystem::absolute(std::move(requestedRoot)).lexically_normal())
+        , executor(requested ? requested : std::max(2u, std::thread::hardware_concurrency()))
         , budget(std::make_shared<WaitBudget>(executor.num_workers()))
         , coordinator([this] { coordinate(); })
     {
@@ -210,6 +244,7 @@ struct RuntimeEngine::Impl
         executor.wait_for_all();
     }
 
+    std::filesystem::path                                             resourceRoot;
     tf::Executor                                                      executor;
     std::shared_ptr<WaitBudget>                                       budget;
     std::mutex                                                        control;
@@ -336,10 +371,15 @@ struct RuntimeEngine::Impl
                           return std::any_of(item.second->nodes.begin(), item.second->nodes.end(),
                                              [&](NodeId id) { return !definitions.contains(id); });
                       });
+        std::filesystem::path root;
+        {
+            std::lock_guard lock(control);
+            root = resourceRoot;
+        }
         for (auto &runtime : removed)
             runtime->release();
         for (const auto &[runtime, node] : configured)
-            runtime->configure(*node, registry, InstanceConfiguration(*node, registry, project.path.parent_path()),
+            runtime->configure(*node, registry, InstanceConfiguration(*node, registry, root),
                                retry.contains(node->id));
     }
 
@@ -651,8 +691,8 @@ struct RuntimeEngine::Impl
     }
 };
 
-RuntimeEngine::RuntimeEngine(std::size_t workers)
-    : impl_(std::make_unique<Impl>(workers))
+RuntimeEngine::RuntimeEngine(std::size_t workers, std::filesystem::path resourceRoot)
+    : impl_(std::make_unique<Impl>(workers, std::move(resourceRoot)))
 {
 }
 
@@ -661,6 +701,18 @@ RuntimeEngine::~RuntimeEngine() = default;
 std::size_t RuntimeEngine::workers() const noexcept
 {
     return impl_->executor.num_workers();
+}
+
+const std::filesystem::path &RuntimeEngine::resourceRoot() const noexcept
+{
+    return impl_->resourceRoot;
+}
+
+void RuntimeEngine::setResourceRoot(std::filesystem::path root)
+{
+    std::lock_guard lock(impl_->control);
+    impl_->resourceRoot = root.empty() ? defaultResourceRoot()
+                                       : std::filesystem::absolute(std::move(root)).lexically_normal();
 }
 
 RuntimeState RuntimeEngine::state() const
@@ -715,11 +767,15 @@ ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegis
             nonempty = nonempty || !flow.nodes.empty();
             for (const auto &node : flow.nodes)
             {
+                if (!frozen->registry.find(node.toolId))
+                    throw ContractError("流程包含缺失插件节点 " + node.title() + "（" + node.toolId
+                                        + "），请删除对应节点后再执行");
+            }
+            for (const auto &node : flow.nodes)
+            {
                 if (mode == RunMode::Node && node.id != *target)
                     continue;
                 const auto *definition = frozen->registry.find(node.toolId);
-                if (!definition)
-                    throw ContractError("执行节点的工具定义缺失：" + node.toolId);
                 frozen->contracts.emplace(node.id, nodeContract(node, *definition));
             }
             if (mode != RunMode::Node && hasDependencyCycle(flow))
@@ -869,7 +925,7 @@ ErrorInfo RuntimeEngine::requestSynchronize(const ProjectDefinition &project, co
                 const auto found = impl_->nodes.find(node.id);
                 if (found == impl_->nodes.end() || !found->second->configuration
                     || *found->second->configuration
-                           != InstanceConfiguration(node, registry, project.path.parent_path()))
+                           != InstanceConfiguration(node, registry, impl_->resourceRoot))
                     changed = true;
             }
         }

@@ -132,7 +132,7 @@ def train(parameters):
     global direction
     direction = parameters[0]
     assert len(parameters[1]["records"]) == 0
-    return {"outputs":{0:0, 1:"", 2:1, 3:direction}, "detail":"", "artifacts":{"model":b"calibration"}}
+    return {"outputs":{0:0, 1:"", 2:1, 3:direction}, "detail":""}
 execute.initialize = initialize
 execute.train = train
 )");
@@ -147,7 +147,6 @@ execute.train = train
     const auto direction = Direction::fromNested({{{10, 20, 30, 90}}});
     const auto trained = tool->train({{0, direction}, {1, DataRef<TrainingSet>(TrainingSet{})}});
     assert(testview::status(trained) && std::get<Direction>(trained.outputs.at(3)) == direction);
-    assert(std::string(trained.artifacts.at("model").bytes.begin(), trained.artifacts.at("model").bytes.end()) == "calibration");
     assert(tool->initialize({{0, DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(5))})}}));
     assert(testview::status(tool->execute({})));
 }

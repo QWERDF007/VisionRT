@@ -116,16 +116,12 @@ PROTECTED_INSTALL_FILES = frozenset({"ui-preferences.json"})
 # The example projects are product assets next to the executable, not test data.
 EXAMPLES_DIRECTORY = "examples"
 
-# The first batch is the product promise: these six projects ship with every installation and run
-# without prerequisites. Packaging compares source and installation byte for byte, which cannot
-# notice a project that is missing from both sides, so the shipped set is stated here once.
+# Packaging compares source and installation byte for byte. The required set also catches a
+# project missing from both sides.
 REQUIRED_EXAMPLE_PROJECTS = (
-    "01_基础入门/01_图像读取/图像读取.json",
-    "02_工具示例/01_ROI定位与裁剪/ROI定位与裁剪.json",
-    "02_工具示例/02_图像预处理/图像预处理.json",
-    "02_工具示例/03_圆测量/圆测量.json",
-    "02_工具示例/04_行间距测量/行间距测量.json",
-    "03_综合示例/01_多分支视觉检测/多分支视觉检测.json",
+    "综合示例/多分支视觉检测/多分支视觉检测.vrtapp",
+    "综合示例/识别线缆颜色/识别线缆颜色.vrtapp",
+    "综合示例/变距尺子标定测量/变距尺子标定测量.vrtapp",
 )
 
 # A developer machine path in a shipped project is a broken example on every other machine.
@@ -557,15 +553,30 @@ def example_texts(value: object) -> Iterator[str]:
             yield from example_texts(item)
 
 
+def read_example_project_json(project: Path) -> dict:
+    """Read program.json from a .vrtapp ZIP container."""
+    import zipfile
+
+    with zipfile.ZipFile(project, "r") as zf:
+        if "program.json" not in zf.namelist():
+            raise ValueError("archive is missing program.json")
+        return json.loads(zf.read("program.json").decode("utf-8"))
+
+
 def example_project_problems(source: Path) -> list[str]:
-    """Each shipped project's resources use relative paths."""
+    """Each shipped .vrtapp project's resources use relative paths."""
+    import zipfile
+
     problems = []
-    for project in sorted(source.glob("*/*/*.json")):
+    for legacy in sorted(source.glob("*/*/*.json")):
+        relative = legacy.relative_to(source).as_posix()
+        problems.append(f"legacy JSON example project must be migrated to .vrtapp: {relative}")
+    for project in sorted(source.glob("*/*/*.vrtapp")):
         relative = project.relative_to(source).as_posix()
         try:
-            document = json.loads(project.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            problems.append(f"example project is not readable JSON: {relative}: {error}")
+            document = read_example_project_json(project)
+        except (OSError, ValueError, zipfile.BadZipFile) as error:
+            problems.append(f"example project is not a readable .vrtapp archive: {relative}: {error}")
             continue
         for text in example_texts(document):
             if ABSOLUTE_PATH_LITERAL.match(text):
@@ -574,7 +585,9 @@ def example_project_problems(source: Path) -> list[str]:
 
 
 def verify_examples(install_dir: Path) -> list[str]:
-    """Every shipped file and every required project's shared image reference must be present."""
+    """Every shipped file and every required project's shared image and archive references must be present."""
+    import zipfile
+
     source = REPO_ROOT / EXAMPLES_DIRECTORY
     installed = install_dir / EXAMPLES_DIRECTORY
     if not installed.is_dir():
@@ -595,10 +608,26 @@ def verify_examples(install_dir: Path) -> list[str]:
         if not project.is_file():
             problems.append(f"required example project missing: {relative}")
             continue
-        document = json.loads(project.read_text(encoding="utf-8"))
-        images = [install_dir / text for text in example_texts(document) if text.startswith("examples/images/")]
+        try:
+            document = read_example_project_json(project)
+        except (OSError, ValueError, zipfile.BadZipFile) as error:
+            problems.append(f"required example project is not a readable .vrtapp archive: {relative}: {error}")
+            continue
+        texts = list(example_texts(document))
+        images = [install_dir / text for text in texts if text.startswith("examples/images/")]
         if not images or not all(path.exists() for path in images):
             problems.append(f"required example has no input images: {relative}")
+        archives = [install_dir / text for text in texts if text.startswith("examples/") and text.endswith(".zip")]
+        for archive in archives:
+            if not archive.is_file():
+                problems.append(f"required example training archive missing: {archive.relative_to(install_dir).as_posix()}")
+            else:
+                try:
+                    with zipfile.ZipFile(archive, "r") as zf:
+                        if "manifest.json" not in zf.namelist():
+                            problems.append(f"training archive missing manifest.json: {archive.name}")
+                except (OSError, zipfile.BadZipFile) as error:
+                    problems.append(f"training archive is unreadable: {archive.name}: {error}")
         if not (project.parent / "README.md").is_file():
             problems.append(f"required example has no README: {relative}")
     problems.extend(example_project_problems(source))

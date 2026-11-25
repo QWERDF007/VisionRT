@@ -99,6 +99,7 @@ visionrt_contract(project_editor_contract visionrt_core)
 visionrt_contract(logic_node_execution_test visionrt_runtime)
 visionrt_contract(edge_hierarchy_contract visionrt_core)
 target_link_libraries(edge_hierarchy_contract PRIVATE visionrt_runtime)
+visionrt_contract(project_archive_contract visionrt_core)
 visionrt_contract(project_storage_contract visionrt_core)
 visionrt_contract(project_value_contract visionrt_core)
 visionrt_contract(cpu_tools_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
@@ -592,7 +593,7 @@ endforeach()
 
 if(TARGET gpu_tools_contract)
     add_test(NAME gpu_tools_contract COMMAND gpu_tools_contract
-        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.json"
+        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/tests/fixtures/projects/GPU目标检测.vrtapp"
         "${VISIONRT_GPU_FIXTURES}")
     visionrt_apply_test_environment(gpu_tools_contract)
     # Without a CUDA device or the external YOLO fixtures the case is reported as not run; it
@@ -605,14 +606,14 @@ if(TARGET gpu_tools_contract)
     # an existing engine still infers correctly is a separate, cheap capability. It shares the
     # binary but not the failure domain, and reports NOT RUN when no engine was ever built.
     add_test(NAME gpu_inference_contract COMMAND gpu_tools_contract
-        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.json"
+        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/tests/fixtures/projects/GPU目标检测.vrtapp"
         "${VISIONRT_GPU_FIXTURES}" --engine-only)
     visionrt_apply_test_environment(gpu_inference_contract)
     set_tests_properties(gpu_inference_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
     set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_inference_contract)
     add_dependencies(tests-gpu gpu_tools_contract)
     add_test(NAME gpu_engine_output_contract COMMAND gpu_tools_contract
-        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.json"
+        "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/tests/fixtures/projects/GPU目标检测.vrtapp"
         "${VISIONRT_GPU_FIXTURES}" --engine-output-error)
     visionrt_apply_test_environment(gpu_engine_output_contract)
     set_tests_properties(gpu_engine_output_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)

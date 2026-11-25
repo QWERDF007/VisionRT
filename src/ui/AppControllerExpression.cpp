@@ -15,11 +15,11 @@ TypeSpec typeFromMap(const QVariantMap &row)
     if (row.value("type").toInt() == static_cast<int>(Type::Array)) {
         type.insert("dtype", row.value("dtype").toInt()); type.insert("rank", row.value("rank").toInt());
     }
-    return ValueJson::decodeType(type);
+    return ValueJson::decodeTypeToken(type);
 }
 QVariantMap typeMap(const TypeSpec &type)
 {
-    return ValueJson::encodeType(type).toVariantMap();
+    return ValueJson::encodeTypeToken(type).toVariantMap();
 }
 } // namespace
 

@@ -1,4 +1,5 @@
 #include "ExecutionEvidence.h"
+#include "ProjectFixtures.h"
 #include "RuntimeTestSupport.h"
 #include "TestPythonEnvironment.h"
 #include "ToolResultAssertions.h"
@@ -43,10 +44,8 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
 {
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
-    const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
-    const auto tempProjectFile = tmpPath / u8"Python图像统计.json";
-    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.json", tempProjectFile);
+    const auto tempProjectFile = std::filesystem::path(
+        testing::copyProjectFixture(repoRoot, tmpDir.path(), u8"Python图像统计.vrtapp").toStdWString());
 
     const auto   package = visionrt::readToolsPackage(toolsPkg);
     auto         loader  = std::make_shared<PluginLoader>();
@@ -71,7 +70,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
     auto update = finish(engine);
 
-    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"Python图像统计.json", loaded.project, update);
+    printExecutionEvidence(repoRoot / "tests/fixtures/projects" / u8"Python图像统计.vrtapp", loaded.project, update);
 
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
@@ -108,7 +107,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((std::abs(values[1] - 22.95) < 0.5));
 
     // Test Save As / Reopen consistency & re-execution output equality
-    const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.json";
+    const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.vrtapp";
     storage.save(loaded.project, saveTarget);
     auto reloaded = storage.load(saveTarget);
     assert((reloaded.diagnostics.empty()));
@@ -128,11 +127,10 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((std::abs(reloadedValues[1] - values[1]) < 1e-6));
 
     // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
-    const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.json";
-    std::filesystem::copy_file(tempProjectFile, corruptTarget);
+    const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.vrtapp";
     {
-        std::ofstream corruptOut(corruptTarget, std::ios::app);
-        corruptOut << "\nINVALID_JSON_TAIL\n";
+        std::ofstream corruptOut(corruptTarget, std::ios::binary | std::ios::trunc);
+        corruptOut << "CORRUPTED_VRTAPP_ARCHIVE_PAYLOAD";
     }
     bool corruptFailed = false;
     try
@@ -175,7 +173,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
         assert((loaded.diagnostics.empty()));
         assert((loaded.project.flows.size() == 1));
         assert((loaded.project.flows[0].nodes.size() == nodeCount));
-        RuntimeEngine engine(4);
+        RuntimeEngine engine(4, root.parent_path());
         const auto    started = engine.start(loaded.project, registry, RunMode::Once);
         assert((started.code == 0));
         auto update = finish(engine);
@@ -193,44 +191,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
         return update;
     };
 
-    const auto firstBatch = root / u8"01_基础入门" / u8"01_图像读取" / u8"图像读取.json";
-    const auto read       = run(firstBatch, 1);
-    const auto readNode   = snapshot(read, 1);
-    assert((std::get<DataRef<Image>>(readNode->outputs.at(2)).get().size() == 2));
-    assert((std::get<std::int64_t>(readNode->outputs.at(4)) == 0));
-    assert((std::get<std::int64_t>(readNode->outputs.at(5)) == 2));
-
-    const auto preprocess = run(root / u8"02_工具示例" / u8"02_图像预处理" / u8"图像预处理.json", 3);
-    const auto binarised  = std::get<DataRef<Image>>(snapshot(preprocess, 3)->outputs.at(2)).get();
-    assert((binarised.size() == 1 && binarised[0].rows == 300 && binarised[0].cols == 400));
-
-    const auto located = run(root / u8"02_工具示例" / u8"01_ROI定位与裁剪" / u8"ROI定位与裁剪.json", 3);
-    const auto &rois    = std::get<visionrt::Rectangle>(snapshot(located, 2)->outputs.at(3)).get();
-    assert((rois.size() == 1 && rois[0].size() == 1));
-    const auto &cropped = std::get<DataRef<Image>>(snapshot(located, 3)->outputs.at(2)).get();
-    assert((cropped.size() == 1 && cropped[0].rows == 300 && cropped[0].cols == 60));
-
-    const auto circle       = run(root / u8"02_工具示例" / u8"03_圆测量" / u8"圆测量.json", 2);
-    const auto circleResult = snapshot(circle, 2);
-    const auto radius       = nestedOf<std::vector<std::vector<double>>>(std::get<Array>(circleResult->outputs.at(9)));
-    const auto centers
-        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(circleResult->outputs.at(8)));
-    assert((radius.size() == 1 && radius[0].size() == 1));
-    assert((std::abs(radius[0][0] - 60.0) < 0.5));
-    assert((std::abs(centers[0][0][0] - 160.0) < 0.5 && std::abs(centers[0][0][1] - 120.0) < 0.5));
-
-    const auto spacing = run(root / u8"02_工具示例" / u8"04_行间距测量" / u8"行间距测量.json", 2);
-    const auto spacingResult = snapshot(spacing, 2);
-    const auto widths
-        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(spacingResult->outputs.at(9)));
-    const auto gaps
-        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(spacingResult->outputs.at(10)));
-    assert((widths.size() == 1 && widths[0].size() == 1 && widths[0][0].size() == 5));
-    assert((gaps[0][0].size() == 4));
-    for (const auto &width : widths[0][0]) assert((std::abs(width - 20.0) < 0.5));
-    for (const auto &gap : gaps[0][0]) assert((std::abs(gap - 20.0) < 0.5));
-
-    const auto branch = run(root / u8"03_综合示例" / u8"01_多分支视觉检测" / u8"多分支视觉检测.json", 5);
+    const auto branch = run(root / u8"综合示例" / u8"多分支视觉检测" / u8"多分支视觉检测.vrtapp", 5);
     const auto &branchRois = std::get<visionrt::Rectangle>(snapshot(branch, 2)->outputs.at(3)).get();
     assert((branchRois.size() == 1 && branchRois[0].size() == 1));
     const auto &branchCrop = std::get<DataRef<Image>>(snapshot(branch, 3)->outputs.at(2)).get();
@@ -243,7 +204,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
 
     // Colour recognition: the reference picture is its own reference, so the pose must come back as
     // the identity, and the five trained wire tips as their classes in wire order.
-    const auto cable = run(root / u8"03_综合示例" / u8"02_识别线缆颜色" / u8"识别线缆颜色.json", 3);
+    const auto cable = run(root / u8"综合示例" / u8"识别线缆颜色" / u8"识别线缆颜色.vrtapp", 3);
     const auto pose
         = nestedOf<NestedVector<double, 2>>(std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
     assert((pose.size() == 1 && pose[0].size() == 6));
@@ -284,17 +245,14 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     std::cout << "[SHIPPED EXAMPLES] installed projects loaded and executed with the installed images\n";
 }
 
-void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
+void testLogicExpressionPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
                                 PythonRuntime &python)
 {
-    // The extension examples are shipped too, but they state a prerequisite: this one borrows the
-    // Python runtime for its mean node, and the expression/branch nodes judge that number.
+    // The Python fixture computes the mean before the expression and branch judge its value.
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
-    const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"02_逻辑表达式与条件分支";
-    const auto projectFile = tmpPath / u8"逻辑表达式与条件分支.json";
-    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.json", projectFile);
+    const auto projectFile = std::filesystem::path(
+        testing::copyProjectFixture(repoRoot, tmpDir.path(), u8"逻辑表达式与条件分支.vrtapp").toStdWString());
 
     const auto   package = visionrt::readToolsPackage(toolsPkg);
     auto         loader  = std::make_shared<PluginLoader>();
@@ -316,7 +274,7 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
     assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
     const auto update = finish(engine);
 
-    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.json", loaded.project,
+    printExecutionEvidence(repoRoot / "tests/fixtures/projects" / u8"逻辑表达式与条件分支.vrtapp", loaded.project,
                            update);
 
     // The first image averages 51.0, so the expression result is true and one unit away from 50.
@@ -335,7 +293,7 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
 
     // The authored file must also be what the editor itself would write: saving it again and
     // reloading has to stay free of schema diagnostics.
-    const auto saved = tmpPath / u8"重新保存.json";
+    const auto saved = projectFile.parent_path() / u8"重新保存.vrtapp";
     storage.save(loaded.project, saved);
     const auto reloaded = storage.load(saved);
     for (const auto &diagnostic : reloaded.diagnostics)
@@ -661,10 +619,8 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
 
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
-    const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
-    const auto projectFile = tmpPath / u8"Python图像统计.json";
-    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.json", projectFile);
+    const auto projectFile = std::filesystem::path(
+        testing::copyProjectFixture(repoRoot, tmpDir.path(), u8"Python图像统计.vrtapp").toStdWString());
 
     ProjectStorage storage(registry);
     auto           loaded = storage.load(projectFile);
@@ -737,10 +693,8 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
 {
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
-    const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"04_错误诊断";
-    const auto tempProjectFile = tmpPath / u8"错误诊断.json";
-    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"错误诊断.json", tempProjectFile);
+    const auto tempProjectFile = std::filesystem::path(
+        testing::copyProjectFixture(repoRoot, tmpDir.path(), u8"错误诊断.vrtapp").toStdWString());
 
     const auto   package = visionrt::readToolsPackage(toolsPkg);
     auto         loader  = std::make_shared<PluginLoader>();
@@ -785,7 +739,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto update = finish(engine);
 
     // Node 1: read succeeds
-    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"错误诊断.json", loaded.project, update);
+    printExecutionEvidence(repoRoot / "tests/fixtures/projects" / u8"错误诊断.vrtapp", loaded.project, update);
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
 
@@ -811,7 +765,8 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     const auto missingStartStatus       = engine.start(loaded.project, registry, RunMode::Once);
     assert((!missingStartStatus));
     assert((missingStartStatus.code == -2));
-    assert((missingStartStatus.message == "执行节点的工具定义缺失：unavailable.custom.plugin"));
+    assert((missingStartStatus.message.find("unavailable.custom.plugin") != std::string::npos
+            && missingStartStatus.message.find("请删除对应节点后再执行") != std::string::npos));
     assert((missingStartStatus.detail.empty()));
     std::cout << "EXPECTED_MISSING_DEFINITION " << missingStartStatus.code << " " << missingStartStatus.message << '\n';
 }
@@ -931,7 +886,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     // Test Save / Reopen consistency
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
-    const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.json";
+    const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.vrtapp";
     ProjectStorage storage(registry);
     auto           reconciled = storage.reconcile(project);
     assert((reconciled.diagnostics.empty()));
@@ -1035,7 +990,7 @@ int main(int argc, char **argv)
     std::cout << "[PASS] Shipped example projects passed." << std::endl;
 
     std::cout << "[TEST] Running the expression and branch example..." << std::endl;
-    testLogicExpressionExample(exampleTools, repoRoot, python);
+    testLogicExpressionPipeline(exampleTools, repoRoot, python);
     std::cout << "[PASS] Expression and branch example passed." << std::endl;
 
     if (installedExamplesOnly)

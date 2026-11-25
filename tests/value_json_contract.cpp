@@ -121,20 +121,14 @@ int main()
         rejects([&] { ValueJson::parse(invalid, {Type::Circle}); });
     rejects([] { ValueJson::parse("[1]", {Type::Image}); });
     for (const auto old : {"NumericArray", "StringArray", "ImageBatch", "Rect", "RoiBatch", "ROI", "Unknown"})
-        rejects(
-            [&]
-            {
-                ValueJson::decodeType({
-                    {"type", old}
-                });
-            });
-    rejects([] { ValueJson::decodeType({{"type", static_cast<int>(Type::Int)}, {"rank", 1}}); });
+        rejects([&] { ValueJson::decodeType(QJsonValue(old)); });
+    rejects([] { ValueJson::decodeType(QJsonObject{{"type", "int"}, {"rank", 1}}); });
     rejects(
         []
         {
-            ValueJson::decodeType({
-                { "type",   "Array"},
-                {"dtype", static_cast<int>(DType::Float64)},
+            ValueJson::decodeType(QJsonObject{
+                { "type",   "array"},
+                {"dtype", "float64"},
                 { "rank",       1.5}
             });
         });
@@ -142,30 +136,32 @@ int main()
         rejects(
             [&]
             {
-                ValueJson::decodeType({
-                    { "type",  "Array"},
-                    {"dtype", static_cast<int>(DType::String)},
+                ValueJson::decodeType(QJsonObject{
+                    { "type",  "array"},
+                    {"dtype", "string"},
                     { "rank",     rank}
                 });
             });
     rejects(
         []
         {
-            ValueJson::decodeType({
-                {"type", static_cast<int>(Type::Array)},
+            ValueJson::decodeType(QJsonObject{
+                {"type", "array"},
                 {"rank",       1}
             });
         });
     rejects(
         []
         {
-            ValueJson::decodeType({
-                {  "type",  "Array"},
+            ValueJson::decodeType(QJsonObject{
+                {  "type",  "array"},
                 { "dtype", "string"},
                 {  "rank",        1},
                 {"layout",  "dense"}
             });
         });
+    assert(ValueJson::decodeTypeToken(ValueJson::encodeTypeToken(type)) == type);
+    assert(ValueJson::decodeTypeToken(ValueJson::encodeTypeToken({Type::Circle})) == TypeSpec{Type::Circle});
     for (const auto number : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
                               -std::numeric_limits<double>::infinity()})
     {
@@ -186,17 +182,15 @@ int main()
     assert(data[1].toObject().value("type") == "float64" && data[1].toObject().value("non_finite") == "Infinity");
     rejects([&] { ValueJson::decode(display, floating); });
     const PortValue images = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(7))});
-    const auto restoredImage = std::get<DataRef<Image>>(ValueJson::parse(ValueJson::text(images, {Type::Image}), {Type::Image}));
-    assert(restoredImage.get().front().type() == CV_8UC1 && restoredImage.get().front().at<std::uint8_t>(1, 2) == 7);
+    rejects([&] { (void)ValueJson::text(images, {Type::Image}); });
     TrainingSet set;
     set.images.emplace(4, trainingFrame(4, cv::Mat(3, 5, CV_16UC3, cv::Scalar(1000, 2000, 3000)), ColorOrder::BGR));
     set.records.emplace(8, TrainingRecord{8, 4, {{0, std::int64_t{9007199254740993LL}},
-        {1, Direction::fromNested({{{10, 20, 30, 90}}})}, {2, images}}});
+        {1, Direction::fromNested({{{10, 20, 30, 90}}})}}});
     set.records.emplace(9, TrainingRecord{9, std::nullopt, {{0, std::string{}}}});
     const auto encodedSet = ValueJson::text(DataRef<TrainingSet>(set), {Type::TrainingSet});
     const auto restoredSet = std::get<DataRef<TrainingSet>>(ValueJson::parse(encodedSet, {Type::TrainingSet}));
-    assert(restoredSet.get().images.at(4).pixels.type() == CV_16UC3);
-    assert(restoredSet.get().images.at(4).pixels.at<cv::Vec3w>(1, 2)[2] == 3000);
+    assert(restoredSet.get().images.at(4).pixels.empty());
     assert(restoredSet.get().images.at(4).colorOrder == ColorOrder::BGR);
     assert(std::get<std::int64_t>(restoredSet.get().records.at(8).fields.at(0)) == 9007199254740993LL);
     assert(!restoredSet.get().records.at(9).imageId);

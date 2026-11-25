@@ -20,7 +20,7 @@ const captures = [];
 function capture(name, debuggerCommands, arguments_ = []) {
     const test = tests.find(candidate => candidate.name === name);
     assert.ok(test, 'CTest target not registered: ' + name);
-    const environment = { ...process.env };
+    const environment = { ...process.env, _NO_DEBUG_HEAP: '1' };
     for (const entry of test.properties.find(property => property.name === 'ENVIRONMENT').value) {
         const assignment = /^([^=]+)=(.*)$/s.exec(entry);
         if (!assignment) continue;
@@ -81,16 +81,10 @@ assert.match(pixel, /ExceptionCode: c0000005/);
 assert.match(pixel, /Attempt to read from address/);
 assert.doesNotMatch(pixel, /^UNEXPECTED_PIXEL_READ /m);
 const trainingLog = capture('workbench_training_publish_contract', [
-    'bm visionrt_ui!visionrt::training::Revision::Revision* ".echo TRAINING_WRITE_ENTRY; gc"'
+    'bm visionrt_ui!visionrt::training::saveModels* ".echo TRAINING_WRITE_ENTRY; gc"'
 ]);
-const trainingWrites = ['draft', 'publish', 'refused', 'upstream'].map(phase => {
-    const begin = trainingLog.indexOf('TRAINING_PHASE_BEGIN ' + phase);
-    const end = trainingLog.indexOf('TRAINING_PHASE_END ' + phase, begin);
-    assert.ok(begin >= 0 && end > begin, 'Missing training observation phase: ' + phase);
-    const writes = (trainingLog.slice(begin, end).match(/^TRAINING_WRITE_ENTRY\s*$/gm) || []).length;
-    assert.equal(writes, phase === 'publish' ? 1 : 0, 'Unexpected training writer entry count: ' + phase);
-    return { phase, writes };
-});
+const trainingWrites = (trainingLog.match(/^TRAINING_WRITE_ENTRY\s*$/gm) || []).length;
+assert.equal(trainingWrites, 4, 'Unexpected model-save call count');
 assert.match(trainingLog, /Exit process [^\r\n]+, code 0\r?\n/);
 const summary = { phases, trainingWrites, pixelReadNegativeControl: 'caught',
     viewportDestructions: 32, nativeExit: 0, captures };

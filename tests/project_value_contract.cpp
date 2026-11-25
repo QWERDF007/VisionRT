@@ -1,3 +1,4 @@
+#include "core/ProjectArchive.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolRegistry.h"
@@ -242,30 +243,27 @@ void allValuesSurviveRealProjectFiles()
     ProjectEditor editor;
     editor.addNode("flow_1", *registry.find(tool.nameEn), {});
     auto           project  = editor.project();
-    const auto     filename = directory.filePath("完整 工程.json");
+    const auto     filename = directory.filePath("完整 工程.vrtapp");
     ProjectStorage storage(registry);
     storage.save(project, std::filesystem::path(filename.toStdWString()));
     require(!project.dirty, "successful project commit did not install saved identity");
-    QFile file(filename);
-    require(file.open(QIODevice::ReadOnly), "saved project unavailable");
-    const auto root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root["format_version"].toInt() == 8, "saved project does not use the current project format");
+    const auto root = QJsonDocument::fromJson(ProjectArchive::readProgramJson(project.path)).object();
+    require(root["format_version"].toInt() == 9, "saved project does not use the current project format");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
-    // Inputs are an entry list keyed by port number, not an object keyed by a name.
-    const auto literals = saved["inputs"].toArray();
+    const auto literals = saved["params"].toObject()["inputs"].toArray();
     const auto entry    = [&](PortId port) -> QJsonObject
     {
         for (const auto &item : literals)
-            if (item.toObject().value("port_id").toInt() == static_cast<int>(port))
+            if (item.toObject().value("port").toInt() == static_cast<int>(port))
                 return item.toObject();
         return {};
     };
-    const auto literal = entry(1)["literal"].toObject();
+    const auto literal = entry(1)["value"].toObject();
     require(literal.contains("values") && (literal.contains("shape") || literal.contains("offsets")),
             "saved Array must state its own shape or ragged offsets");
-    require(entry(29)["literal"].toArray().size() == 3, "saved ROI groups lost");
-    require(entry(34)["literal"].toArray().isEmpty(), "empty Image value lost");
-    require(entry(35)["literal"].toInt() == 0, "type default not saved");
+    require(entry(29)["value"].toArray().size() == 3, "saved ROI groups lost");
+    require(entry(34)["value"].toArray().isEmpty(), "empty Image value lost");
+    require(entry(35)["value"].toInt() == 0, "type default not saved");
     const auto  reopened = storage.load(project.path);
     const auto &restored = reopened.project.flows.front().nodes.front();
     for (const auto &port : registry.find(tool.nameEn)->inputs)

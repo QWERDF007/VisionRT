@@ -98,11 +98,9 @@ struct NodeDefinition
     std::optional<ExpressionConfig>                  expression;
     std::optional<TypeSpec>                          selectType;
     std::uint64_t                                    executionRevision = 0;
-    // The published training revision this node runs from, resolved against the project directory
-    // while the project is in memory. Empty means the node never published any training result.
-    std::filesystem::path                            trainingAsset;
+    // Changes when an initialized resource is replaced while its configured path stays the same.
+    std::uint64_t                                    initializationRevision = 0;
     QJsonObject                                      unresolved;
-    QJsonObject                                      retiredInitParams;
     VISIONRT_CORE_API std::string                                      title() const;
 };
 
@@ -118,6 +116,9 @@ struct FlowDefinition
 struct ProjectDefinition
 {
     std::string                 name       = "未命名项目";
+    std::string                 notes;
+    std::string                 appVersion;
+    std::string                 contractsVersion;
     NodeId                      nextNodeId = 0;
     std::uint64_t               nextFlowId = 2;
     std::vector<FlowDefinition> flows{

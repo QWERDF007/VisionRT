@@ -303,7 +303,6 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             request.training ? ProducedBy::Train : ProducedBy::Execute);
 
         outcome.outputs = std::move(result.outputs);
-        outcome.artifacts = std::move(result.artifacts);
         if (!outcome.status)
         {
             outcome.quality = helperMessage(outcome.status.message);

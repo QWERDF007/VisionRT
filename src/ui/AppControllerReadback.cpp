@@ -20,6 +20,7 @@ void AppController::Impl::beginDrain(std::function<void()> continuation)
     if (pendingTraining)
     {
         pendingTraining.reset();
+        pendingTrainingArtifacts.clear();
         editor.setBusy(state != RuntimeState::Idle);
         emit q->runtimeChanged();
     }

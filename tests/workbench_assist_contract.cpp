@@ -7,6 +7,7 @@
 #include "SettingsFileGuard.h"
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
+#include "core/ProjectArchive.h"
 #include "log/LogModel.h"
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
@@ -85,21 +86,19 @@ QImage dots(const QList<QPointF> &centers, const QList<double> &radii)
 // ROI literal of one node, as stored in the saved project: groups[imageIndex][recordIndex][values].
 QJsonArray roiGroups(const QString &project, const QString &node)
 {
-    QFile file(project);
-    if (!file.open(QIODevice::ReadOnly))
-        throw std::runtime_error("saved assist project is unreadable");
-    const auto document = QJsonDocument::fromJson(file.readAll());
+    const auto document
+        = QJsonDocument::fromJson(ProjectArchive::readProgramJson(std::filesystem::path(project.toStdWString())));
     for (const auto &flow : document.object().value("flows").toArray())
         for (const auto &candidate : flow.toObject().value("nodes").toArray())
         {
             const auto object = candidate.toObject();
-            if (object.value("node_seq").toString() != node)
+            if (object.value("id").toString() != node)
                 continue;
-            for (const auto &binding : object.value("inputs").toArray())
+            for (const auto &binding : object.value("params").toObject().value("inputs").toArray())
             {
                 const auto entry = binding.toObject();
-                if (entry.value("port_id").toInt() == static_cast<int>(kRoisInput))
-                    return entry.value("literal").toArray();
+                if (entry.value("port").toInt() == static_cast<int>(kRoisInput))
+                    return entry.value("value").toArray();
             }
             return {};
         }
@@ -196,7 +195,7 @@ try
             "circle image input could not be bound");
     require(app.setParameter(kSigmaInput, false, "3"), "the smoothing preset was rejected");
     settle();
-    if (!app.save(root + "/assist.json"))
+    if (!app.save(root + "/assist.vrtapp"))
         throw std::runtime_error("assist project could not be saved: " + app.diagnostic().toStdString());
     stable();
     app.runOnce();
@@ -329,9 +328,9 @@ try
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 5; }, 10000),
             "the second image proposal was not committed");
     stable();
-    require(app.save(root + "/assist.json"), "assist project could not be saved after the batch commit");
+    require(app.save(root + "/assist.vrtapp"), "assist project could not be saved after the batch commit");
     settle();
-    const auto batchGroups = roiGroups(root + "/assist.json", circle);
+    const auto batchGroups = roiGroups(root + "/assist.vrtapp", circle);
     require(batchGroups.size() == 3 && batchGroups.at(0).toArray().size() == 2
                 && batchGroups.at(1).toArray().size() == 1 && batchGroups.at(2) == batchGroups.at(0),
             "the proposal was not written to the selected image group");
@@ -358,9 +357,9 @@ try
             "aligned click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return app.dirty(); }, 10000), "the aligned click was not committed");
     stable();
-    require(app.save(root + "/assist.json"), "aligned assist project could not be saved");
+    require(app.save(root + "/assist.vrtapp"), "aligned assist project could not be saved");
     stable();
-    const auto alignedGroups = roiGroups(root + "/assist.json", circle);
+    const auto alignedGroups = roiGroups(root + "/assist.vrtapp", circle);
     require(alignedGroups.at(0).toArray().size() == 1, "the aligned proposal replaced the wrong group");
     const auto aligned = recordCenter(alignedGroups.at(0).toArray().at(0).toArray());
     require(std::abs(aligned.x() - 150.0) <= 1.5 && std::abs(aligned.y() - 115.0) <= 1.5,
@@ -479,8 +478,8 @@ try
     require(numericValue(rowOf(afterRowAppend, kRowWidthMaxInput).value("literal").toString())
                 == numericValue(rowOf(beforeRowAppend, kRowWidthMaxInput).value("literal").toString()),
             "the append must keep the current upper width bound");
-    require(app.save(root + "/assist.json"), "row spacing project could not be saved");
-    const auto rowGroups = roiGroups(root + "/assist.json", rowsNode);
+    require(app.save(root + "/assist.vrtapp"), "row spacing project could not be saved");
+    const auto rowGroups = roiGroups(root + "/assist.vrtapp", rowsNode);
     require(rowGroups.size() == 3 && rowGroups.at(2).toArray().size() == 2
                 && rowGroups.at(2).toArray().at(0).toArray().size() == 5,
             "row spacing proposals did not land as rectangles on the selected image");
@@ -512,7 +511,7 @@ try
 
     // Closing must drain the assist channel: an in-flight helper is invalidated, its owner released,
     // and closeReady is emitted exactly once.
-    require(app.save(root + "/assist.json"), "assist project could not be saved before closing");
+    require(app.save(root + "/assist.vrtapp"), "assist project could not be saved before closing");
     stable();
     QSignalSpy closeReady(&app, &AppController::closeReady);
     require(app.assistHover(160.0, 120.0), "hover before close was rejected");

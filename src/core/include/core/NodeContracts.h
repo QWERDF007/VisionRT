@@ -51,5 +51,11 @@ VISIONRT_CORE_API void resolveOutputTypes(ProjectDefinition &project);
 VISIONRT_CORE_API TypeMap resolvedOutputTypes(const ToolDefinition &contract);
 
 VISIONRT_CORE_API std::map<std::string, std::filesystem::path> nodeModelReferences(
-    const NodeDefinition&, const ToolDefinition&, const std::filesystem::path&);
+    const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &resourceRoot);
+
+// Hydrates persisted TrainingSet metadata in a node's training parameters by reading original
+// images from the node's configured training resource ZIP archive(s) resolved against resourceRoot.
+VISIONRT_CORE_API Values hydrateNodeTrainingSets(const NodeDefinition &node, const ToolDefinition &definition,
+                                                 const std::filesystem::path &resourceRoot,
+                                                 std::string *error = nullptr);
 } // namespace visionrt

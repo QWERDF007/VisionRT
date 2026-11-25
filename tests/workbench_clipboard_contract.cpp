@@ -112,7 +112,7 @@ try
     {
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "clipboard operation did not finish");
     };
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
+    app.requestOpen(visionrt::testing::copyProjectFixture(VISIONRT_SOURCE_DIR, installation.directory(), u8"Python图像统计.vrtapp"));
     if (!app.busy() && app.nodes().isEmpty())
         app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
