@@ -4,6 +4,23 @@
 
 namespace visionrt {
 
+void AppController::Impl::flushRoiDraftRow()
+{
+    if (!pendingRoiDraftTarget || !roiSession.active())
+    {
+        pendingRoiDraftTarget.reset();
+        return;
+    }
+    pendingRoiDraftTarget.reset();
+    refreshParameterModel();
+}
+
+void AppController::Impl::stopRoiDraftSync()
+{
+    roiDraftSyncTimer.stop();
+    pendingRoiDraftTarget.reset();
+}
+
 void AppController::Impl::updateResults()
 {
     presentation.updateResults();
@@ -36,6 +53,7 @@ void AppController::attachViewport(QObject *object)
         QObject::connect(target, &ImageViewport::roiCommitted, this,
                          [this](const RoiEditTarget &key, const EncodedRegion &roi)
                          {
+                             impl_->stopRoiDraftSync();
                              if (key.kind == RoiTargetKind::Training)
                                  impl_->commitTrainingRoi(key, &roi);
                              else
@@ -44,6 +62,7 @@ void AppController::attachViewport(QObject *object)
         QObject::connect(target, &ImageViewport::roiDeleted, this,
                          [this](const RoiEditTarget &key)
                          {
+                             impl_->stopRoiDraftSync();
                              if (key.kind == RoiTargetKind::Training)
                                  impl_->commitTrainingRoi(key, nullptr);
                              else
@@ -54,15 +73,17 @@ void AppController::attachViewport(QObject *object)
                          {
                              if (impl_->roiSession.previewGeometry(key, roi))
                              {
-                                 emit parametersChanged();
-                                 emit resultsChanged();
+                                 impl_->pendingRoiDraftTarget = key;
+                                 if (!impl_->roiDraftSyncTimer.isActive())
+                                     impl_->roiDraftSyncTimer.start(33);
                              }
                          });
         QObject::connect(target, &ImageViewport::roiDraftCanceled, this,
                          [this]
                          {
+                             impl_->stopRoiDraftSync();
                              impl_->roiSession.cancelPreview();
-                             emit parametersChanged();
+                             impl_->refreshParameterModel();
                          });
         QObject::connect(target, &ImageViewport::roiSelected, this,
                          [this](const RoiEditTarget &key)
@@ -130,6 +151,16 @@ int AppController::imageCount() const
 QString AppController::selectedImageOutput() const
 {
     return impl_->presentation.selectedImageOutput();
+}
+
+quint64 AppController::resultThumbnailVersion() const
+{
+    return impl_->presentation.thumbnailVersion();
+}
+
+QString AppController::resultThumbnailUrl(int index) const
+{
+    return impl_->presentation.thumbnailUrl(index);
 }
 
 void AppController::setImageIndex(int index)

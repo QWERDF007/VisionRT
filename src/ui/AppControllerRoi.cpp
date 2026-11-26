@@ -5,6 +5,7 @@
 namespace visionrt {
 void AppController::Impl::finishRoi()
 {
+    stopRoiDraftSync();
     if (!roiSession.active())
         return;
     const auto view   = roiSession.view();

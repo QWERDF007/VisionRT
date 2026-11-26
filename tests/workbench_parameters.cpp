@@ -276,18 +276,20 @@ void parameterEditorsContract()
     input->setProperty("text", "-9223372036854775809");
     QTest::keyClick(&window, Qt::Key_Up);
     require(value(testing::parameters::Count) == "9007199254740997"
-                && input->property("text").toString() == "-9223372036854775809",
-            "invalid integer draft was rounded, discarded or stepped from the old value");
-    QTest::keyClick(&window, Qt::Key_Escape);
+                && input->property("text").toString() == "9007199254740997",
+            "invalid integer draft was not rejected and rolled back to committed value");
+    QTest::keyClick(&window, Qt::Key_X);
+    require(input->property("text").toString() == "9007199254740997",
+            "integer keystroke validator did not block non-numeric input");
     require(app.setParameter(testing::parameters::Count, false, "9223372036854775807"), "Int64 maximum was rejected");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     require(value(testing::parameters::Count) == "9223372036854775807", "integer increment overflowed at the maximum");
     input->setProperty("text", "9223372036854775808");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value(testing::parameters::Count) == "9223372036854775807", "out-of-range integer replaced the valid parameter");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    require(input->property("text").toString() == "9223372036854775807", "Escape lost the full Int64 value");
+    require(value(testing::parameters::Count) == "9223372036854775807"
+                && input->property("text").toString() == "9223372036854775807",
+            "out-of-range integer was not rejected and rolled back");
     require(app.setParameter(testing::parameters::Count, false, "-9223372036854775808"), "Int64 minimum was rejected");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Down);
@@ -388,9 +390,31 @@ void parameterEditorsContract()
     input->forceActiveFocus();
     input->setProperty("text", "0.35garbage");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value(testing::parameters::Ratio) == "0.35", "invalid Float draft replaced the committed value");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    require(input->property("text").toString() == "0.35", "Escape did not restore the panel Float");
+    require(value(testing::parameters::Ratio) == "0.35"
+                && input->property("text").toString() == "0.35",
+            "invalid Float draft was not rejected and rolled back");
+    // Float focus shows lossless editText and selects all; blur restores 6-decimal displayText without redundant commits.
+    panel->forceActiveFocus();
+    require(app.setParameter(testing::parameters::Ratio, false, "0.123456789"), "high-precision Float was rejected");
+    QTest::qWait(20);
+    require(input->property("text").toString() == "0.123457",
+            "unfocused Float did not render 6-decimal displayText");
+    const int beforePrecisionFocus = parameterChanges.count();
+    input->forceActiveFocus();
+    QTest::qWait(30);
+    require(input->property("text").toString() == "0.123456789",
+            "focused Float did not switch to lossless editText");
+    require(input->property("selectedText").toString() == "0.123456789",
+            "focused Float did not auto-select all text");
+    panel->forceActiveFocus();
+    QTest::qWait(30);
+    require(input->property("text").toString() == "0.123457",
+            "blurred Float did not restore displayText");
+    require(parameterChanges.count() == beforePrecisionFocus && value(testing::parameters::Ratio) == "0.123456789",
+            "focus/blur without editing triggered redundant commit or truncated precision");
+    require(app.setParameter(testing::parameters::Ratio, false, "0.35"), "Float restore failed");
+    input->forceActiveFocus();
+    QTest::qWait(20);
     input->setProperty("text", "0.4");
     panel->setEnabled(false);
     window.contentItem()->forceActiveFocus();
@@ -543,9 +567,9 @@ void parameterEditorsContract()
     labelsInput->forceActiveFocus();
     labelsInput->setProperty("text", "invalid structure");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value(testing::parameters::Labels) == originalLabels, "invalid structure replaced a typed parameter");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    require(labelsInput->property("text").toString() == originalLabels, "Escape did not restore array value");
+    require(value(testing::parameters::Labels) == originalLabels
+                && labelsInput->property("text").toString() == originalLabels,
+            "invalid structure was not rejected and rolled back");
     labelsInput->setProperty("text", "[\"中文\", \"with spaces\"]");
     QTest::keyClick(&window, Qt::Key_Return);
     const auto committedLabels = value(testing::parameters::Labels);

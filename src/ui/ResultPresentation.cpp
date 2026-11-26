@@ -68,11 +68,12 @@ std::optional<PortRef> parseImageKey(const QString &key)
 } // namespace
 
 ResultPresentation::ResultPresentation(PresentationHost &host, OutputModel &outputs, RoiEditSession &roi,
-                                       QObject *parent)
+                                       QObject *parent, std::shared_ptr<ThumbnailStore> thumbnailStore)
     : host_(host)
     , outputs_(outputs)
     , roi_(roi)
     , converter_(parent)
+    , thumbnailStore_(std::move(thumbnailStore))
 {
     QObject::connect(&converter_, &DisplayConverter::batchConverted, &converter_,
                      [this](const std::vector<DisplayFrame> &frames)
@@ -91,6 +92,21 @@ ResultPresentation::ResultPresentation(PresentationHost &host, OutputModel &outp
                              }
                          }
                          updateReadback();
+                     });
+    QObject::connect(&converter_, &DisplayConverter::thumbnailsConverted, &converter_,
+                     [this](quint64 generation, quint64 requestId, const std::vector<QImage> &thumbnails)
+                     {
+                         if (!thumbnailStore_ || generation != generation_ || requestId != displayRequest_)
+                             return;
+                         std::vector<std::pair<QString, QImage>> entries;
+                         entries.reserve(thumbnails.size());
+                         for (std::size_t i = 0; i < thumbnails.size(); ++i)
+                             entries.emplace_back(QString::number(i), thumbnails[i]);
+                         thumbnailVersion_
+                             = thumbnailStore_->replaceNamespace(QStringLiteral("results/"), std::move(entries));
+                         if (pendingThumbnailRequest_ == requestId)
+                             publishedThumbnailBatch_ = pendingThumbnailBatch_;
+                         host_.thumbnailVersionChanged();
                      });
     QObject::connect(&converter_, &DisplayConverter::readersIdle, &converter_,
                      [this]
@@ -282,9 +298,24 @@ void ResultPresentation::retain(const std::set<NodeId> &existing)
     std::erase_if(active_, [&](NodeId node) { return !existing.contains(node); });
 }
 
+void ResultPresentation::clearThumbnails()
+{
+    publishedThumbnailBatch_.reset();
+    pendingThumbnailBatch_.reset();
+    pendingThumbnailRequest_ = 0;
+    if (thumbnailStore_)
+        thumbnailStore_->clearNamespace(QStringLiteral("results/"));
+    if (thumbnailVersion_ != 0)
+    {
+        thumbnailVersion_ = 0;
+        host_.thumbnailVersionChanged();
+    }
+}
+
 void ResultPresentation::clearDisplay()
 {
     converter_.invalidate(generation_);
+    clearThumbnails();
     if (viewport_)
     {
         ++displayRequest_;
@@ -690,14 +721,32 @@ void ResultPresentation::updateDisplay()
         target->setGeometryOverlays({});
         target->endRoiEdit();
     }
-    if (requestedImages.empty())
+    std::optional<DataRef<Image>> thumbnailBatch;
+    if (batch && !batch->get().empty() && thumbnailStore_ && thumbnailsEnabled_)
+    {
+        ThumbnailBatchKey key;
+        key.generation = generation_;
+        key.color      = color;
+        key.frames.reserve(batch->get().size());
+        for (const auto &mat : batch->get())
+            key.frames.push_back({mat.data, mat.rows, mat.cols, mat.type(), mat.step[0]});
+        if (!publishedThumbnailBatch_ || *publishedThumbnailBatch_ != key)
+        {
+            pendingThumbnailBatch_   = std::move(key);
+            pendingThumbnailRequest_ = displayRequest_;
+            thumbnailBatch           = DataRef<Image>(batch->get(), {batch->owner()});
+        }
+    }
+    if (requestedImages.empty() && !thumbnailBatch)
     {
         converter_.invalidate(generation_);
+        if (host_.runtimeIdle() && (!batch || batch->get().empty()))
+            clearThumbnails();
         applyOverlays();
         return;
     }
     converter_.requestBatch(DataRef<Image>(std::move(requestedImages), {batch->owner()}), std::move(color),
-                            displayRequest_, generation_);
+                            displayRequest_, generation_, std::move(thumbnailBatch));
 }
 
 void ResultPresentation::adoptViewport(ImageViewport *target)
@@ -711,6 +760,17 @@ void ResultPresentation::adoptThumbnail(ImageViewport *target)
     if (std::find(thumbnails_.begin(), thumbnails_.end(), target) == thumbnails_.end())
         thumbnails_.push_back(target);
     updateDisplay();
+}
+
+void ResultPresentation::setThumbnailsEnabled(bool enabled)
+{
+    if (thumbnailsEnabled_ == enabled)
+        return;
+    thumbnailsEnabled_ = enabled;
+    if (thumbnailsEnabled_)
+        updateDisplay();
+    else
+        clearThumbnails();
 }
 
 ImageViewport *ResultPresentation::viewport() const
@@ -832,6 +892,13 @@ QString ResultPresentation::selectedImageOutput() const
         return offered ? key : QString{};
     }
     return imageSelection_ ? imageKey(*imageSelection_) : QString{};
+}
+
+QString ResultPresentation::thumbnailUrl(int index) const
+{
+    if (thumbnailVersion_ == 0 || index < 0 || index >= imageCount())
+        return {};
+    return QStringLiteral("image://visionrt_results/%1?v=%2").arg(index).arg(thumbnailVersion_);
 }
 
 bool ResultPresentation::setImageIndex(int index)

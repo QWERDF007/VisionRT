@@ -2,6 +2,7 @@ include(ConfigLibavoid)
 visionrt_add_module(ui SOURCES
     UiTypes.cpp
     Color.cpp
+    DashedBorderItem.cpp
     Size.cpp
     DurationText.cpp
     WireRouter.cpp
@@ -15,8 +16,11 @@ visionrt_add_module(ui SOURCES
     AppControllerReadback.cpp
     AppControllerRoi.cpp
     NodeListModel.cpp
+    ParameterListModel.cpp
     ResultPresentation.cpp
     RoiEditSession.cpp
+    ThumbnailImageProvider.cpp
+    TrainingRecordModel.cpp
     TrainingSession.cpp
     TrainingAssets.cpp
     AppControllerTraining.cpp

@@ -49,7 +49,7 @@ int main(int argc, char **argv)
         require(session.images().front().pixels.at<cv::Vec3w>(0, 0)[0] == 1000, "draft owns copied original pixels");
         require(session.images().front().pixels.type() == CV_16UC3
                     && session.images().front().colorOrder == ColorOrder::BGR, "depth and colour order preserved");
-        require(!session.images().front().thumbnail.isEmpty(), "thumbnail derives from original frame");
+        require(!session.images().front().thumbnailImage.isNull(), "thumbnail derives from original frame");
         require(session.setRegions(0, {makeCircle({3, 4}, 2)}), "circle is a valid ROI field value");
         require(session.selectRoiParameter(4), "second ROI field is independently selectable");
         require(session.setRegions(0, {makeSegment({1, 2}, {3, 4})}), "segment is a valid second field");

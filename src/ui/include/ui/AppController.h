@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 
+class QQmlEngine;
 class QQuickTextDocument;
 
 namespace visionrt {
@@ -51,6 +52,7 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(QString selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList parameters READ parameters NOTIFY parametersChanged)
     Q_PROPERTY(QVariantList parameterGroups READ parameterGroups NOTIFY parametersChanged)
+    Q_PROPERTY(QAbstractListModel *parameterModel READ parameterModel CONSTANT)
     Q_PROPERTY(QString outputTitle READ outputTitle NOTIFY resultsChanged)
     Q_PROPERTY(QVariantList parameterTabs READ parameterTabs NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
@@ -63,6 +65,7 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(bool trainingAvailable READ trainingAvailable NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
     Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
+    Q_PROPERTY(QAbstractListModel *trainingRecordModel READ trainingRecordModel CONSTANT)
     Q_PROPERTY(QString selectedTrainingDraftRecord READ selectedTrainingDraftRecord NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
     Q_PROPERTY(bool canAddTrainingImage READ canAddTrainingImage NOTIFY resultsChanged)
@@ -71,6 +74,7 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(int imageIndex READ imageIndex WRITE setImageIndex NOTIFY resultsChanged)
     Q_PROPERTY(int imageCount READ imageCount NOTIFY resultsChanged)
     Q_PROPERTY(QString selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
+    Q_PROPERTY(quint64 resultThumbnailVersion READ resultThumbnailVersion NOTIFY resultThumbnailVersionChanged)
     Q_PROPERTY(QAbstractItemModel *toolModel READ toolModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel *outputModel READ outputModel CONSTANT)
     // 日志窗口模型：服务未启动时为空，启动后按可见性批量追加
@@ -130,6 +134,7 @@ public:
     QString             currentFlow() const;
     QString             selectedNode() const;
     QVariantList        parameters() const;
+    QAbstractListModel *parameterModel() const;
     QVariantList        parameterTabs() const;
     Q_INVOKABLE bool startTrainingRoi(int parameter, int shape);
     Q_INVOKABLE bool startParameterRoi(int parameter, int stage, int shape, bool recordScoped = false);
@@ -144,6 +149,7 @@ public:
     bool                trainingMode() const;
     void                setTrainingMode(bool value);
     QVariantList        trainingRecords() const;
+    QAbstractListModel *trainingRecordModel() const;
     QString             selectedTrainingDraftRecord() const;
     bool                trainingDirty() const;
     bool                trainingSavable() const;
@@ -169,6 +175,10 @@ public:
     int                 imageIndex() const;
     int                 imageCount() const;
     QString             selectedImageOutput() const;
+    quint64             resultThumbnailVersion() const;
+    Q_INVOKABLE QString resultThumbnailUrl(int index) const;
+    void                registerImageProviders(QQmlEngine *engine);
+    Q_INVOKABLE bool    ensureImageProviders(QObject *contextObject);
     QAbstractItemModel *toolModel() const;
     QAbstractItemModel *outputModel() const;
     QAbstractItemModel *logModel();
@@ -328,6 +338,7 @@ signals:
     void selectionChanged();
     void parametersChanged();
     void resultsChanged();
+    void resultThumbnailVersionChanged();
     void runtimeChanged();
     void timingChanged();
     void diagnosticChanged();

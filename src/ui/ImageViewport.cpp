@@ -23,6 +23,9 @@ ImageViewport::ImageViewport(QQuickItem *parent)
     setAcceptHoverEvents(true);
     connect(this, &QQuickItem::enabledChanged, this, [this] { updateCursor(); });
     setActiveFocusOnTab(true);
+    keyCommitTimer_.setSingleShot(true);
+    keyCommitTimer_.setInterval(120);
+    connect(&keyCommitTimer_, &QTimer::timeout, this, [this] { flushPendingKeyCommit(); });
     const auto observeWindow = [this](QQuickWindow *window)
     {
         if (observedWindow_)
@@ -34,12 +37,18 @@ ImageViewport::ImageViewport(QQuickItem *parent)
         updatePixelProbe();
         QObject::disconnect(windowActiveConnection_);
         if (editing())
+        {
+            flushPendingKeyCommit();
             emit roiEditCanceled();
+        }
         windowActiveConnection_ = window ? connect(window, &QWindow::activeChanged, this,
                                                    [this, window]
                                                    {
                                                        if (!window->isActive() && editing())
+                                                       {
+                                                           flushPendingKeyCommit();
                                                            emit roiEditCanceled();
+                                                       }
                                                    })
                                          : QMetaObject::Connection{};
         if (mode_ == OneToOne)
@@ -334,7 +343,11 @@ QString ImageViewport::pixelTextAt(QPointF itemPoint) const
 
 void ImageViewport::updatePixelProbe()
 {
-    pixelText_ = pointerInside_ && altHeld_ ? pixelTextAt(pointerPosition_) : QString{};
+    const QString nextText = pointerInside_ && altHeld_ ? pixelTextAt(pointerPosition_) : QString{};
+    if (nextText == pixelText_ && (nextText.isEmpty() || pointerPosition_ == lastProbePosition_))
+        return;
+    pixelText_         = nextText;
+    lastProbePosition_ = pointerPosition_;
     emit pixelProbeChanged();
 }
 
@@ -389,6 +402,9 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         uploadedTextureKey_ = texture->comparisonKey();
         uploadedRevision_   = textureRevision_;
     }
+    const auto desiredFilter = scale_ < 1.0 ? QSGTexture::Linear : QSGTexture::Nearest;
+    if (node->filtering() != desiredFilter)
+        node->setFiltering(desiredFilter);
     node->setRect(QRectF(imageToItem({0, 0}), imageToItem({double(imageSize_.width()), double(imageSize_.height())})));
     return node;
 }

@@ -9,6 +9,7 @@ ColumnLayout {
     required property QtObject controller
     enabled: controller.workspaceEnabled
     spacing: 0
+    readonly property bool _providersReady: root.controller.ensureImageProviders(root)
 
     Item {
         Layout.fillWidth: true
@@ -23,7 +24,7 @@ ColumnLayout {
             clip: true
             spacing: VisionRTSize.Spacing
             boundsBehavior: Flickable.StopAtBounds
-            model: root.controller.trainingRecords
+            model: root.controller.trainingRecordModel
             ScrollBar.vertical: WorkbenchScrollBar {
                 id: trainingScrollBar
                 parent: trainingList.parent
@@ -33,7 +34,10 @@ ColumnLayout {
             }
             delegate: Item {
                 id: recordRow
-                required property var modelData
+                required property string recordId
+                required property string imageUrl
+                required property bool selected
+                required property var fields
                 required property int index
                 width: trainingList.width
                 height: content.implicitHeight
@@ -49,12 +53,13 @@ ColumnLayout {
                         id: thumbnailCard
                         Layout.fillWidth: true
                         index: recordRow.index
-                        selected: recordRow.modelData.selected
+                        selected: recordRow.selected
                         Image {
                             anchors.fill: parent
-                            source: recordRow.modelData.imageUrl
+                            source: root._providersReady ? recordRow.imageUrl : ""
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
+                            cache: false
                         }
                         MouseArea {
                             parent: thumbnailCard
@@ -62,7 +67,7 @@ ColumnLayout {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             height: VisionRTSize.ThumbnailHeight + 2 * VisionRTSize.Spacing
-                            onClicked: root.controller.selectTrainingDraftRecord(recordRow.modelData.id)
+                            onClicked: root.controller.selectTrainingDraftRecord(recordRow.recordId)
                         }
                         WorkbenchActionButton {
                             parent: thumbnailCard
@@ -78,13 +83,13 @@ ColumnLayout {
                             iconColor: !enabled ? QuiColor.FontDark : hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                             text: "删除训练记录"
                             iconSource: QuiFontIcon.ChromeClose
-                            onClicked: root.controller.removeTrainingDraftRecord(recordRow.modelData.id)
+                            onClicked: root.controller.removeTrainingDraftRecord(recordRow.recordId)
                         }
                         details: Component {
                             ColumnLayout {
                                 spacing: VisionRTSize.Spacing
                                 Repeater {
-                                    model: recordRow.modelData.fields
+                                    model: recordRow.fields
                                     delegate: TrainingValueEditor {
                                         required property var modelData
                                         Layout.fillWidth: true
@@ -92,8 +97,11 @@ ColumnLayout {
                                         font: QuiFont.Caption
                                         field: modelData
                                         visible: !modelData.roi
-                                        onCommitRequested: function(value) {
-                                            root.controller.setTrainingField(recordRow.modelData.id, field.id, value);
+                                        commitValue: function(value) {
+                                            return root.controller.setTrainingField(recordRow.recordId, field.id, value);
+                                        }
+                                        onRejected: function(text) {
+                                            root.controller.logParameterDraftRejected(field.id + "：" + text);
                                         }
                                     }
                                 }

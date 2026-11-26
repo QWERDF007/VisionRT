@@ -177,6 +177,15 @@ if(VISIONRT_BUILD_APP)
     # The node list model has no window: it must not take the desktop lock or join the ui group.
     visionrt_contract(node_list_model_test visionrt_ui LABELS backend)
     target_link_libraries(node_list_model_test PRIVATE Qt6::Test)
+    visionrt_contract(node_display_debounce_contract visionrt_ui)
+    target_link_libraries(node_display_debounce_contract PRIVATE Qt6::Test)
+    target_compile_definitions(node_display_debounce_contract PRIVATE
+        VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+    visionrt_contract(parameter_model_contract visionrt_ui LABELS backend)
+    target_link_libraries(parameter_model_contract PRIVATE Qt6::Test)
+    visionrt_contract(training_image_provider_contract visionrt_ui LABELS backend)
+    target_link_libraries(training_image_provider_contract PRIVATE Qt6::Test)
     visionrt_contract(tool_port_list_model_test visionrt_ui LABELS backend)
     target_link_libraries(tool_port_list_model_test PRIVATE Qt6::Test)
     # What the result view may expose is decided without a window, so the visibility rule is

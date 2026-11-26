@@ -16,11 +16,14 @@
 #include "ui/LogHighlighter.h"
 #include "ui/NodeListModel.h"
 #include "ui/OutputModel.h"
+#include "ui/ParameterListModel.h"
 #include "ui/ProjectOperations.h"
 #include "ui/RecentProjects.h"
 #include "ui/RoiEditSession.h"
+#include "ui/ThumbnailStore.h"
 #include "ui/ToolEditorController.h"
 #include "ui/ToolTreeModel.h"
+#include "ui/TrainingRecordModel.h"
 #include "ui/TrainingSession.h"
 #include "ui/UiPreferences.h"
 #include "ui/WireRouter.h"
@@ -118,6 +121,9 @@ struct AppController::Impl : PresentationHost
     ToolTreeModel                    tools;
     OutputModel                      outputs;
     NodeListModel                    nodesModel{q};
+    ParameterListModel               parameterModel{q};
+    TrainingRecordModel              trainingRecordModel{q};
+    std::shared_ptr<ThumbnailStore>  thumbnailStore = std::make_shared<ThumbnailStore>();
     LogModel                         logModel;
     // The text document owns the highlighter; this only observes it, because the window may be
     // destroyed before the controller.
@@ -127,6 +133,8 @@ struct AppController::Impl : PresentationHost
     // A loaded project's findings, held until the open actually commits.
     std::vector<ToolUpdate>          pendingToolUpdates;
     QTimer                           timer;
+    QTimer                           roiDraftSyncTimer;
+    std::optional<RoiEditTarget>     pendingRoiDraftTarget;
     RuntimeState                     state        = RuntimeState::Idle;
     std::uint64_t                    generation   = 1;
     std::uint64_t                    projectEpoch = 1;
@@ -219,7 +227,7 @@ struct AppController::Impl : PresentationHost
     RoiEditSession     roiSession;
     // Presentation state (snapshots, output rows, image batch, text/readback and its drain) has one
     // owner; the controller only connects QML and selection changes to it.
-    ResultPresentation presentation{*this, outputs, roiSession, q};
+    ResultPresentation presentation{*this, outputs, roiSession, q, thumbnailStore};
 
     // Smart point selection runs on its own bounded channel; the controller only forwards the
     // cursor and owns the proposal transaction.
@@ -240,8 +248,13 @@ struct AppController::Impl : PresentationHost
     };
     std::optional<AssistContext>                     pendingTraining;
     std::map<std::string, PendingTrainingArtifact>   pendingTrainingArtifacts;
-    QVariantList parameterRows;
-    NodeId       parameterRowsNode = 0;
+    NodeId                                            parameterModelNode = 0;
+    NodeId                                            trainingThumbNode  = 0;
+    std::optional<PortId>                             trainingThumbDataset;
+    std::vector<std::pair<TrainingImageId, quint64>>  trainingThumbSignature;
+    std::vector<ParameterListModel::Row>              buildParameterRows() const;
+    void                                              refreshParameterModel();
+    void                                              refreshTrainingModel();
 
     const NodeDefinition *currentNode() const;
     const NodeDefinition *findNode(NodeId id) const;
@@ -356,8 +369,14 @@ struct AppController::Impl : PresentationHost
         emit q->resultsChanged();
     }
 
+    void thumbnailVersionChanged() override
+    {
+        emit q->resultThumbnailVersionChanged();
+    }
+
     void runtimeChanged() override
     {
+        refreshAssist();
         emit q->runtimeChanged();
     }
 
@@ -437,7 +456,9 @@ struct AppController::Impl : PresentationHost
     bool publishTraining(const TrainingSpec &spec,
                          const std::map<std::string, PendingTrainingArtifact> &artifacts,
                          ToolResult &result);
-    void finishRoi();
+    void                 flushRoiDraftRow();
+    void                 stopRoiDraftSync();
+    void                 finishRoi();
     void storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 
     // Smart point selection.

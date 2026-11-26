@@ -6,6 +6,7 @@
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/RoiEditSession.h"
+#include "ui/ThumbnailStore.h"
 
 #include <QPointer>
 #include <QVariantMap>
@@ -51,6 +52,7 @@ public:
     virtual QVariantMap portContext(PortId port) const                                     = 0;
     virtual void        deliverText(const QString &text)                                   = 0;
     virtual void        resultsChanged()                                                   = 0;
+    virtual void        thumbnailVersionChanged() {}
     virtual void        runtimeChanged()                                                   = 0;
     virtual void        endRoiEdit()                                                       = 0;
     virtual void        reportDiagnostic(const ApplicationDiagnostic &diagnostic)          = 0;
@@ -64,7 +66,8 @@ public:
 class ResultPresentation
 {
 public:
-    ResultPresentation(PresentationHost &host, OutputModel &outputs, RoiEditSession &roi, QObject *parent);
+    ResultPresentation(PresentationHost &host, OutputModel &outputs, RoiEditSession &roi, QObject *parent,
+                       std::shared_ptr<ThumbnailStore> thumbnailStore = {});
     ~ResultPresentation();
     ResultPresentation(const ResultPresentation &)            = delete;
     ResultPresentation &operator=(const ResultPresentation &) = delete;
@@ -138,12 +141,15 @@ public:
 
     void           adoptViewport(ImageViewport *target);
     void           adoptThumbnail(ImageViewport *target);
+    void           setThumbnailsEnabled(bool enabled);
     ImageViewport *viewport() const;
 
     QVariantList imageOutputs() const;
     int          imageIndex() const;
     int          imageCount() const;
     QString      selectedImageOutput() const;
+    quint64      thumbnailVersion() const noexcept { return thumbnailVersion_; }
+    QString      thumbnailUrl(int index) const;
     bool         setImageIndex(int index);
     bool         setImageOutput(const QString &output);
     // Restores the pre-edit index without the user-command guards; the ROI session owns that rule.
@@ -200,11 +206,36 @@ private:
     // Keeps the panel on a real image: a node without a usable selection adopts the first offered
     // port that already carries images, so switching nodes never lands on an empty canvas.
     void                     ensureImageSelection(const NodeDefinition &node, const ResultSlot::Snapshot &snapshot);
+    void                     clearThumbnails();
+
+    struct ThumbnailBatchKey
+    {
+        struct FrameKey
+        {
+            const void *data = nullptr;
+            int         rows = 0;
+            int         cols = 0;
+            int         type = 0;
+            std::size_t step = 0;
+            bool        operator==(const FrameKey &) const = default;
+        };
+
+        std::uint64_t         generation = 0;
+        ColorOrder            color      = ColorOrder::Automatic;
+        std::vector<FrameKey> frames;
+        bool                  operator==(const ThumbnailBatchKey &) const = default;
+    };
 
     PresentationHost &host_;
     OutputModel      &outputs_;
     RoiEditSession   &roi_;
     DisplayConverter  converter_;
+    std::shared_ptr<ThumbnailStore> thumbnailStore_;
+    bool              thumbnailsEnabled_ = false;
+    quint64           thumbnailVersion_  = 0;
+    std::optional<ThumbnailBatchKey> publishedThumbnailBatch_;
+    std::optional<ThumbnailBatchKey> pendingThumbnailBatch_;
+    quint64                          pendingThumbnailRequest_ = 0;
     RuntimeEngine    *runtime_ = nullptr;
 
     std::map<NodeId, ResultSlot::Snapshot>                  snapshots_;

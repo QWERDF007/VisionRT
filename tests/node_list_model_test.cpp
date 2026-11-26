@@ -68,7 +68,8 @@ try
     require(model.update(row("3", "检测", 4, NodeState::Running)), "state change was ignored");
     require(changed.count() == 1, "state change did not emit exactly one dataChanged");
     const auto roles = changed.first().at(2).value<QList<int>>();
-    require(roles == QList<int>{NodeListModel::StateRole}, "state change reported unrelated roles");
+    require(roles == QList<int>{NodeListModel::StateRole, NodeListModel::DisplayStateRole},
+            "state change reported unrelated roles");
 
     // The legacy map view stays consistent with the roles for existing consumers.
     const auto record = model.rowMap("3");

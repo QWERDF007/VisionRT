@@ -1,10 +1,12 @@
 #include "ui/DisplayConverter.h"
+#include "ui/ThumbnailStore.h"
 
 #include <QMetaObject>
 #include <QThread>
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <opencv2/imgproc.hpp>
 #include <utility>
 
 namespace visionrt {
@@ -270,6 +272,28 @@ DisplayFrame DisplayConverter::convert(const cv::Mat &image, ColorOrder colorOrd
     return result;
 }
 
+DisplayFrame DisplayConverter::convertThumbnail(const cv::Mat &image, ColorOrder colorOrder, int maxEdge)
+{
+    if (image.empty() || maxEdge <= 0)
+        return {};
+    const int depth = CV_MAT_DEPTH(image.type());
+    const bool canResize = depth == CV_8U || depth == CV_16U || depth == CV_32F || depth == CV_64F;
+    if (canResize && (image.cols > maxEdge || image.rows > maxEdge))
+    {
+        const double scale  = static_cast<double>(maxEdge) / static_cast<double>(std::max(image.cols, image.rows));
+        const int    targetW = std::max(1, static_cast<int>(std::lround(image.cols * scale)));
+        const int    targetH = std::max(1, static_cast<int>(std::lround(image.rows * scale)));
+        cv::Mat      resized;
+        cv::resize(image, resized, cv::Size(targetW, targetH), 0.0, 0.0, cv::INTER_AREA);
+        auto frame  = convert(resized, colorOrder);
+        frame.image = ThumbnailStore::scaleForThumbnail(frame.image);
+        return frame;
+    }
+    auto frame  = convert(image, colorOrder);
+    frame.image = ThumbnailStore::scaleForThumbnail(frame.image);
+    return frame;
+}
+
 void DisplayConverter::invalidate(quint64 generation)
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -279,7 +303,8 @@ void DisplayConverter::invalidate(quint64 generation)
     pending_.reset();
 }
 
-void DisplayConverter::requestBatch(DataRef<Image> images, ColorOrder colorOrder, quint64 requestId, quint64 generation)
+void DisplayConverter::requestBatch(DataRef<Image> images, ColorOrder colorOrder, quint64 requestId, quint64 generation,
+                                    std::optional<DataRef<Image>> thumbnailBatch)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     if (generation < generation_)
@@ -290,7 +315,8 @@ void DisplayConverter::requestBatch(DataRef<Image> images, ColorOrder colorOrder
         return;
     hasRequest_      = true;
     latestRequestId_ = requestId;
-    Request request{std::move(images), std::move(colorOrder), requestId, generation, ++serial_};
+    Request request{std::move(images), std::move(thumbnailBatch), std::move(colorOrder), requestId, generation,
+                    ++serial_};
     if (busy_)
         pending_ = std::move(request);
     else
@@ -321,7 +347,9 @@ void DisplayConverter::run(std::stop_token stop)
             work_.reset();
             reading_ = true;
         }
-        const auto                serial = request->serial;
+        const auto                serial     = request->serial;
+        const auto                generation = request->generation;
+        const auto                requestId  = request->requestId;
         std::vector<DisplayFrame> frames;
         frames.reserve(request->images.get().size());
         for (std::size_t i = 0; i < request->images.get().size(); ++i)
@@ -351,10 +379,45 @@ void DisplayConverter::run(std::stop_token stop)
                     frame.error = QString::fromUtf8(error.what());
                 }
             }
-            frame.generation = request->generation;
-            frame.requestId  = request->requestId;
+            frame.generation = generation;
+            frame.requestId  = requestId;
             frame.batchIndex = static_cast<int>(i);
             frames.push_back(std::move(frame));
+        }
+        std::vector<QImage> thumbnails;
+        if (request->thumbnailBatch && !request->thumbnailBatch->get().empty())
+        {
+            const auto &thumbSources = request->thumbnailBatch->get();
+            thumbnails.reserve(thumbSources.size());
+            for (std::size_t i = 0; i < thumbSources.size(); ++i)
+            {
+                if (stop.stop_requested())
+                    break;
+                const auto &source = thumbSources[i];
+                QImage      thumb;
+                for (std::size_t f = 0; f < request->images.get().size() && f < frames.size(); ++f)
+                {
+                    const auto &candidate = request->images.get()[f];
+                    if (source.data == candidate.data && source.rows == candidate.rows && source.cols == candidate.cols
+                        && source.type() == candidate.type() && source.step[0] == candidate.step[0])
+                    {
+                        thumb = ThumbnailStore::scaleForThumbnail(frames[f].image);
+                        break;
+                    }
+                }
+                if (thumb.isNull() && !source.empty())
+                {
+                    try
+                    {
+                        thumb = convertThumbnail(source, request->colorOrder, ThumbnailStore::kMaxEdge).image;
+                    }
+                    catch (const std::exception &)
+                    {
+                        thumb = {};
+                    }
+                }
+                thumbnails.push_back(std::move(thumb));
+            }
         }
         request.reset();
         {
@@ -366,12 +429,15 @@ void DisplayConverter::run(std::stop_token stop)
             return;
         // Do not begin another conversion until the GUI consumes this one event.
         QMetaObject::invokeMethod(
-            this, [this, frames = std::move(frames), serial]() mutable { complete(std::move(frames), serial); },
+            this,
+            [this, frames = std::move(frames), thumbnails = std::move(thumbnails), generation, requestId, serial]() mutable
+            { complete(std::move(frames), std::move(thumbnails), generation, requestId, serial); },
             Qt::QueuedConnection);
     }
 }
 
-void DisplayConverter::complete(std::vector<DisplayFrame> frames, quint64 serial)
+void DisplayConverter::complete(std::vector<DisplayFrame> frames, std::vector<QImage> thumbnails, quint64 generation,
+                                quint64 requestId, quint64 serial)
 {
     if (serial != activeSerial_)
         return;
@@ -379,6 +445,8 @@ void DisplayConverter::complete(std::vector<DisplayFrame> frames, quint64 serial
     if (serial == serial_ && hasRequest_)
     {
         emit batchConverted(frames);
+        if (!thumbnails.empty())
+            emit thumbnailsConverted(generation, requestId, thumbnails);
     }
     // A direct signal receiver may have submitted the next request already.
     if (!busy_ && pending_)

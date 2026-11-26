@@ -27,18 +27,18 @@
 
 ## 工作台
 
-- [主窗口](../src/ui/qml/Main.qml)、[控制器接口](../src/ui/include/ui/AppController.h)、[流程画布](../src/ui/qml/FlowCanvas.qml)。
-- [参数](../src/ui/qml/ParameterPanel.qml)、[结果](../src/ui/qml/ResultsPanel.qml)、[缩略图卡片](../src/ui/qml/ResultsThumbnailCard.qml)、[训练记录](../src/ui/qml/ResultsTrainingRecords.qml)、[ROI 编辑](../src/ui/RoiEditSession.cpp)。
+- [主窗口](../src/ui/qml/Main.qml)、[控制器接口](../src/ui/include/ui/AppController.h)、[流程画布](../src/ui/qml/FlowCanvas.qml)、[节点卡片](../src/ui/qml/NodeDelegate.qml)、[节点虚线边框](../src/ui/include/ui/DashedBorderItem.h)、[节点状态防抖模型](../src/ui/include/ui/NodeListModel.h)。
+- [参数](../src/ui/qml/ParameterPanel.qml)、[参数列表模型](../src/ui/include/ui/ParameterListModel.h)、[浮点参数编辑器](../src/ui/qml/FloatParameterEditor.qml)、[整数参数编辑器](../src/ui/qml/IntegerParameterEditor.qml)、[结果](../src/ui/qml/ResultsPanel.qml)、[缩略图存储与提供者](../src/ui/include/ui/ThumbnailStore.h)、[缩略图提供者实现](../src/ui/include/ui/ThumbnailImageProvider.h)、[缩略图卡片](../src/ui/qml/ResultsThumbnailCard.qml)、[训练记录模型](../src/ui/include/ui/TrainingRecordModel.h)、[训练记录](../src/ui/qml/ResultsTrainingRecords.qml)、[ROI 编辑](../src/ui/RoiEditSession.cpp)。
 - [工具编辑器](../src/ui/ToolEditorController.cpp)、[用户工具存储](../src/core/CustomToolStore.cpp)。
 - [设置](../src/ui/UiPreferences.cpp)、[关于信息](../src/ui/AboutReport.cpp)、[页签](../src/ui/qml/WorkbenchTabButton.qml)、[尺寸属性](../src/ui/include/ui/Size.h)、[颜色属性](../src/ui/include/ui/Color.h)。
 - [通用主题颜色](../3rdparty/QuickUI/src/Color.cpp)、[字体属性](../3rdparty/QuickUI/src/Font.cpp)、[工作台滚动条](../src/ui/qml/WorkbenchScrollBar.qml)、[滚动容器](../src/ui/qml/BoundedScrollView.qml)、[训练字段编辑器](../src/ui/qml/TrainingValueEditor.qml)。
 - [下拉框属性](../3rdparty/QuickUI/src/controls/QuiComboBox.qml)、[分组下拉框](../3rdparty/QuickUI/src/controls/QuiGroupComboBox.qml)、[参数下拉框](../src/ui/qml/ParameterComboBox.qml)。
-- [值的中文类型](../src/ui/DisplayTypes.cpp)、[输入输出数值显示](../src/ui/ValueDisplay.cpp)、[参数与分组投影](../src/ui/AppControllerMetadata.cpp)、[参数精度验证](../tests/ui_value_contract.cpp)、[完整输出数据](../src/ui/OutputModel.cpp)、[阶段输出校验](../src/core/ToolValueValidation.cpp)、[值编解码](../src/core/ValueJson.cpp)、[几何编辑验证](../tests/workbench_roi.cpp)、[输出数据验证](../tests/output_value_contract.cpp)。
+- [值的中文类型](../src/ui/DisplayTypes.cpp)、[输入输出数值显示](../src/ui/ValueDisplay.cpp)、[参数与分组投影](../src/ui/AppControllerMetadata.cpp)、[参数精度验证](../tests/ui_value_contract.cpp)、[输出模型](../src/ui/OutputModel.cpp)、[输出数据与关系](../src/ui/qml/OutputPanel.qml)、[连接上下文与候选](../src/ui/AppControllerBindings.cpp)、[阶段输出校验](../src/core/ToolValueValidation.cpp)、[值编解码](../src/core/ValueJson.cpp)、[几何编辑验证](../tests/workbench_roi.cpp)、[输出数据验证](../tests/output_value_contract.cpp)、[输出菜单验证](../tests/workbench_popups.cpp)。
 - [合流类型选择](../src/ui/qml/SelectTypeEditor.qml)、[类型选择与表达式验证](../tests/workbench_expression_contract.cpp)。
 - [ROI 手势](../src/ui/ImageViewportRoi.cpp)、[装饰绘制](../src/ui/RoiOverlay.cpp)、[几何与命中](../src/ui/RoiGeometry.h)、[参数编辑](../src/ui/qml/ParameterEditor.qml)、[交互验证](../tests/roi_interaction_contract.cpp)。
 - [ROI 显示、参数编辑与焦点验证](../tests/workbench_roi_persistence_contract.cpp)、[中心悬浮标签与 ROI 绘制验证](../tests/viewport_contract.cpp)。
 - [像素来源与显示转换](../src/ui/DisplayConverter.cpp)、[Alt 像素读取](../src/ui/ImageViewport.cpp)、[指针提示](../src/ui/qml/ResultsImageView.qml)、[像素验证](../tests/viewport_pixel_contract.cpp)、[实际窗口与截图验证](../tests/viewport_contract.cpp)。
-- [节点悬浮提示](../src/ui/qml/FlowCanvas.qml)、[节点提示与状态验证](../tests/workbench_status_contract.cpp)、[像素提示与焦点验证](../tests/workbench_roi_persistence_contract.cpp)。
+- [节点悬浮提示](../src/ui/qml/FlowCanvas.qml)、[节点提示与状态验证](../tests/workbench_status_contract.cpp)、[节点防抖与虚线边框验证](../tests/node_display_debounce_contract.cpp)、[参数模型增量验证](../tests/parameter_model_contract.cpp)、[缩略图提供者验证](../tests/training_image_provider_contract.cpp)、[像素提示与焦点验证](../tests/workbench_roi_persistence_contract.cpp)。
 
 ## 构建与发行
 

@@ -77,6 +77,11 @@ struct FakeHost final : PresentationHost
         return nullptr;
     }
 
+    QString inputPortName(const NodeDefinition &, PortId) const override
+    {
+        return {};
+    }
+
     const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &, const NodeDefinition &) const override
     {
         return nullptr;

@@ -34,11 +34,13 @@ Item {
     Connections {
         target: app
         function onSelectionChanged() { root.refreshGroups(); }
-        function onTrainingChanged() { root.refreshGroups(); }
-        function onParametersChanged() { root.refreshGroups(); }
+    }
+    Connections {
+        target: app.parameterModel
+        function onGroupsChanged() { root.refreshGroups(); }
     }
     function refreshGroups() {
-        let result = app.parameterGroups.filter(function (group) { return group.tab === root.parameterTab; });
+        let result = app.parameterModel.groupsForTab(root.parameterTab);
         if (!isSameGroups(result, parameterGroups)) parameterGroups = result;
     }
     visible: app.selectedNode.length > 0
@@ -107,11 +109,27 @@ Item {
                             Loader {
                                 id: parameterRow
                                 required property var modelData
-                                readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode ? app.parameters.find(function (parameter) {
-                                    return parameter.id === parameterRow.modelData.id && parameter.stage === parameterRow.modelData.stage && parameter.recordId === parameterRow.modelData.recordId && !!parameter.recordScoped === !!parameterRow.modelData.recordScoped && parameter.datasetId === parameterRow.modelData.datasetId;
-                                }) : undefined
+                                readonly property string rowKey: modelData.key || ""
+                                property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode
+                                                               ? app.parameterModel.rowByKey(rowKey)
+                                                               : ({})
+                                Connections {
+                                    target: app.parameterModel
+                                    function onDataChanged(topLeft, bottomRight) {
+                                        if (parameterGroup.modelData.nodeId !== app.selectedNode)
+                                            return;
+                                        const idx = app.parameterModel.rowIndexOf(parameterRow.rowKey);
+                                        if (idx >= topLeft.row && idx <= bottomRight.row)
+                                            parameterRow.currentParameter = app.parameterModel.rowByKey(parameterRow.rowKey);
+                                    }
+                                    function onModelReset() {
+                                        parameterRow.currentParameter = parameterGroup.modelData.nodeId === app.selectedNode
+                                                                        ? app.parameterModel.rowByKey(parameterRow.rowKey)
+                                                                        : ({});
+                                    }
+                                }
                                 Layout.fillWidth: true
-                                active: currentParameter !== undefined
+                                active: currentParameter !== undefined && currentParameter !== null && Object.keys(currentParameter).length > 0
                                 sourceComponent: ParameterEditor {
                                     nodeId: parameterGroup.modelData.nodeId
                                     parameter: parameterRow.currentParameter

@@ -509,6 +509,10 @@ Rectangle {
         function onLayoutChanged() {
             Qt.callLater(table.forceLayout);
         }
+        function onDataChanged() {
+            if (root.relations)
+                Qt.callLater(table.forceLayout);
+        }
     }
     Connections {
         target: root.Window.window

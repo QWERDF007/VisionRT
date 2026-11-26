@@ -334,10 +334,10 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                     if (const auto *suggested = std::get_if<std::int64_t>(&value))
                         compatible = compare(*number, *suggested);
                 }
-                else if (const auto *number = std::get_if<double>(current))
+                else if (const auto *realNumber = std::get_if<double>(current))
                 {
                     if (const auto *suggested = std::get_if<double>(&value))
-                        compatible = compare(*number, *suggested);
+                        compatible = compare(*realNumber, *suggested);
                 }
             }
             if (!compatible)

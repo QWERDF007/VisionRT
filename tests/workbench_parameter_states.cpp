@@ -124,15 +124,16 @@ void parameterStatesContract(visionrt::AppController &app)
     capture("numeric_focus");
     QTest::keyClick(window, Qt::Key_A, Qt::ControlModifier);
     QTest::keyClick(window, Qt::Key_X);
+    require(ratioInput->property("text").toString() == QStringLiteral("0.35"),
+            "numeric keystroke validator allowed an illegal character");
+    QTest::keyClick(window, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(window, Qt::Key_Minus);
     QTest::keyClick(window, Qt::Key_Return);
-    // Validation still rejects the draft, but the field keeps it without painting itself red and
-    // the committed value is untouched.
-    require(ratioInput->property("text").toString() == QStringLiteral("x"),
-            "a rejected numeric draft was replaced instead of kept for correction");
+    require(ratioInput->property("text").toString() == QStringLiteral("0.35"),
+            "a rejected numeric draft did not roll back to the committed value");
     require(!ratio->property("invalid").toBool(),
             "a rejected numeric draft still paints the field as invalid");
     capture("rejected_draft");
-    QTest::keyClick(window, Qt::Key_Escape);
     auto *choiceRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Mode));
     QQuickItem *choice = nullptr;
     require(choiceRow != nullptr, "actual enum row is missing");

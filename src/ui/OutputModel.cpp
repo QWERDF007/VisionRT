@@ -89,6 +89,16 @@ QVariantList relationVariants(const std::vector<OutputRelation> &relations)
         });
     return result;
 }
+
+bool equalRelations(const std::vector<OutputRelation> &a, const std::vector<OutputRelation> &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (a[i].node != b[i].node || a[i].port != b[i].port || a[i].label != b[i].label)
+            return false;
+    return true;
+}
 } // namespace
 
 QString typeText(const TypeSpec &type)
@@ -115,6 +125,8 @@ OutputModel::OutputModel(QObject *parent)
 
 void OutputModel::clear()
 {
+    if (rows_.empty())
+        return;
     beginResetModel();
     rows_.clear();
     endResetModel();
@@ -130,10 +142,9 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     {
         if (snapshot)
             status = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
-
     }
-    beginResetModel();
-    rows_.clear();
+
+    std::vector<Row> nextRows;
     auto add = [&](PortId id, std::string name, TypeSpec type, bool system)
     {
         PortValue value = Missing{};
@@ -174,7 +185,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
             const auto rawMsg = q(diagnostic.status.message);
             row.tooltip = !rawMsg.trimmed().isEmpty() ? rawMsg : statusSummary(diagnostic.status);
         }
-        rows_.push_back(std::move(row));
+        nextRows.push_back(std::move(row));
     };
     add(kStatusCodePort, "状态码", {Type::Int}, true);
     add(kStatusMessagePort, "状态消息", {Type::String}, true);
@@ -195,7 +206,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                     row.type = QStringLiteral("未绑定");
                     row.tooltip = QStringLiteral("请选择源流程、源节点和输出端口");
                     row.resolved = false;
-                    rows_.push_back(std::move(row));
+                    nextRows.push_back(std::move(row));
                 }
             }
         }
@@ -205,6 +216,70 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
             if (!isReservedPort(PortStage::Outputs, id))
                 add(id, portLabel(id), type, false);
         }
+
+    const bool sameTopology = nextRows.size() == rows_.size()
+        && std::equal(rows_.begin(), rows_.end(), nextRows.begin(),
+                      [](const Row &a, const Row &b)
+                      { return a.id == b.id && a.system == b.system && a.resolved == b.resolved; });
+
+    if (sameTopology)
+    {
+        const int lastCol = columnCount() - 1;
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+        {
+            const auto &prev = rows_[i];
+            auto       &next = nextRows[i];
+            QList<int>  changed;
+            bool        displayChanged = false;
+            if (prev.name != next.name)
+            {
+                changed.push_back(NameRole);
+                displayChanged = true;
+            }
+            if (prev.type != next.type)
+            {
+                changed.push_back(TypeRole);
+                displayChanged = true;
+            }
+            if (prev.captured.type != next.captured.type)
+                changed.push_back(TypeDisplayRole);
+            if (prev.preview != next.preview)
+            {
+                changed.push_back(PreviewRole);
+                displayChanged = true;
+            }
+            if (prev.tooltip != next.tooltip)
+            {
+                changed.push_back(TooltipRole);
+                changed.push_back(Qt::ToolTipRole);
+            }
+            if (!equalRelations(prev.relations, next.relations))
+            {
+                changed.push_back(RelationsRole);
+                changed.push_back(CountRole);
+                displayChanged = true;
+            }
+            if (prev.connectable != next.connectable)
+                changed.push_back(ConnectableRole);
+            const bool prevDiag = static_cast<bool>(prev.captured.diagnostic || prev.captured.lifecycle);
+            const bool nextDiag = static_cast<bool>(next.captured.diagnostic || next.captured.lifecycle);
+            if (prevDiag != nextDiag)
+                changed.push_back(DiagnosticRole);
+            if (displayChanged)
+                changed.push_back(Qt::DisplayRole);
+
+            rows_[i] = std::move(next);
+            if (!changed.isEmpty())
+            {
+                const int rowIdx = static_cast<int>(i);
+                emit dataChanged(index(rowIdx, 0), index(rowIdx, lastCol), changed);
+            }
+        }
+        return;
+    }
+
+    beginResetModel();
+    rows_ = std::move(nextRows);
     endResetModel();
 }
 

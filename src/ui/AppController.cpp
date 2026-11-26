@@ -13,6 +13,7 @@
 #include "ui/AboutReport.h"
 #include "ui/Diagnostics.h"
 #include "ui/DurationText.h"
+#include "ui/ThumbnailImageProvider.h"
 #include "ui/TrainingAssets.h"
 #include "ui/UiPreferences.h"
 
@@ -28,6 +29,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QQmlEngine>
 #include <QUrl>
 #include <algorithm>
 #include <cmath>
@@ -199,6 +201,9 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     QObject::connect(&timer, &QTimer::timeout, owner, [this] { poll(); });
     timer.setInterval(34);
     timer.start();
+    roiDraftSyncTimer.setSingleShot(true);
+    roiDraftSyncTimer.setInterval(33);
+    QObject::connect(&roiDraftSyncTimer, &QTimer::timeout, owner, [this] { flushRoiDraftRow(); });
     QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, owner,
                      [this](Qt::ApplicationState state)
                      {
@@ -272,6 +277,8 @@ AppController::Impl::~Impl()
     // go, and the events they arrived in are removed with the timer below.
     tearingDown = true;
     timer.stop();
+    roiDraftSyncTimer.stop();
+    pendingRoiDraftTarget.reset();
     // The helper owns images and may still be executing; release it before any runtime state goes.
     if (assist)
         assist->shutdown();
@@ -558,8 +565,8 @@ void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDia
 
 void AppController::Impl::clearResults()
 {
-    parameterRows.clear();
-    parameterRowsNode = 0;
+    parameterModel.clear();
+    parameterModelNode = 0;
     flowLatestMs.clear();
     latestRoundMs.reset();
     latestElapsedMs = 0;
@@ -1054,8 +1061,17 @@ void AppController::Impl::finishClose()
     if (auto *viewport = presentation.viewport())
         viewport->setAssistActive(false);
     roiSession.end();
-    parameterRows.clear();
-    parameterRowsNode = 0;
+    parameterModel.clear();
+    parameterModelNode = 0;
+    trainingRecordModel.clear();
+    trainingThumbSignature.clear();
+    trainingThumbNode = 0;
+    trainingThumbDataset.reset();
+    if (thumbnailStore)
+    {
+        thumbnailStore->clearNamespace(QStringLiteral("training/"));
+        thumbnailStore->clearNamespace(QStringLiteral("results/"));
+    }
     clipboard.reset();
     operations.clearReplacement();
     refreshResult.reset();
@@ -1414,11 +1430,43 @@ AppController::AppController(std::size_t workers, const QString &applicationDire
     : QObject(parent)
     , impl_(std::make_unique<Impl>(this, workers, applicationDirectory))
 {
+    connect(this, &AppController::selectionChanged, this,
+            [this]
+            {
+                impl_->refreshParameterModel();
+                impl_->refreshTrainingModel();
+            });
+    connect(this, &AppController::parametersChanged, this, [this] { impl_->refreshParameterModel(); });
+    connect(this, &AppController::trainingChanged, this, [this] { impl_->refreshTrainingModel(); });
     // Training availability is a function of the selected tool, so every selection change refreshes
     // it through the one signal instead of each command remembering to announce it.
     connect(this, &AppController::selectionChanged, this, &AppController::trainingChanged);
     connect(this, &AppController::trainingChanged, this, &AppController::resultsChanged);
     connect(this, &AppController::runtimeChanged, this, &AppController::resultsChanged);
+}
+
+void AppController::registerImageProviders(QQmlEngine *engine)
+{
+    if (!engine || !impl_ || !impl_->thumbnailStore)
+        return;
+    if (!engine->imageProvider(QStringLiteral("visionrt_training")))
+        engine->addImageProvider(QStringLiteral("visionrt_training"),
+                                 new ThumbnailImageProvider(impl_->thumbnailStore, QStringLiteral("training/")));
+    if (!engine->imageProvider(QStringLiteral("visionrt_results")))
+        engine->addImageProvider(QStringLiteral("visionrt_results"),
+                                 new ThumbnailImageProvider(impl_->thumbnailStore, QStringLiteral("results/")));
+    impl_->presentation.setThumbnailsEnabled(true);
+}
+
+bool AppController::ensureImageProviders(QObject *contextObject)
+{
+    if (!contextObject)
+        return false;
+    auto *engine = qmlEngine(contextObject);
+    if (!engine)
+        return false;
+    registerImageProviders(engine);
+    return true;
 }
 
 AppController::~AppController() = default;

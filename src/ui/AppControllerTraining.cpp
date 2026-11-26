@@ -509,9 +509,86 @@ void AppController::setTrainingMode(bool value)
     emit resultsChanged();
 }
 
+void AppController::Impl::refreshTrainingModel()
+{
+    if (!training || !training->active() || !training->datasetParameter())
+    {
+        trainingRecordModel.clear();
+        if (!trainingThumbSignature.empty() || trainingThumbNode != 0 || trainingThumbDataset.has_value())
+        {
+            trainingThumbSignature.clear();
+            trainingThumbNode = 0;
+            trainingThumbDataset.reset();
+            if (thumbnailStore)
+                thumbnailStore->clearNamespace(QStringLiteral("training/"));
+        }
+        return;
+    }
+
+    const auto nodeId    = training->node();
+    const auto datasetId = *training->datasetParameter();
+    const auto &images   = training->images();
+
+    std::vector<std::pair<TrainingImageId, quint64>> signature;
+    signature.reserve(images.size());
+    for (const auto &img : images)
+        signature.emplace_back(img.id, img.thumbnailRevision);
+
+    if (trainingThumbNode != nodeId || trainingThumbDataset != datasetId || trainingThumbSignature != signature)
+    {
+        trainingThumbNode      = nodeId;
+        trainingThumbDataset   = datasetId;
+        trainingThumbSignature = std::move(signature);
+        if (thumbnailStore)
+        {
+            std::vector<std::pair<QString, QImage>> entries;
+            entries.reserve(images.size());
+            for (const auto &img : images)
+                if (!img.thumbnailImage.isNull())
+                    entries.emplace_back(QStringLiteral("%1/%2/%3").arg(nodeId).arg(datasetId).arg(img.id),
+                                         img.thumbnailImage);
+            thumbnailStore->replaceNamespace(QStringLiteral("training/"), std::move(entries));
+        }
+    }
+
+    const auto                      &records = training->records();
+    std::vector<TrainingRecordModel::Row> rows;
+    rows.reserve(records.size());
+    for (std::size_t i = 0; i < records.size(); ++i)
+    {
+        const auto &rec   = records[i];
+        QString     url;
+        if (rec.image)
+        {
+            const auto found = std::ranges::find(images, *rec.image, &TrainingDraftImage::id);
+            if (found != images.end() && !found->thumbnailImage.isNull())
+                url = QStringLiteral("image://visionrt_training/%1/%2/%3?v=%4")
+                          .arg(nodeId)
+                          .arg(datasetId)
+                          .arg(found->id)
+                          .arg(found->thumbnailRevision);
+        }
+        rows.push_back({
+            rec.id(),
+            rec.image ? QVariant(*rec.image) : QVariant{},
+            std::move(url),
+            static_cast<int>(training->regions(static_cast<int>(i)).size()),
+            static_cast<int>(i) == training->selected(),
+            training->fields(static_cast<int>(i))
+        });
+    }
+    trainingRecordModel.sync(std::move(rows));
+}
+
+QAbstractListModel *AppController::trainingRecordModel() const
+{
+    return &impl_->trainingRecordModel;
+}
+
 QVariantList AppController::trainingRecords() const
 {
-    return impl_->training ? impl_->training->rows() : QVariantList{};
+    impl_->refreshTrainingModel();
+    return impl_->trainingRecordModel.snapshot();
 }
 
 QString AppController::selectedTrainingDraftRecord() const

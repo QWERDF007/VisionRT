@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Shapes
 import quickui
 import VisionRT.Ui 1.0
 
@@ -13,6 +12,7 @@ Rectangle {
     required property string nodeCategory
     required property string nodeVersion
     required property int nodeStatus
+    required property int nodeDisplayStatus
     required property bool nodeMissing
     required property string nodeTimingText
     property bool selected: false
@@ -31,10 +31,11 @@ Rectangle {
     opacity: root.isMissing ? 0.78 : 1.0
     objectName: "flowNode_" + nodeId
 
-    readonly property int nodeState: root.nodeStatus
+    readonly property int nodeState: root.nodeDisplayStatus
     readonly property bool isMissing: root.nodeMissing === true
     readonly property bool isError: !root.isMissing && root.nodeState === NodeState.Failed
     readonly property bool runningNow: !root.isMissing && root.nodeState === NodeState.Running
+    readonly property bool dashedBorder: root.selected || root.isMissing
     readonly property color headerBg: {
         if (root.isMissing)
             return VisionRTColor.NodeWarning;
@@ -46,10 +47,8 @@ Rectangle {
     }
     readonly property color headerText: root.runningNow || root.isError || root.isMissing ? QuiColor.White : QuiColor.FontPrimary
 
-    // The running border is its own layer: selecting a node must not hide that it is running.
-    // Missing-plugin nodes render a dashed warning border via Shape below instead of a solid frame.
     border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? VisionRTColor.NodeRed : QuiColor.Border)
-    border.width: root.isMissing ? 0 : (root.runningNow ? 2 : 1)
+    border.width: root.dashedBorder ? 0 : (root.runningNow ? 2 : 1)
 
     function getIcon(title, category) {
         let t = (title + " " + category).toLowerCase();
@@ -146,69 +145,19 @@ Rectangle {
         }
     }
 
-    Shape {
+    Loader {
+        id: nodeBorderLoader
+        objectName: "nodeDashedBorderLoader_" + root.nodeId
         anchors.fill: parent
-        visible: root.isMissing && !root.selected
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            id: missingBorderPath
-            readonly property real inset: 0.75 / Math.max(0.01, root.viewScale)
-            strokeColor: VisionRTColor.NodeWarning
-            strokeWidth: 1.5 / Math.max(0.01, root.viewScale)
-            strokeStyle: ShapePath.DashLine
-            dashPattern: [5, 3]
-            fillColor: "transparent"
-            startX: missingBorderPath.inset
-            startY: missingBorderPath.inset
-            PathLine {
-                x: root.width - missingBorderPath.inset
-                y: missingBorderPath.inset
-            }
-            PathLine {
-                x: root.width - missingBorderPath.inset
-                y: root.height - missingBorderPath.inset
-            }
-            PathLine {
-                x: missingBorderPath.inset
-                y: root.height - missingBorderPath.inset
-            }
-            PathLine {
-                x: missingBorderPath.inset
-                y: missingBorderPath.inset
-            }
-        }
-    }
-
-    Shape {
-        anchors.fill: parent
-        visible: root.selected
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            id: selectionPath
-            readonly property real inset: 1 / Math.max(0.01, root.viewScale)
-            strokeColor: QuiColor.Highlight
-            strokeWidth: 2 / Math.max(0.01, root.viewScale)
-            strokeStyle: ShapePath.DashLine
-            dashPattern: [4, 4]
-            fillColor: "transparent"
-            startX: selectionPath.inset
-            startY: selectionPath.inset
-            PathLine {
-                x: root.width - selectionPath.inset
-                y: selectionPath.inset
-            }
-            PathLine {
-                x: root.width - selectionPath.inset
-                y: root.height - selectionPath.inset
-            }
-            PathLine {
-                x: selectionPath.inset
-                y: root.height - selectionPath.inset
-            }
-            PathLine {
-                x: selectionPath.inset
-                y: selectionPath.inset
-            }
+        active: root.dashedBorder
+        sourceComponent: DashedBorder {
+            objectName: "nodeDashedBorder_" + root.nodeId
+            borderColor: root.selected ? QuiColor.Highlight : VisionRTColor.NodeWarning
+            borderWidth: root.selected ? 2.0 : 1.5
+            radius: root.radius
+            dashLength: root.selected ? 6.0 : 5.0
+            gapLength: root.selected ? 4.0 : 3.0
+            viewScale: root.viewScale
         }
     }
 

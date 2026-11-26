@@ -9,10 +9,12 @@
 #include <QQuickItem>
 #include <QQuickPaintedItem>
 #include <QSize>
+#include <QTimer>
 #include <QTransform>
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace visionrt {
@@ -249,6 +251,8 @@ protected:
     void     mouseUngrabEvent() override;
     void     wheelEvent(QWheelEvent *event) override;
     void     keyPressEvent(QKeyEvent *event) override;
+    void     keyReleaseEvent(QKeyEvent *event) override;
+    void     focusOutEvent(QFocusEvent *event) override;
     void     hoverEnterEvent(QHoverEvent *event) override;
     void     hoverMoveEvent(QHoverEvent *event) override;
     void     hoverLeaveEvent(QHoverEvent *event) override;
@@ -273,11 +277,13 @@ private:
     void                         zoomAt(double factor, QPointF itemPoint);
     void                         selectRoi(int index);
     bool                         canEdit() const;
-    void                         changeDraft(QPointF imagePoint);
+    void                         changeDraft(QPointF imagePoint, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
     std::optional<EncodedRegion> completedDraft() const;
     std::vector<QPointF>         handles(const EncodedRegion &roi) const;
     const EncodedRegion        *activeRegion() const;
-    void                         updateCircleHandle(QPointF itemPoint);
+    bool                         updateCircleHandle(QPointF itemPoint);
+    bool                         computeHoverCenterHandle(QPointF itemPoint) const;
+    void                         flushPendingKeyCommit();
     int                          hitRoi(QPointF imagePoint) const;
     void                         commitDraft();
     void                         clearGesture();
@@ -297,7 +303,11 @@ private:
     bool                         pointerInside_ = false;
     bool                         altHeld_ = false;
     QPointF                      pointerPosition_;
+    QPointF                      lastProbePosition_;
     QString                      pixelText_;
+    bool                         hoveringCenterHandle_ = false;
+    QTimer                       keyCommitTimer_;
+    std::optional<std::pair<RoiEditTarget, EncodedRegion>> pendingKeyCommit_;
     QSize                        imageSize_;
     QString                      statusText_;
     quint64                      generation_      = 0;

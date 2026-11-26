@@ -8,6 +8,7 @@ Rectangle {
     id: root
     objectName: "resultsPanel"
     color: QuiColor.Primary
+    readonly property bool _providersReady: app.ensureImageProviders(root)
 
     QuiMenu {
         id: trainingMenu

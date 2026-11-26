@@ -11,57 +11,103 @@ QuiStepperField {
 
     property string valueText: ""
     property string parameterId: ""
+    property string parameterKey: ""
     property bool canDecrement: false
     property bool canIncrement: false
     property var commitValue
     property var stepValue
 
-    // A rejected draft is reported to whoever owns the value; this control has no global dependency.
     signal rejected(string text)
 
-    property string _lastValue: ""
+    property bool _skipRequest: false
+    property bool _dirty: false
 
     implicitHeight: VisionRTSize.ContentSize
     canDecrease: enabled && !readOnly && canDecrement
     canIncrease: enabled && !readOnly && canIncrement
-    onTextEdited: invalid = false
 
-    function sync() {
-        if (inputItem.activeFocus && text !== _lastValue)
+    RegularExpressionValidator {
+        id: intKeystrokeValidator
+        regularExpression: /^[+-]?\d{0,19}$/
+    }
+
+    function _isValidInt64(raw) {
+        const trimmed = String(raw).trim();
+        if (!/^[+-]?\d+$/.test(trimmed))
+            return false;
+        const negative = trimmed.startsWith("-");
+        let digits = (trimmed.startsWith("+") || negative) ? trimmed.slice(1) : trimmed;
+        digits = digits.replace(/^0+/, "") || "0";
+        const limit = negative ? "9223372036854775808" : "9223372036854775807";
+        if (digits.length !== limit.length)
+            return digits.length < limit.length;
+        return digits <= limit;
+    }
+
+    function _setTextSilently(value) {
+        _skipRequest = true;
+        text = value;
+        _skipRequest = false;
+    }
+
+    function sync(force) {
+        if (!force && inputItem.activeFocus && _dirty)
             return;
-        _lastValue = valueText;
-        text = valueText;
+        _setTextSilently(valueText);
+        _dirty = false;
         invalid = false;
     }
 
-    onValueTextChanged: sync()
-    Component.onCompleted: sync()
+    onTextChanged: {
+        if (_skipRequest)
+            return;
+        _dirty = (text !== valueText);
+        invalid = false;
+    }
+    onValueTextChanged: sync(false)
+    onParameterKeyChanged: sync(true)
+    Component.onCompleted: {
+        inputItem.validator = intKeystrokeValidator;
+        sync(true);
+    }
 
     onCommitRequested: {
+        if (_skipRequest || !enabled || readOnly || inputItem.inputMethodComposing)
+            return;
         if (text === valueText) {
+            _dirty = false;
             invalid = false;
             return;
         }
-        // A rejected draft stays in the field for the user to correct; validation is reported to
-        // the owner of the value instead of painting the row red.
-        if (commitValue(text)) {
-            _lastValue = text;
-            invalid = false;
-        } else {
+        const trimmed = text.trim();
+        if (!_isValidInt64(trimmed) || !commitValue || commitValue(trimmed) !== true) {
             rejected(text);
-            invalid = false;
+            sync(true);
+            return;
         }
+        sync(true);
     }
-    onCancelRequested: {
-        text = valueText;
-        invalid = false;
-    }
+    onCancelRequested: sync(true)
     onDecreaseRequested: {
-        _lastValue = text;
-        stepValue(-1, text);
+        if (_skipRequest || !enabled || readOnly || inputItem.inputMethodComposing)
+            return;
+        const trimmed = text.trim();
+        if (!_isValidInt64(trimmed) || !stepValue || stepValue(-1, trimmed) !== true) {
+            rejected(text);
+            sync(true);
+            return;
+        }
+        sync(true);
     }
     onIncreaseRequested: {
-        _lastValue = text;
-        stepValue(1, text);
+        if (_skipRequest || !enabled || readOnly || inputItem.inputMethodComposing)
+            return;
+        const trimmed = text.trim();
+        if (!_isValidInt64(trimmed) || !stepValue || stepValue(1, trimmed) !== true) {
+            rejected(text);
+            sync(true);
+            return;
+        }
+        sync(true);
     }
 }

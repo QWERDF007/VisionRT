@@ -208,6 +208,7 @@ int main(int argc, char *argv[])
         visionrt::registerUiTypes();
         (void)quickui::QuiColor::getInstance();
         QQmlApplicationEngine engine;
+        controller.registerImageProviders(&engine);
         engine.addImportPath(QCoreApplication::applicationDirPath());
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);

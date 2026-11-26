@@ -4,6 +4,7 @@
 #include "ui/ImageViewport.h"
 
 #include <QGuiApplication>
+#include <QHoverEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <array>
@@ -11,10 +12,10 @@
 #include <cmath>
 using namespace visionrt;
 
-void mouse(ImageViewport &view, QEvent::Type type, QPointF point)
+void mouse(ImageViewport &view, QEvent::Type type, QPointF point, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     QMouseEvent event(type, point, point, type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
-                      type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+                      type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, modifiers);
     QCoreApplication::sendEvent(&view, &event);
 }
 
@@ -112,4 +113,53 @@ int main(int argc, char **argv)
             mouse(view, QEvent::MouseButtonRelease, outside + QPointF(10, 10));
             assert(result[5] == angle && "Pressing outside a rotation icon must not rotate the ROI");
         }
+
+    // Ctrl modifier snaps rectangle rotation to 15-degree increments
+    view.restoreViewState({ImageViewport::Manual, 1.0, {200, 200}});
+    {
+        const auto rect    = makeRectangle(100, 120, 200, 160, 0.0);
+        const auto corners = RegionView(rect).rectangle().corners();
+        view.beginRoiEdit({7, 6, 0, 0, 15}, {rect});
+        const auto cross = view.imageToItem({200, 200});
+        const auto start = view.imageToItem({corners[0].x, corners[0].y}) + QPointF(7, 7);
+        const auto delta = start - cross;
+        const double rad = 22.0 * std::acos(-1.0) / 180.0;
+        const QPointF rotated(delta.x() * std::cos(rad) - delta.y() * std::sin(rad),
+                              delta.x() * std::sin(rad) + delta.y() * std::cos(rad));
+        const int beforeSnap = commits;
+        mouse(view, QEvent::MouseButtonPress, start, Qt::ControlModifier);
+        mouse(view, QEvent::MouseMove, cross + rotated, Qt::ControlModifier);
+        mouse(view, QEvent::MouseButtonRelease, cross + rotated, Qt::ControlModifier);
+        assert(commits == beforeSnap + 1 && std::abs(result[5] - 15.0) < 1e-9);
+    }
+
+    // Auto-repeat arrow keys coalesce commits and flush once on non-repeat KeyRelease
+    {
+        view.beginRoiEdit({7, 6, 0, 0, 16}, {makeRectangle(100, 100, 80, 40)});
+        const int beforeRepeat = commits;
+        for (int step = 0; step < 5; ++step)
+        {
+            QKeyEvent repeatKey(QEvent::KeyPress, Qt::Key_Right, Qt::NoModifier, {}, true);
+            QCoreApplication::sendEvent(&view, &repeatKey);
+        }
+        assert(commits == beforeRepeat && "auto-repeat arrow keys should buffer commits");
+        QKeyEvent releaseKey(QEvent::KeyRelease, Qt::Key_Right, Qt::NoModifier, {}, false);
+        QCoreApplication::sendEvent(&view, &releaseKey);
+        assert(commits == beforeRepeat + 1 && std::abs(result[1] - 105.0) < 1e-9);
+    }
+
+    // Plain hover without Alt held must not emit redundant pixelProbeChanged signals
+    {
+        int probeSignals = 0;
+        const auto connection = QObject::connect(&view, &ImageViewport::pixelProbeChanged,
+                                                 [&] { ++probeSignals; });
+        for (int i = 0; i < 20; ++i)
+        {
+            QHoverEvent hover(QEvent::HoverMove, QPointF(10.0 + i * 2.0, 10.0), QPointF(10.0 + i * 2.0, 10.0),
+                              QPointF(10.0 + (i - 1) * 2.0, 10.0), Qt::NoModifier);
+            QCoreApplication::sendEvent(&view, &hover);
+        }
+        QObject::disconnect(connection);
+        assert(probeSignals == 0 && "hover without Alt emitted spurious pixelProbeChanged");
+    }
 }

@@ -7,6 +7,7 @@
 #include "runtime/RuntimeEngine.h"
 #include "runtime/Snapshot.h"
 #include "ui/Color.h"
+#include "ui/DashedBorderItem.h"
 #include "ui/ImageViewport.h"
 #include "ui/Size.h"
 #include "ui/UiState.h"
@@ -22,6 +23,7 @@ void registerUiTypes()
     {
         qmlRegisterSingletonType<VisionRTColor>("VisionRT.Ui", 1, 0, "VisionRTColor", VisionRTColor::create);
         qmlRegisterSingletonType<VisionRTSize>("VisionRT.Ui", 1, 0, "VisionRTSize", VisionRTSize::create);
+        qmlRegisterType<DashedBorderItem>("VisionRT.Ui", 1, 0, "DashedBorder");
         qmlRegisterUncreatableMetaObject(ImageViewport::staticMetaObject, "VisionRT.Ui", 1, 0, "RoiDrawShape",
                                          "Enum values");
         qmlRegisterUncreatableMetaObject(qml::ToolKind::staticMetaObject, "VisionRT.Ui", 1, 0, "ToolKind",

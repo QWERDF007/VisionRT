@@ -2,13 +2,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.View 1.0
 import VisionRT.Ui 1.0
 
 ColumnLayout {
     id: root
     required property QtObject controller
     signal trainingMenuRequested
+    readonly property bool _providersReady: root.controller.ensureImageProviders(root)
 
     spacing: 0
     Rectangle {
@@ -80,14 +80,15 @@ ColumnLayout {
                     width: thumbnails.width - 2 * VisionRTSize.ThumbnailHorizontalMargin
                     height: implicitHeight
                     selected: index === root.controller.imageIndex
-                    ImageViewport {
+                    Image {
                         id: thumbnail
-                        property int thumbnailIndex: thumbnailCard.index
                         anchors.fill: parent
-                        readOnly: true
-                        enabled: false
-                        Component.onCompleted: root.controller.attachViewport(thumbnail)
-                        onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        cache: false
+                        source: root._providersReady && root.controller.resultThumbnailVersion > 0
+                                ? root.controller.resultThumbnailUrl(thumbnailCard.index)
+                                : ""
                     }
                     MouseArea {
                         parent: thumbnailCard

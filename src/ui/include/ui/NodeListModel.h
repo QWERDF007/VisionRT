@@ -7,8 +7,10 @@
 #include "runtime/Snapshot.h"
 
 #include <QAbstractListModel>
+#include <QTimer>
 #include <QVariantList>
 
+#include <chrono>
 #include <map>
 #include <vector>
 
@@ -32,6 +34,7 @@ public:
         PosXRole,
         PosYRole,
         StateRole,
+        DisplayStateRole,
         DispositionRole,
         ExecutedRole,
         StaleRole,
@@ -59,7 +62,8 @@ public:
         QString      category;
         double       x = 0;
         double       y = 0;
-        NodeState    state = NodeState::Idle;
+        NodeState    state        = NodeState::Idle;
+        NodeState    displayState = NodeState::Idle;
         NodeDisposition disposition = NodeDisposition::Pending;
         bool         executed        = false;
         bool         stale           = false;
@@ -95,16 +99,34 @@ public:
     QVariantList  snapshot() const;
     QVariantMap   rowMap(const QString &id) const;
     bool          empty() const noexcept { return rows_.empty(); }
+    int           runningHoldMs() const noexcept { return runningHoldMs_; }
+    void          setRunningHoldMs(int milliseconds);
 
 private:
+    using Clock = std::chrono::steady_clock;
+
+    struct RunningHold
+    {
+        Clock::time_point enteredRunningAt{};
+        Clock::time_point holdUntil{};
+        NodeState         pendingState = NodeState::Idle;
+        bool              holding      = false;
+    };
+
     static QVariant value(const Row &row, int role);
     static bool     sameValue(const Row &left, const Row &right, int role);
     // Structural changes shift every later row; the table is rebuilt instead of patched so a stale
     // index can never address a row that no longer exists.
     void            rebuildIndex();
+    NodeState       resolveDisplayState(const Row &current, const Row &incoming);
+    void            scheduleHoldTimer();
+    void            releaseExpiredHolds();
 
-    std::vector<Row>                       rows_;
-    std::map<QString, int>                 index_;
+    std::vector<Row>               rows_;
+    std::map<QString, int>         index_;
+    std::map<QString, RunningHold> holds_;
+    QTimer                         holdTimer_;
+    int                            runningHoldMs_ = 150;
 };
 
 } // namespace visionrt

@@ -4,6 +4,7 @@
 #include "core/ToolDefinition.h"
 #include "ui/Export.h"
 
+#include <QImage>
 #include <QString>
 #include <QVariantList>
 #include <map>
@@ -20,7 +21,8 @@ struct TrainingDraftImage
     QString source;
     cv::Mat pixels;
     ColorOrder colorOrder = ColorOrder::Automatic;
-    QString thumbnail;
+    QImage thumbnailImage;
+    quint64 thumbnailRevision = 0;
 };
 
 struct TrainingDraftRecord

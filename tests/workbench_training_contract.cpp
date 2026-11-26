@@ -115,18 +115,21 @@ try
     app.setEasyTouchEnabled(true);
     require(app.assistAvailable(), "smart point selection is unavailable in training mode");
     const auto before = app.project().flows.front().nodes[1].inputs.at(6).literal;
-    const auto inputRoiVisible = [&]
+    const auto &trainingSet = std::get<DataRef<TrainingSet>>(app.project().flows.front().nodes[1].trainParams.at(7)).get();
+    const auto trainingBefore = trainingSet.records.begin()->second.fields.at(2);
+    const auto inputRoiVisible = [&](const PortValue &expectedRoi)
     {
         auto capture = viewport->grabToImage();
         require(capture && QTest::qWaitFor([&] { return !capture->image().isNull(); }, 3000),
                 "viewport could not be captured");
         const auto rendered = capture->image();
-        const auto &firstRect = std::get<Rectangle>(before).get().front().front();
-        const auto edgePoint = viewport->imageToItem({firstRect[1], firstRect[2] - firstRect[4] / 2})
+        const auto &firstRect = std::get<Rectangle>(expectedRoi).get().front().front();
+        const auto corner = RegionView(firstRect).rectangle().corners().front();
+        const auto edgePoint = viewport->imageToItem({corner.x, corner.y})
                              * (rendered.width() / viewport->width());
         return hasColorNear(rendered, edgePoint, VisionRTColor::getInstance()->ROIInput());
     };
-    require(inputRoiVisible(), "training ROI rectangle is not visible on the training canvas");
+    require(inputRoiVisible(trainingBefore), "training ROI rectangle is not visible on the training canvas");
     app.setEasyTouchEnabled(false);
     app.runNode();
     settle();
@@ -134,7 +137,7 @@ try
             "running a node while in training mode cleared the training ROI");
     app.setTrainingMode(false);
     settle();
-    require(inputRoiVisible(), "input ROI rectangle is not visible after returning to normal mode");
+    require(inputRoiVisible(before), "input ROI rectangle is not visible after returning to normal mode");
     app.setTrainingMode(true);
     settle();
     require(app.setTrainingField(record, 2, "[[[1200, 1570, 300, 90, 0], [1880, 1000, 300, 90, 90]]]"),

@@ -41,8 +41,19 @@ void ImageViewport::beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, b
     updateCursor();
 }
 
+void ImageViewport::flushPendingKeyCommit()
+{
+    keyCommitTimer_.stop();
+    if (!pendingKeyCommit_)
+        return;
+    auto pending = std::move(*pendingKeyCommit_);
+    pendingKeyCommit_.reset();
+    emit roiCommitted(pending.first, pending.second);
+}
+
 void ImageViewport::endRoiEdit()
 {
+    flushPendingKeyCommit();
     cancelDraft();
     if (!target_)
         return;
@@ -51,6 +62,7 @@ void ImageViewport::endRoiEdit()
     setDrawShape(DrawNone);
     selectRoi(-1);
     inspectedInput_.reset();
+    hoveringCenterHandle_ = false;
     static_cast<RoiOverlay *>(overlay_)->clear();
     overlaysUpdated();
     emit editingChanged();
@@ -62,7 +74,10 @@ void ImageViewport::setReadOnly(bool value)
     if (readOnly_ == value)
         return;
     if (value)
+    {
+        flushPendingKeyCommit();
         cancelDraft();
+    }
     readOnly_ = value;
     overlaysUpdated();
     emit readOnlyChanged();
@@ -84,10 +99,12 @@ void ImageViewport::selectRoi(int index)
 {
     if (selected_ == index)
         return;
+    flushPendingKeyCommit();
     if (selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
         static_cast<RoiOverlay *>(overlay_)->fade(editable_[selected_]);
     selected_ = index;
     circleHandleDirection_ = {1, 0};
+    hoveringCenterHandle_  = pointerInside_ && computeHoverCenterHandle(pointerPosition_);
     emit selectedRoiChanged();
     overlaysUpdated();
 }
@@ -118,20 +135,38 @@ const EncodedRegion *ImageViewport::activeRegion() const
     return selected_ >= 0 && selected_ < static_cast<int>(editable_.size()) ? &editable_[selected_] : nullptr;
 }
 
-void ImageViewport::updateCircleHandle(QPointF itemPoint)
+bool ImageViewport::computeHoverCenterHandle(QPointF itemPoint) const
 {
     const auto *active = activeRegion();
-    if (!active || !hasImage()) return;
+    if (!active || !hasImage())
+        return false;
+    const auto center = imageToItem(roiui::center(roiui::view(*active)));
+    return roiui::centerHandleBounds(center, VisionRTSize::getInstance()->ROICenterHandleSize()).contains(itemPoint);
+}
+
+bool ImageViewport::updateCircleHandle(QPointF itemPoint)
+{
+    const auto *active = activeRegion();
+    if (!active || !hasImage()) return false;
     const auto region = roiui::view(*active);
-    if (region.kind() != RoiKind::Circle) return;
+    if (region.kind() != RoiKind::Circle) return false;
     const auto circle = region.circle();
     const auto center = roiui::point(circle.center());
     const auto &style = *VisionRTSize::getInstance();
-    if (roiui::centerHandleBounds(imageToItem(center), style.ROICenterHandleSize()).contains(itemPoint)) return;
+    if (roiui::centerHandleBounds(imageToItem(center), style.ROICenterHandleSize()).contains(itemPoint)) return false;
     const auto delta = itemToImage(itemPoint) - center;
     const auto distance = roiui::length(delta);
     if (distance > 0 && std::abs(distance - circle.radius()) * scale_ <= style.ROIEdgeHitTolerance())
-        circleHandleDirection_ = delta / distance;
+    {
+        const QPointF nextDir = delta / distance;
+        if (!qFuzzyCompare(nextDir.x() + 1.0, circleHandleDirection_.x() + 1.0)
+            || !qFuzzyCompare(nextDir.y() + 1.0, circleHandleDirection_.y() + 1.0))
+        {
+            circleHandleDirection_ = nextDir;
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<QPointF> ImageViewport::handles(const EncodedRegion &encoded) const
@@ -199,6 +234,7 @@ void ImageViewport::clearGesture()
 
 void ImageViewport::mousePressEvent(QMouseEvent *event)
 {
+    flushPendingKeyCommit();
     forceActiveFocus(Qt::MouseFocusReason);
     gestureInverse_ = imageTransform().inverted();
     if (event->button() == Qt::LeftButton && drawShape_ == DrawNone && gesture_ == Gesture::None)
@@ -338,7 +374,7 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
     event->accept();
 }
 
-void ImageViewport::changeDraft(QPointF point)
+void ImageViewport::changeDraft(QPointF point, Qt::KeyboardModifiers modifiers)
 {
     try
     {
@@ -379,10 +415,15 @@ void ImageViewport::changeDraft(QPointF point)
                     const auto delta   = point - center;
                     const auto initial = anchor_ - center;
                     if (roiui::length(delta) > epsilon)
-                        draft_ = makeRectangle(
-                            rectangle.left(), rectangle.top(), rectangle.width(), rectangle.height(),
-                            rectangle.angle() + std::atan2(initial.x() * delta.y() - initial.y() * delta.x(),
-                                                          QPointF::dotProduct(initial, delta)) * 180 / pi);
+                    {
+                        double angle = rectangle.angle()
+                            + std::atan2(initial.x() * delta.y() - initial.y() * delta.x(),
+                                         QPointF::dotProduct(initial, delta)) * 180.0 / pi;
+                        if (modifiers.testFlag(Qt::ControlModifier))
+                            angle = std::round(angle / 15.0) * 15.0;
+                        draft_ = makeRectangle(rectangle.left(), rectangle.top(), rectangle.width(), rectangle.height(),
+                                               angle);
+                    }
                 }
                 else
                 {
@@ -473,7 +514,7 @@ void ImageViewport::mouseMoveEvent(QMouseEvent *event)
     if (canEdit() && (gesture_ == Gesture::Create || gesture_ == Gesture::Move || gesture_ == Gesture::Handle))
     {
         lastPointer_ = gestureInverse_.map(event->position());
-        changeDraft(lastPointer_);
+        changeDraft(lastPointer_, event->modifiers());
         event->accept();
         return;
     }
@@ -506,7 +547,7 @@ void ImageViewport::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && canEdit()
         && (gesture_ == Gesture::Create || gesture_ == Gesture::Move || gesture_ == Gesture::Handle))
     {
-        changeDraft(gestureInverse_.map(event->position()));
+        changeDraft(gestureInverse_.map(event->position()), event->modifiers());
         commitDraft();
         event->accept();
         return;
@@ -596,6 +637,8 @@ void ImageViewport::deleteSelectedRoi()
 {
     if (!canEdit() || selected_ < 0 || selected_ >= static_cast<int>(editable_.size()))
         return;
+    keyCommitTimer_.stop();
+    pendingKeyCommit_.reset();
     auto key     = *target_;
     key.roiIndex = selected_;
     cancelDraft();
@@ -632,7 +675,16 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
         auto key             = *target_;
         key.roiIndex         = selected_;
         overlaysUpdated();
-        emit roiCommitted(key, value);
+        if (!event->isAutoRepeat() && !pendingKeyCommit_)
+        {
+            emit roiCommitted(key, value);
+        }
+        else
+        {
+            pendingKeyCommit_ = std::make_pair(key, value);
+            emit roiDraftChanged(key, value);
+            keyCommitTimer_.start();
+        }
         event->accept();
         return;
     }
@@ -663,6 +715,25 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
         QQuickItem::keyPressEvent(event);
 }
 
+void ImageViewport::keyReleaseEvent(QKeyEvent *event)
+{
+    if (!event->isAutoRepeat() && pendingKeyCommit_
+        && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right || event->key() == Qt::Key_Up
+            || event->key() == Qt::Key_Down))
+    {
+        flushPendingKeyCommit();
+        event->accept();
+        return;
+    }
+    QQuickItem::keyReleaseEvent(event);
+}
+
+void ImageViewport::focusOutEvent(QFocusEvent *event)
+{
+    flushPendingKeyCommit();
+    QQuickItem::focusOutEvent(event);
+}
+
 void ImageViewport::updateCursor()
 {
     if ((drawShape_ != DrawNone && canEdit()) || (assistActive_ && hasImage()))
@@ -677,8 +748,12 @@ void ImageViewport::hoverEnterEvent(QHoverEvent *event)
     pointerPosition_ = event->position();
     altHeld_         = event->modifiers().testFlag(Qt::AltModifier);
     updatePixelProbe();
-    updateCircleHandle(event->position());
-    overlaysUpdated();
+    const bool circleChanged   = updateCircleHandle(event->position());
+    const bool nextHoverCenter = computeHoverCenterHandle(event->position());
+    const bool centerChanged   = nextHoverCenter != hoveringCenterHandle_;
+    hoveringCenterHandle_      = nextHoverCenter;
+    if (circleChanged || centerChanged || gesture_ == Gesture::Vertices)
+        overlaysUpdated();
     updateCursor();
     if (assistActive_ && hasImage() && drawShape_ == DrawNone)
         emit assistHover(itemToImage(event->position()));
@@ -690,8 +765,12 @@ void ImageViewport::hoverMoveEvent(QHoverEvent *event)
     pointerInside_   = true;
     pointerPosition_ = event->position();
     updatePixelProbe();
-    updateCircleHandle(event->position());
-    overlaysUpdated();
+    const bool circleChanged   = updateCircleHandle(event->position());
+    const bool nextHoverCenter = computeHoverCenterHandle(event->position());
+    const bool centerChanged   = nextHoverCenter != hoveringCenterHandle_;
+    hoveringCenterHandle_      = nextHoverCenter;
+    if (circleChanged || centerChanged || gesture_ == Gesture::Vertices)
+        overlaysUpdated();
     updateCursor();
     if (assistActive_ && hasImage() && drawShape_ == DrawNone)
         emit assistHover(itemToImage(event->position()));
@@ -702,7 +781,10 @@ void ImageViewport::hoverLeaveEvent(QHoverEvent *event)
 {
     pointerInside_ = false;
     updatePixelProbe();
-    overlaysUpdated();
+    const bool wasHoverCenter = hoveringCenterHandle_;
+    hoveringCenterHandle_     = false;
+    if (wasHoverCenter || gesture_ == Gesture::Vertices)
+        overlaysUpdated();
     unsetCursor();
     if (assistActive_)
         emit assistLeave();

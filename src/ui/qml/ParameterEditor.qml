@@ -21,6 +21,7 @@ ColumnLayout {
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled && (!parameter.recordScoped || !!parameter.recordId)
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string displayText: parameter.displayText === undefined ? root.valueText : parameter.displayText
+    readonly property string editText: parameter.editText === undefined ? root.valueText : parameter.editText
     readonly property string parameterKey: nodeId + ":" + parameter.stage + ":" + !!parameter.recordScoped + ":" + (parameter.recordScoped ? parameter.datasetId : "") + ":" + (parameter.recordId || "") + ":" + parameter.id
     readonly property real numberValue: Number(root.valueText)
     readonly property real minimumValue: parameter.minimum === undefined || parameter.minimum === "" ? -Infinity : Number(parameter.minimum)
@@ -286,6 +287,7 @@ ColumnLayout {
         id: integerEditor
         IntegerParameterEditor {
             parameterId: root.parameter.id
+            parameterKey: root.parameterKey
             flat: true
             valueText: root.valueText
             canDecrement: root.parameter.canDecrement === true
@@ -303,56 +305,56 @@ ColumnLayout {
     }
     Component {
         id: floatEditor
-        QuiSpinEditor {
-            id: spin
-            buttonWidth: height
-            iconSize: VisionRTSize.IconSize
-            contentPadding: 0
-            flat: true
-            label: ""
-            decimals: root.decimalPlaces
+        FloatParameterEditor {
+            parameterId: root.parameter.id
+            parameterKey: root.parameterKey
+            displayText: root.displayText
+            editText: root.editText
+            minimumValue: root.minimumValue
+            maximumValue: root.maximumValue
             step: root.numberStep > 0 ? root.numberStep : 1
-            minValue: root.minimumValue
-            maxValue: root.maximumValue
-            Component.onCompleted: spin.value = root.numberValue
-            commitValue: function (number) {
-                return root.commit(String(number));
+            decimals: root.decimalPlaces
+            commitValue: function (text) {
+                return root.commit(text);
             }
-            // The shared editor repaints itself red on a rejected draft; parameter rows keep one
-            // text colour and leave the draft in place for correction.
-            onInvalidChanged: if (invalid) {
+            onRejected: function (text) {
                 app.logParameterDraftRejected(root.parameter.id + "：" + text);
-                invalid = false;
-            }
-            Connections {
-                target: root
-                function onValueTextChanged() {
-                    spin.value = root.numberValue;
-                    spin.invalid = false;
-                }
-                function onParameterKeyChanged() {
-                    spin.value = root.numberValue;
-                    spin.invalid = false;
-                }
             }
         }
     }
     Component {
         id: boolEditor
         ParameterComboBox {
+            id: boolCombo
             flat: true
             implicitHeight: VisionRTSize.ContentSize
             readonly property bool isRecursive: root.parameter.editor === EditorKind.Recursive
+            property bool skipRequest: false
             model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
-            currentIndex: {
+            function backendIndex() {
                 let val = (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true");
                 if (isRecursive)
                     return val ? 1 : 0;
                 return val ? 0 : 1;
             }
+            function syncIndex() {
+                skipRequest = true;
+                currentIndex = backendIndex();
+                skipRequest = false;
+            }
+            Component.onCompleted: syncIndex()
             onActivated: function (index) {
+                if (skipRequest)
+                    return;
                 let isTrue = isRecursive ? (index === 1) : (index === 0);
-                root.commit(isTrue ? "true" : "false");
+                if (!root.commit(isTrue ? "true" : "false"))
+                    syncIndex();
+            }
+            Connections {
+                target: root
+                function onParameterChanged() { boolCombo.syncIndex(); }
+                function onValueTextChanged() { boolCombo.syncIndex(); }
+                function onParameterKeyChanged() { boolCombo.syncIndex(); }
             }
         }
     }
@@ -366,12 +368,29 @@ ColumnLayout {
                 anchors.left: parent.left
                 anchors.leftMargin: 5
                 anchors.verticalCenter: parent.verticalCenter
-                checked: (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
+                property bool skipRequest: false
+                function backendChecked() {
+                    return root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true";
+                }
+                function syncChecked() {
+                    skipRequest = true;
+                    checked = backendChecked();
+                    skipRequest = false;
+                }
                 enabled: root.editable
+                Component.onCompleted: syncChecked()
                 clickListener: function () {
-                    let nextVal = !sw.checked;
-                    sw.checked = nextVal;
-                    root.commit(nextVal ? "true" : "false");
+                    if (skipRequest || !root.editable)
+                        return;
+                    let nextVal = !backendChecked();
+                    if (!root.commit(nextVal ? "true" : "false"))
+                        syncChecked();
+                }
+                Connections {
+                    target: root
+                    function onParameterChanged() { sw.syncChecked(); }
+                    function onValueTextChanged() { sw.syncChecked(); }
+                    function onParameterKeyChanged() { sw.syncChecked(); }
                 }
             }
         }
@@ -382,17 +401,34 @@ ColumnLayout {
             id: choice
             flat: true
             implicitHeight: VisionRTSize.ContentSize
+            property bool skipRequest: false
             model: root.parameter.options
             textRole: "label"
-            currentIndex: {
-                for (let index = 0; index < model.length; ++index)
-                    if (model[index].value === root.valueText)
+            function backendIndex() {
+                const items = root.parameter.options || [];
+                for (let index = 0; index < items.length; ++index)
+                    if (items[index].value === root.valueText)
                         return index;
                 return -1;
             }
-            displayText: currentIndex < 0 ? root.valueText : model[currentIndex].label
+            function syncIndex() {
+                skipRequest = true;
+                currentIndex = backendIndex();
+                skipRequest = false;
+            }
+            displayText: currentIndex < 0 ? root.valueText : (model[currentIndex] ? model[currentIndex].label : root.valueText)
+            Component.onCompleted: syncIndex()
             onActivated: function (index) {
-                root.commit(model[index].value);
+                if (skipRequest || !model || index < 0 || index >= model.length)
+                    return;
+                if (!root.commit(model[index].value))
+                    syncIndex();
+            }
+            Connections {
+                target: root
+                function onParameterChanged() { choice.syncIndex(); }
+                function onValueTextChanged() { choice.syncIndex(); }
+                function onParameterKeyChanged() { choice.syncIndex(); }
             }
             HoverHandler {
                 id: choiceHover
@@ -507,32 +543,37 @@ ColumnLayout {
             id: field
             flat: true
             property string committedText: ""
+            property bool skipRequest: false
             function sync(force) {
                 const dirty = text !== committedText;
                 committedText = root.valueText;
                 if (force || !inputItem.activeFocus || !dirty) {
+                    skipRequest = true;
                     text = committedText;
                     invalid = false;
+                    skipRequest = false;
                 }
             }
             Component.onCompleted: sync(true)
-            // Path parameters use a unified picker dialog supporting both files and folders.
-            // A path parameter has one picker: it selects a file or a folder in the same dialog.
             actionIcon: root.parameter.editor === EditorKind.Path ? QuiFontIcon.FolderOpen : 0
             actionText: root.parameter.editor === EditorKind.Path ? "选择路径" : ""
             secondaryActionIcon: 0
             secondaryActionText: ""
             onCommitRequested: {
+                if (skipRequest)
+                    return;
                 if (text === root.valueText) {
                     invalid = false;
                     return;
                 }
-                invalid = !root.commit(text);
+                if (!root.commit(text)) {
+                    app.logParameterDraftRejected(root.parameter.id + "：" + text);
+                    sync(true);
+                } else {
+                    sync(true);
+                }
             }
-            onCancelRequested: {
-                text = root.valueText;
-                invalid = false;
-            }
+            onCancelRequested: sync(true)
             onActionRequested: pathPicker.open()
             Connections {
                 target: root
@@ -551,6 +592,7 @@ ColumnLayout {
         ParameterTextField {
             id: field
             property string committedText: ""
+            property bool skipRequest: false
             backgroundColor: QuiColor.Hovered
             readonly property bool hasRect: root.parameter.hasRect === true
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === RoiDrawShape.DrawRectangle
@@ -574,25 +616,32 @@ ColumnLayout {
             function sync(force) {
                 const currentText = hasRect ? (root.parameter.displayText || "[]") : "[]";
                 if (force || !inputItem.activeFocus) {
+                    skipRequest = true;
                     text = currentText;
                     committedText = currentText;
                     invalid = false;
+                    skipRequest = false;
                 }
             }
 
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
-                if (text === committedText)
+                if (skipRequest || text === committedText)
                     return;
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
-                    root.clearRegions();
-                    invalid = false;
+                    if (!root.clearRegions())
+                        sync(true);
+                    else
+                        sync(true);
                     return;
                 }
-                invalid = !root.commit(text);
-                if (!invalid)
-                    committedText = text;
+                if (!root.commit(text)) {
+                    app.logParameterDraftRejected(root.parameter.id + "：" + text);
+                    sync(true);
+                } else {
+                    sync(true);
+                }
             }
 
             onCancelRequested: sync(true)
@@ -617,6 +666,7 @@ ColumnLayout {
         ParameterTextField {
             id: field
             property string committedText: ""
+            property bool skipRequest: false
             backgroundColor: QuiColor.Hovered
             readonly property int count: root.parameter.roiCount !== undefined ? root.parameter.roiCount : 0
             readonly property bool hasRois: count > 0
@@ -641,25 +691,30 @@ ColumnLayout {
             function sync(force) {
                 const currentText = root.displayText;
                 if (force || !inputItem.activeFocus) {
+                    skipRequest = true;
                     text = currentText;
                     committedText = currentText;
                     invalid = false;
+                    skipRequest = false;
                 }
             }
 
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
-                if (text === committedText)
+                if (skipRequest || text === committedText)
                     return;
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
                     root.clearRegions();
-                    invalid = false;
+                    sync(true);
                     return;
                 }
-                invalid = !root.commit(text);
-                if (!invalid)
-                    committedText = text;
+                if (!root.commit(text)) {
+                    app.logParameterDraftRejected(root.parameter.id + "：" + text);
+                    sync(true);
+                } else {
+                    sync(true);
+                }
             }
 
             onCancelRequested: sync(true)
@@ -685,39 +740,43 @@ ColumnLayout {
         ParameterTextField {
             id: field
             property string committedText: ""
+            property bool skipRequest: false
 
             actionIcon: (text.length > 0 && text !== "[]") ? QuiFontIcon.Clear : 0
             actionText: "清空"
             onActionRequested: {
-                text = "[]";
-                committedText = "[]";
                 root.commit(root.parameter.emptyLiteral || "[]");
+                sync(true);
             }
 
             function sync(force) {
                 const currentText = (root.displayText && root.displayText !== "null") ? root.displayText : "[]";
                 committedText = currentText;
                 if (force || !inputItem.activeFocus) {
+                    skipRequest = true;
                     text = committedText;
                     invalid = false;
+                    skipRequest = false;
                 }
             }
 
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
+                if (skipRequest)
+                    return;
                 let trimmed = text.trim();
-                if (trimmed === "" || trimmed === "[]" || trimmed === "null" || trimmed === "~") {
+                if (trimmed === "" || trimmed === "[]" || trimmed === "null" || trimmed === "~")
                     trimmed = "[]";
-                    text = "[]";
-                }
                 if (trimmed === committedText) {
-                    invalid = false;
+                    sync(true);
                     return;
                 }
-                invalid = !root.commit(trimmed);
-                if (!invalid) {
-                    committedText = trimmed;
+                if (!root.commit(trimmed)) {
+                    app.logParameterDraftRejected(root.parameter.id + "：" + text);
+                    sync(true);
+                } else {
+                    sync(true);
                 }
             }
 

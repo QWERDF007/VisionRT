@@ -130,19 +130,18 @@ QVariantMap AppController::toolMetadata(const QString &toolId) const
     return definition ? workbench::metadata(*definition) : QVariantMap{};
 }
 
-QVariantList AppController::parameters() const
+std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() const
 {
     using workbench::q;
-    QVariantList result;
-    const auto  *node = impl_->currentNode();
+    std::vector<ParameterListModel::Row> result;
+    const auto                          *node = currentNode();
     if (!node)
         return result;
-    if (!impl_->readsAllowed())
-        return impl_->parameterRowsNode == node->id ? impl_->parameterRows : QVariantList{};
-    const auto *tool = impl_->currentTool();
+    const auto  nodeIdText = QString::number(node->id);
+    const auto *tool       = currentTool();
     // Rows come from the materialised contract, the same definition execution consumes; the raw
     // declaration is still the source for type_from selection options.
-    const auto *contract = impl_->effectiveTool();
+    const auto *contract = effectiveTool();
     auto        add      = [&](PortId id, const TypeSpec &type, PortStage stage, const PortDefinition *declaration, bool recordScoped = false)
     {
         const bool initialization = stage == PortStage::Init;
@@ -154,12 +153,12 @@ QVariantList AppController::parameters() const
         {
             if (!recordScoped)
             {
-                const auto found = impl_->training->parameter(id);
+                const auto found = training->parameter(id);
                 if (found) literal = *found;
             }
-            else if (impl_->training && impl_->training->selected() >= 0)
+            else if (training && training->selected() >= 0)
             {
-                if (const auto value = impl_->training->value(impl_->training->selected(), id)) literal = *value;
+                if (const auto value = training->value(training->selected(), id)) literal = *value;
             }
         }
         else if (initialization)
@@ -176,8 +175,8 @@ QVariantList AppController::parameters() const
             // longer describes this row because it is not the effective binding.
             if (found->second.mode == BindingMode::Upstream && found->second.source)
             {
-                const auto *parent    = impl_->findNode(found->second.source->node);
-                const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
+                const auto *parent    = findNode(found->second.source->node);
+                const auto *parentDef = parent ? registry.find(parent->toolId) : nullptr;
                 // The display name is copied while its contract is alive: a derived contract is a
                 // temporary, so a bare PortDefinition pointer would dangle past this scope.
                 QString     portName = q(portLabel(found->second.source->port));
@@ -200,10 +199,10 @@ QVariantList AppController::parameters() const
                 source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
         }
-        if (!recordScoped && impl_->roiSession.active() && impl_->roiSession.parameterStage() == stage
-            && impl_->roiSession.original().mode == BindingMode::Literal && impl_->roiSession.node() == node->id
-            && impl_->roiSession.input() == id)
-            literal = impl_->roiSession.draft();
+        if (!recordScoped && roiSession.active() && roiSession.parameterStage() == stage
+            && roiSession.original().mode == BindingMode::Literal && roiSession.node() == node->id
+            && roiSession.input() == id)
+            literal = roiSession.draft();
         QString text;
         QString formattedText;
         try
@@ -249,9 +248,9 @@ QVariantList AppController::parameters() const
                             = found == node->initParams.end() ? nullptr : std::get_if<std::string>(&found->second);
                         return value ? q(*value) : QString{};
                     };
-                    for (const auto &sourceFlow : impl_->editor.project().flows)
+                    for (const auto &sourceFlow : editor.project().flows)
                     {
-                        if (sourceFlow.id == impl_->flow.toStdString())
+                        if (sourceFlow.id == flow.toStdString())
                             continue;
                         if (id == reference.flowParameter.id)
                             addOption(q(sourceFlow.name), q(sourceFlow.id));
@@ -274,9 +273,6 @@ QVariantList AppController::parameters() const
         const auto  inputFound = node->inputs.find(id);
         const bool  hasSource  = !trainingParameter && inputFound != node->inputs.end() && inputFound->second.mode == BindingMode::Upstream
                             && inputFound->second.source.has_value();
-        // Every path parameter opens the same file-or-folder picker, so the editor kind is the
-        // declaration itself. A path mode parameter stays a tool-owned value and no longer selects
-        // a second picker.
         EditorKind editorKind = declaration ? declaration->editor : EditorKind::Default;
 
         const auto *regions = shapeRegions(literal);
@@ -302,16 +298,34 @@ QVariantList AppController::parameters() const
         else
             displayText = formattedText;
 
+        QString editText;
+        if (rectangleEditor)
+            editText = hasRect ? text : QStringLiteral("[]");
+        else if (type.type == Type::Array)
+            editText = arrayText;
+        else if (string)
+            editText = q(*string);
+        else if (type.type == Type::Float)
+            editText = isMissing(literal) ? QString{} : text;
+        else
+            editText = text;
+
+        const QVariant datasetId = training && training->datasetParameter() ? QVariant::fromValue(*training->datasetParameter()) : QVariant{};
+        const QString  recordId  = recordScoped ? this->q->selectedTrainingDraftRecord() : QString{};
+        const QString  key       = ParameterListModel::makeKey(nodeIdText, static_cast<int>(stage), recordScoped,
+                                                               datasetId, recordId, static_cast<int>(id));
+
         QVariantMap row{
+            {"key", key},
             {"roiDrawShape", roiDrawShape},
             {"isShape", isShapeType(type.type)},
             {"emptyLiteral", type.type == Type::TrainingSet ? ValueJson::text(defaultValue(type), type) : QStringLiteral("[]")},
             {"id", static_cast<uint>(id)},
             {"stage", static_cast<int>(stage)},
             {"recordScoped", recordScoped},
-            {"datasetEditor", trainingParameter && !recordScoped && tool->training && std::ranges::any_of(tool->training->datasets, [&](const auto &dataset) { return dataset.parameter == id; })},
-            {"datasetId", impl_->training && impl_->training->datasetParameter() ? QVariant::fromValue(*impl_->training->datasetParameter()) : QVariant{}},
-            {"recordId", recordScoped ? selectedTrainingDraftRecord() : QString{}},
+            {"datasetEditor", trainingParameter && !recordScoped && tool && tool->training && std::ranges::any_of(tool->training->datasets, [&](const auto &dataset) { return dataset.parameter == id; })},
+            {"datasetId", datasetId},
+            {"recordId", recordId},
             {"name", declaration ? q(declaration->nameZh) : q(portLabel(id))},
             {"type", static_cast<int>(type.type)},
             {"typeDetail", typeText(type)},
@@ -323,6 +337,7 @@ QVariantList AppController::parameters() const
                           : string                   ? q(*string)
                                                      : text},
             {"displayText", displayText},
+            {"editText", editText},
             {"hasRect", hasRect},
             {"roiCount", roiCount},
             {"hasRois", hasRois},
@@ -384,14 +399,21 @@ QVariantList AppController::parameters() const
             if (declaration->decimals && type.type != Type::Float)
                 row["decimals"] = *declaration->decimals;
         }
-        result.push_back(row);
+        result.push_back({key, nodeIdText, row.value("group").toString(), row.value("tab").toInt(), std::move(row)});
     };
 
     auto addMeta = [&](int id, const QString &name, EditorKind editorKind, const QString &displayText,
                        bool isSingle = false, const QVariantMap &extras = {})
     {
+        const QString key = ParameterListModel::makeKey(nodeIdText, static_cast<int>(PortStage::Inputs), false,
+                                                        QVariant{}, QString{}, id);
         QVariantMap row{
+            {            "key",                                        key},
             {             "id",                                         id},
+            {          "stage",          static_cast<int>(PortStage::Inputs)},
+            {   "recordScoped",                                      false},
+            {      "datasetId",                                 QVariant{}},
+            {       "recordId",                                  QString{}},
             {           "name",                                       name},
             {           "type",             static_cast<int>(Type::String)},
             {     "typeDetail",                   QStringLiteral("String")},
@@ -400,6 +422,7 @@ QVariantList AppController::parameters() const
             {        "literal",                                displayText},
             {      "valueText",                                displayText},
             {    "displayText",                                displayText},
+            {       "editText",                                displayText},
             {          "title",                workbench::q(node->title())},
             {         "editor",               static_cast<int>(editorKind)},
             {            "tab", static_cast<int>(ParameterTab::BasicInput)},
@@ -417,17 +440,17 @@ QVariantList AppController::parameters() const
             {      "inputMode",     static_cast<int>(BindingMode::Literal)}
         };
         for (auto entry = extras.begin(); entry != extras.end(); ++entry) row.insert(entry.key(), entry.value());
-        result.push_back(row);
+        result.push_back({key, nodeIdText, row.value("group").toString(), row.value("tab").toInt(), std::move(row)});
     };
 
     if (contract)
     {
-        if (trainingAvailable())
+        if (this->q->trainingAvailable())
         {
-            impl_->ensureTrainingSession();
+            const_cast<AppController::Impl *>(this)->ensureTrainingSession();
             for (const auto &port : tool->trainParams)
                 add(port.id, port.type, PortStage::Train, &port);
-            for (const auto &port : impl_->training->recordParameters())
+            for (const auto &port : training->recordParameters())
                 add(port.id, port.type, PortStage::Train, &port, true);
         }
         for (const auto &port : contract->initParams)
@@ -435,9 +458,6 @@ QVariantList AppController::parameters() const
             if (tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, port.id)) continue;
             add(port.id, port.type, PortStage::Init, &port);
         }
-
-        // Explicit execution conditions exist on the logical models only; a fixed
-        // tool exposes its real upstream_status input instead.
 
         if (tool->nodeModel == NodeModel::Expression)
         {
@@ -452,7 +472,6 @@ QVariantList AppController::parameters() const
                 }
                 else if (node->expression->program.size() > 1)
                 {
-                    // The row shows the configured value itself, never a summary of it.
                     QJsonArray program;
                     for (const auto &entry : node->expression->program)
                         program.append(QJsonObject{
@@ -490,11 +509,11 @@ QVariantList AppController::parameters() const
             if (bound)
             {
                 const auto &source = *found->second.source;
-                const auto *parent = impl_->findNode(source.node);
+                const auto *parent = findNode(source.node);
                 QString     name   = workbench::q(portLabel(source.port));
                 if (parent)
                 {
-                    const auto *parentTool = impl_->registry.find(parent->toolId);
+                    const auto *parentTool = registry.find(parent->toolId);
                     if (parentTool)
                         try
                         {
@@ -523,8 +542,6 @@ QVariantList AppController::parameters() const
         if (contract)
             for (const auto &port : contract->inputs)
             {
-                // A condition node maps its single condition input onto the dedicated condition row;
-                // enumerating the raw port again would show the same value twice.
                 if (tool && tool->nodeModel == NodeModel::Condition && port.id == kConditionInputPort)
                     continue;
                 add(port.id, port.type, PortStage::Inputs, &port);
@@ -542,9 +559,9 @@ QVariantList AppController::parameters() const
         for (const auto &[id, type] : node->signatures.inputs) add(id, type, PortStage::Inputs, nullptr);
     }
     const QStringList basicGroups{"流程控制", "检测图像", "检测区域", "输入数据"};
-    for (auto &value : result)
+    for (auto &item : result)
     {
-        auto row = value.toMap();
+        auto &row = item.map;
         if (!row.contains("stage")) row.insert("stage", static_cast<int>(PortStage::Inputs));
         if (row.value("tab").toInt() == static_cast<int>(ParameterTab::BasicInput))
         {
@@ -555,44 +572,57 @@ QVariantList AppController::parameters() const
             else if (isShapeType(static_cast<Type>(row.value("type").toInt()))) group = basicGroups[2];
             else group = basicGroups[3];
             row.insert("group", group);
+            item.group = group;
         }
-        value = row;
+        item.tab = row.value("tab").toInt();
     }
-    std::stable_sort(result.begin(), result.end(), [&](const QVariant &a, const QVariant &b)
+    std::stable_sort(result.begin(), result.end(), [&](const ParameterListModel::Row &a, const ParameterListModel::Row &b)
     {
-        const auto left = a.toMap(), right = b.toMap();
-        if (left.value("tab") != right.value("tab")) return left.value("tab").toInt() < right.value("tab").toInt();
-        if (left.value("tab").toInt() == static_cast<int>(ParameterTab::BasicInput))
-            return basicGroups.indexOf(left.value("group").toString()) < basicGroups.indexOf(right.value("group").toString());
+        if (a.tab != b.tab) return a.tab < b.tab;
+        if (a.tab == static_cast<int>(ParameterTab::BasicInput))
+            return basicGroups.indexOf(a.group) < basicGroups.indexOf(b.group);
         return false;
     });
-    impl_->parameterRows     = result;
-    impl_->parameterRowsNode = node->id;
     return result;
+}
+
+void AppController::Impl::refreshParameterModel()
+{
+    const auto *node = currentNode();
+    if (!node)
+    {
+        parameterModel.clear();
+        parameterModelNode = 0;
+        return;
+    }
+    if (!readsAllowed())
+    {
+        if (parameterModelNode != node->id)
+        {
+            parameterModel.clear();
+            parameterModelNode = 0;
+        }
+        return;
+    }
+    parameterModel.sync(buildParameterRows());
+    parameterModelNode = node->id;
+}
+
+QAbstractListModel *AppController::parameterModel() const
+{
+    return &impl_->parameterModel;
+}
+
+QVariantList AppController::parameters() const
+{
+    impl_->refreshParameterModel();
+    return impl_->parameterModel.snapshot();
 }
 
 QVariantList AppController::parameterGroups() const
 {
-    QVariantList result;
-    for (const auto &value : parameters())
-    {
-        const auto row = value.toMap();
-        const auto name = row.value("group").toString();
-        const auto tab = row.value("tab").toInt();
-        auto group = std::find_if(result.begin(), result.end(), [&](const QVariant &entry)
-        { const auto map = entry.toMap(); return map.value("name").toString() == name && map.value("tab").toInt() == tab; });
-        if (group == result.end())
-        {
-            result.append(QVariantMap{{"nodeId", selectedNode()}, {"name", name}, {"tab", tab}, {"parameters", QVariantList{}}});
-            group = std::prev(result.end());
-        }
-        auto map = group->toMap();
-        auto rows = map.value("parameters").toList();
-        rows.append(QVariantMap{{"id", row.value("id")}, {"stage", row.value("stage")}, {"recordId", row.value("recordId")}, {"recordScoped", row.value("recordScoped")}, {"datasetId", row.value("datasetId")}});
-        map.insert("parameters", rows);
-        *group = map;
-    }
-    return result;
+    impl_->refreshParameterModel();
+    return impl_->parameterModel.groupsSnapshot();
 }
 
 QString AppController::outputTitle() const

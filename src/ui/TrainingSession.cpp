@@ -2,22 +2,26 @@
 
 #include "core/ToolValueValidation.h"
 #include "ui/DisplayConverter.h"
+#include "ui/ThumbnailStore.h"
 #include "ui/ValueDisplay.h"
 
-#include <QBuffer>
 #include <algorithm>
+#include <atomic>
 
 namespace visionrt {
 namespace {
-QString thumbnailOf(const cv::Mat &pixels, ColorOrder order)
+std::atomic<quint64> gThumbnailRevision{0};
+
+QImage thumbnailImageOf(const cv::Mat &pixels, ColorOrder order)
 {
-    const auto frame = DisplayConverter::convert(pixels, order);
-    const auto preview = frame.image.scaled(160, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    QByteArray bytes;
-    QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    preview.save(&buffer, "PNG");
-    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(bytes.toBase64());
+    if (pixels.empty())
+        return {};
+    return DisplayConverter::convertThumbnail(pixels, order, ThumbnailStore::kMaxEdge).image;
+}
+
+quint64 nextThumbnailRevision()
+{
+    return gThumbnailRevision.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 }
 
@@ -170,7 +174,7 @@ std::optional<int> TrainingSession::addRecord(const cv::Mat &pixels, ColorOrder 
     else if (!pixels.empty())
     {
         id = d->nextImage++;
-        d->images.push_back({*id, source, pixels.clone(), order, thumbnailOf(pixels, order)});
+        d->images.push_back({*id, source, pixels.clone(), order, thumbnailImageOf(pixels, order), nextThumbnailRevision()});
     }
     if (maximum == 1) d->records.clear();
     TrainingDraftRecord record{d->nextRecord++, id, {}};
@@ -269,7 +273,8 @@ TrainingSession::Dataset TrainingSession::draft(const TrainingSet &value)
     {
         const bool hasPixels = !image.pixels.empty();
         d.images.push_back({id, {}, hasPixels ? image.pixels.clone() : cv::Mat{}, image.colorOrder,
-                            hasPixels ? thumbnailOf(image.pixels, image.colorOrder) : QString{}});
+                            hasPixels ? thumbnailImageOf(image.pixels, image.colorOrder) : QImage{},
+                            hasPixels ? nextThumbnailRevision() : 0});
         d.nextImage = std::max(d.nextImage, id + 1);
     }
     for (const auto &[id, record] : value.records)
@@ -311,9 +316,8 @@ QVariantList TrainingSession::rows() const
     for (std::size_t i = 0; i < records().size(); ++i)
     {
         const auto &r = records()[i];
-        const auto found = std::ranges::find(images(), r.image, &TrainingDraftImage::id);
         result.append(QVariantMap{{"id", r.id()}, {"imageId", r.image ? QVariant(*r.image) : QVariant{}},
-            {"imageUrl", found == images().end() ? QString{} : found->thumbnail},
+            {"imageUrl", QString{}},
             {"regions", static_cast<int>(regions(static_cast<int>(i)).size())}, {"selected", static_cast<int>(i) == selected()},
             {"fields", fields(static_cast<int>(i))}});
     }
