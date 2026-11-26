@@ -4,6 +4,7 @@
 
 #include "ui/DisplayConverter.h"
 #include "ui/ImageViewport.h"
+#include "ui/Size.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -276,10 +277,11 @@ int main(int argc, char **argv)
         hover(viewport, QEvent::HoverMove, cross);
         const auto shown = renderedFrame(window);
         assert(shown != hidden && "ROI measurements must appear when hovering the center cross");
-        hover(viewport, QEvent::HoverMove, cross + QPointF(7, 7));
+        const qreal centerHalf = VisionRTSize::getInstance()->ROICenterHandleSize() / 2.0;
+        hover(viewport, QEvent::HoverMove, cross + QPointF(centerHalf - 1.0, centerHalf - 1.0));
         assert(renderedFrame(window) == shown && "ROI labels must stay anchored inside the center hover area");
-        hover(viewport, QEvent::HoverMove, cross + QPointF(8.5, 0));
-        assert(renderedFrame(window) == hidden && "ROI measurements must hide outside the 16px center handle");
+        hover(viewport, QEvent::HoverMove, cross + QPointF(centerHalf + 0.5, 0));
+        assert(renderedFrame(window) == hidden && "ROI measurements must hide outside the center handle");
         hover(viewport, QEvent::HoverMove, cross);
         assert(renderedFrame(window) == shown);
         hover(viewport, QEvent::HoverLeave, cross);

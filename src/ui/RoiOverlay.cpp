@@ -91,21 +91,28 @@ void RoiOverlay::paint(QPainter *p)
         if (alignment.testFlag(Qt::AlignLeft)) rect.moveLeft(0);
         p->setPen(Qt::NoPen);
         p->setBrush(c.ROIInput());
-        p->drawRoundedRect(rect, 2, 2);
+        p->drawRoundedRect(rect, 4, 4);
         p->setPen(c.ROILabelText());
         p->drawText(rect, Qt::AlignCenter, text);
         p->restore();
     };
-    const auto arrow = [&](QPointF a, QPointF b, QColor color)
+    const auto arrow = [&](QPointF a, QPointF b, QColor color, qreal strokeWidth, qreal maxHeadSize)
     {
-        pen(color, s.ROIGuideStrokeWidth());
-        p->drawLine(a, b);
-        const auto delta = b - a;
-        if (roiui::length(delta) == 0)
+        const auto   delta  = b - a;
+        const double length = roiui::length(delta);
+        if (length <= 1e-6)
             return;
-        const auto head = delta / roiui::length(delta) * s.ROIArrowHeadSize();
-        p->drawLine(b, b - roiui::rotate(head, 28));
-        p->drawLine(b, b - roiui::rotate(head, -28));
+        p->setPen(QPen(color, strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p->setBrush(Qt::NoBrush);
+        const double  headLen = std::clamp(length * 0.35, std::min(5.0, length * 0.5), maxHeadSize);
+        const QPointF head    = delta / length * headLen;
+        QPainterPath  path;
+        path.moveTo(a);
+        path.lineTo(b);
+        path.moveTo(b - roiui::rotate(head, 30));
+        path.lineTo(b);
+        path.lineTo(b - roiui::rotate(head, -30));
+        p->drawPath(path);
     };
     for (const auto &overlay : v.geometry_)
         std::visit([&](const auto &geometry)
@@ -119,19 +126,18 @@ void RoiOverlay::paint(QPainter *p)
             {
                 const auto value = geometry.at(overlay.image, i);
                 if constexpr (std::is_same_v<std::decay_t<decltype(geometry)>, Direction>)
-                    arrow(point(value.start()), point(value.end()), overlay.input ? c.ROIInput() : c.ROIOutput());
+                    arrow(point(value.start()), point(value.end()), overlay.input ? c.ROIInput() : c.ROIOutput(),
+                          s.ROIArrowStrokeWidth(), s.ROIArrowHeadSize());
                 else
                 {
                     const auto origin = point(value.origin());
-                    const auto xEnd = point(value.xEnd()), yEnd = point(value.yEnd());
-                    arrow(origin, xEnd, c.CoordinateAxisX());
-                    arrow(origin, yEnd, c.CoordinateAxisY());
-                    pen(c.CoordinateAxisX(), s.ROIGuideStrokeWidth());
-                    p->drawText(xEnd + QPointF(s.ROIArrowHeadSize(), 0), QStringLiteral("X"));
-                    pen(c.CoordinateAxisY(), s.ROIGuideStrokeWidth());
-                    p->drawText(yEnd + QPointF(0, s.ROIArrowHeadSize()), QStringLiteral("Y"));
-                    pen(c.CoordinateOrigin(), s.ROIGuideStrokeWidth());
-                    const auto half = s.ROICenterHandleSize() / 2;
+                    const auto xEnd   = point(value.xEnd());
+                    const auto yEnd   = point(value.yEnd());
+                    arrow(origin, xEnd, c.CoordinateAxisX(), s.CoordinateAxisStrokeWidth(), s.CoordinateArrowHeadSize());
+                    arrow(origin, yEnd, c.CoordinateAxisY(), s.CoordinateAxisStrokeWidth(), s.CoordinateArrowHeadSize());
+                    p->setPen(QPen(c.CoordinateOrigin(), 1.5, Qt::SolidLine, Qt::FlatCap));
+                    p->setBrush(Qt::NoBrush);
+                    const auto half = s.CoordinateOriginSize() / 2.0;
                     p->drawLine(origin - QPointF(half, 0), origin + QPointF(half, 0));
                     p->drawLine(origin - QPointF(0, half), origin + QPointF(0, half));
                 }
@@ -201,10 +207,10 @@ void RoiOverlay::paint(QPainter *p)
            && roiui::centerHandleBounds(center, centerSize).contains(v.pointerPosition_);
         const auto square   = [&](QPointF position, qreal size)
         {
-            pen(c.ROIInput(), s.ROIGuideStrokeWidth());
+            pen(c.ROIInput(), s.ROIHandleStrokeWidth());
             const qreal dpr  = window() ? window()->effectiveDevicePixelRatio() : 1;
             position         = {std::round(position.x() * dpr) / dpr, std::round(position.y() * dpr) / dpr};
-            const qreal side = size - s.ROIGuideStrokeWidth();
+            const qreal side = size - s.ROIHandleStrokeWidth();
             p->drawRect(QRectF(position - QPointF(side / 2, side / 2), QSizeF(side, side)));
         };
         const auto coordinate = [](QPointF value)
@@ -215,15 +221,19 @@ void RoiOverlay::paint(QPainter *p)
             label(center + QPointF(0, s.ROILabelOffset() + 16), coordinate(roiui::center(region)));
         if (region.kind() == RoiKind::Rectangle)
         {
-            const auto rect     = region.rectangle();
-            const auto controls = v.handles(*active);
-            const auto axis     = roiui::rotate({1, 0}, rect.angle());
-            const auto normal   = roiui::rotate({0, 1}, rect.angle());
-            arrow(center, center + axis * rect.width() * v.zoom() / 2, c.ROIInput());
+            const auto  rect            = region.rectangle();
+            const auto  controls        = v.handles(*active);
+            const auto  axis            = roiui::rotate({1, 0}, rect.angle());
+            const auto  normal          = roiui::rotate({0, 1}, rect.angle());
+            const qreal rectMinSide     = std::min(rect.width(), rect.height()) * v.zoom();
+            const qreal rectArrowStroke = rectMinSide < 50.0 ? 1.5 : 2.5;
+            const qreal rectArrowHead   = std::clamp(rectMinSide * 0.22, 6.0, s.ROIArrowHeadSize());
+            arrow(center, center + axis * rect.width() * v.zoom() / 2, c.ROIInput(), rectArrowStroke, rectArrowHead);
             if (writable)
             {
                 const auto rotations = roiui::rectangleRotationHandles(rect, v.imageTransform(), s.ROIRotationArrowSize());
-                pen(c.ROIGuide(), s.ROIGuideStrokeWidth());
+                p->setPen(QPen(c.ROIGuide(), 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                p->setBrush(Qt::NoBrush);
                 for (const auto &control : rotations) p->drawPath(control.arrow);
                 for (std::size_t i = 1; i <= 4; ++i) square(map(controls[i]), s.ROIHandleSize());
             }
@@ -291,9 +301,10 @@ void RoiOverlay::paint(QPainter *p)
         for (auto value : v.vertices_) polygon.append(map(value));
         if (v.drawShape_ == ImageViewport::DrawPolygon)
             p->drawPolyline(polygon);
+        pen(c.ROIInput(), s.ROIHandleStrokeWidth());
+        const qreal side = s.ROIHandleSize() - s.ROIHandleStrokeWidth();
         for (auto value : polygon)
-            p->drawRect(QRectF(value - QPointF(s.ROIHandleSize() / 2, s.ROIHandleSize() / 2),
-                               QSizeF(s.ROIHandleSize(), s.ROIHandleSize())));
+            p->drawRect(QRectF(value - QPointF(side / 2, side / 2), QSizeF(side, side)));
     }
 }
 } // namespace visionrt

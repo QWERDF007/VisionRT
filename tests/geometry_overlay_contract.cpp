@@ -55,9 +55,22 @@ int main(int argc, char **argv)
         QDir().mkpath(evidence);
         image.save(evidence + "/geometry-overlays-current.png");
         assert(ready);
-        assert(coloredNear(image, viewport.imageToItem({150, 110}), colors.CoordinateAxisY(), window.devicePixelRatio()));
-        assert(coloredNear(image, viewport.imageToItem({150, 50}), colors.CoordinateOrigin(), window.devicePixelRatio()));
-        assert(coloredNear(image, viewport.imageToItem({110, 230}), colors.ROIOutput(), window.devicePixelRatio()));
+        const double dpr = window.devicePixelRatio();
+        assert(coloredNear(image, viewport.imageToItem({150, 110}), colors.CoordinateAxisY(), dpr));
+        assert(coloredNear(image, viewport.imageToItem({150, 50}), colors.CoordinateOrigin(), dpr));
+        assert(coloredNear(image, viewport.imageToItem({150, 50}) + QPointF(-8, 0), colors.CoordinateOrigin(), dpr));
+        assert(coloredNear(image, viewport.imageToItem({150, 50}) + QPointF(0, -8), colors.CoordinateOrigin(), dpr));
+        assert(coloredNear(image, viewport.imageToItem({110, 230}), colors.ROIOutput(), dpr));
+        // Arrowhead wings on Direction and CoordinateFrame2D axes must render visibly in logical pixels.
+        const auto dirTip = viewport.imageToItem({170, 230});
+        assert(coloredNear(image, dirTip + QPointF(-7, -4), colors.ROIOutput(), dpr));
+        assert(coloredNear(image, dirTip + QPointF(-7, 4), colors.ROIOutput(), dpr));
+        const auto xTip = viewport.imageToItem({270, 50});
+        assert(coloredNear(image, xTip + QPointF(-8, -4.5), colors.CoordinateAxisX(), dpr));
+        assert(coloredNear(image, xTip + QPointF(-8, 4.5), colors.CoordinateAxisX(), dpr));
+        const auto yTip = viewport.imageToItem({150, 170});
+        assert(coloredNear(image, yTip + QPointF(-4.5, -8), colors.CoordinateAxisY(), dpr));
+        assert(coloredNear(image, yTip + QPointF(4.5, -8), colors.CoordinateAxisY(), dpr));
         return image;
     };
     verify();

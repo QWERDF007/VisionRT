@@ -20,12 +20,12 @@ VisionRTColor::VisionRTColor(QObject *parent)
 {
     ROIInput(QColor("#006EFF"));
     ROIOutput(QColor("#AA00FF"));
-    ROIGuide(QColor("#7FB6FF"));
+    ROIGuide(QColor("#6FB7F9"));
     ROICrosshair(QColor("#222222"));
     ROILabelText(QColor("#FFFFFF"));
     ROIPreview(QColor("#F1C40F"));
-    CoordinateAxisX(QColor("#FF2424"));
-    CoordinateAxisY(QColor("#20CE4D"));
+    CoordinateAxisX(QColor("#FF0000"));
+    CoordinateAxisY(QColor("#45B045"));
     CoordinateOrigin(QColor("#AA00FF"));
     ROISelectionFillOpacity(0.18);
     NodeGrey(QColor(0xcf, 0xcf, 0xcf));

@@ -2,6 +2,7 @@
 #    undef NDEBUG
 #endif
 #include "ui/ImageViewport.h"
+#include "ui/Size.h"
 
 #include <QGuiApplication>
 #include <QHoverEvent>
@@ -85,7 +86,9 @@ int main(int argc, char **argv)
     mouse(view, QEvent::MouseButtonPress, view.imageToItem({170, 120}));
     mouse(view, QEvent::MouseButtonRelease, view.imageToItem({190, 120}));
     assert(std::abs(result[1] - 110) < 1e-9 && std::abs(result[2] - 90) < 1e-9 && result[3] == 100 && result[4] == 60);
-    const std::array<QPointF, 4> inward{QPointF(7, 7), QPointF(-7, 7), QPointF(-7, -7), QPointF(7, -7)};
+    const qreal rotHalf = VisionRTSize::getInstance()->ROIRotationArrowSize() / 2.0;
+    const std::array<QPointF, 4> inward{QPointF(rotHalf, rotHalf), QPointF(-rotHalf, rotHalf),
+                                        QPointF(-rotHalf, -rotHalf), QPointF(rotHalf, -rotHalf)};
     for (double zoom : {0.5, 1.0, 2.0})
         for (double angle : {0.0, 35.0, 89.0})
         {
@@ -108,7 +111,8 @@ int main(int argc, char **argv)
                        && result[3] == 200 && result[4] == 160);
             }
             view.beginRoiEdit({7, 6, 0, 0, 14}, {rectangle});
-            const auto outside = view.imageToItem({corners[0].x, corners[0].y}) + orientation.map(QPointF(15, 7));
+            const auto outside = view.imageToItem({corners[0].x, corners[0].y})
+                               + orientation.map(QPointF(rotHalf * 2.0 + 1.0, rotHalf));
             mouse(view, QEvent::MouseButtonPress, outside);
             mouse(view, QEvent::MouseButtonRelease, outside + QPointF(10, 10));
             assert(result[5] == angle && "Pressing outside a rotation icon must not rotate the ROI");
@@ -121,7 +125,7 @@ int main(int argc, char **argv)
         const auto corners = RegionView(rect).rectangle().corners();
         view.beginRoiEdit({7, 6, 0, 0, 15}, {rect});
         const auto cross = view.imageToItem({200, 200});
-        const auto start = view.imageToItem({corners[0].x, corners[0].y}) + QPointF(7, 7);
+        const auto start = view.imageToItem({corners[0].x, corners[0].y}) + QPointF(rotHalf, rotHalf);
         const auto delta = start - cross;
         const double rad = 22.0 * std::acos(-1.0) / 180.0;
         const QPointF rotated(delta.x() * std::cos(rad) - delta.y() * std::sin(rad),
