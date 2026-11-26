@@ -28,26 +28,25 @@ Rectangle {
     radius: 2
     antialiasing: true
     color: root.isMissing ? QuiColor.Background : QuiColor.Primary
-    opacity: root.isMissing ? 0.78 : 1.0
     objectName: "flowNode_" + nodeId
 
     readonly property int nodeState: root.nodeDisplayStatus
     readonly property bool isMissing: root.nodeMissing === true
     readonly property bool isError: !root.isMissing && root.nodeState === NodeState.Failed
     readonly property bool runningNow: !root.isMissing && root.nodeState === NodeState.Running
-    readonly property bool dashedBorder: root.selected || root.isMissing
+    readonly property bool dashedBorder: root.selected
     readonly property color headerBg: {
         if (root.isMissing)
-            return VisionRTColor.NodeWarning;
+            return VisionRTColor.NodeMissing;
         if (root.runningNow)
             return VisionRTColor.NodeGreen;
         if (root.isError)
             return VisionRTColor.NodeRed;
         return VisionRTColor.NodeGrey;
     }
-    readonly property color headerText: root.runningNow || root.isError || root.isMissing ? QuiColor.White : QuiColor.FontPrimary
+    readonly property color headerText: root.runningNow || root.isError ? QuiColor.White : QuiColor.FontPrimary
 
-    border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? VisionRTColor.NodeRed : QuiColor.Border)
+    border.color: root.isMissing ? VisionRTColor.NodeMissing : (root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? VisionRTColor.NodeRed : QuiColor.Border))
     border.width: root.dashedBorder ? 0 : (root.runningNow ? 2 : 1)
 
     function getIcon(title, category) {
@@ -97,7 +96,7 @@ Rectangle {
                 color: root.headerText
             }
             QuiText {
-                text: root.isMissing ? "缺失" : (root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0")
+                text: root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0"
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
                 color: root.headerText
@@ -120,9 +119,9 @@ Rectangle {
             Layout.preferredWidth: 16
             Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
-            iconSource: root.isMissing ? QuiFontIcon.Warning : root.getIcon(root.nodeToolName, root.nodeCategory || "")
+            iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
             iconSize: VisionRTSize.IconSize
-            iconColor: root.isMissing ? VisionRTColor.NodeWarning : (root.isError ? VisionRTColor.NodeRed : (root.runningNow ? VisionRTColor.NodeGreen : QuiColor.FontCaption))
+            iconColor: root.isMissing ? VisionRTColor.NodeMissing : (root.isError ? VisionRTColor.NodeRed : (root.runningNow ? VisionRTColor.NodeGreen : QuiColor.FontCaption))
             renderType: Text.QtRendering
         }
         ColumnLayout {
@@ -134,13 +133,13 @@ Rectangle {
                 elide: Text.ElideRight
                 renderType: Text.QtRendering
                 font: QuiFont.Body
-                color: root.isMissing ? QuiColor.FontCaption : QuiColor.FontPrimary
+                color: root.isMissing ? QuiColor.FontDark : QuiColor.FontPrimary
             }
             QuiText {
-                text: root.isMissing ? "插件缺失，请删除" : root.nodeTimingText
+                text: root.nodeTimingText
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
-                color: root.isMissing ? VisionRTColor.NodeWarning : QuiColor.FontCaption
+                color: QuiColor.FontCaption
             }
         }
     }
@@ -152,11 +151,11 @@ Rectangle {
         active: root.dashedBorder
         sourceComponent: DashedBorder {
             objectName: "nodeDashedBorder_" + root.nodeId
-            borderColor: root.selected ? QuiColor.Highlight : VisionRTColor.NodeWarning
-            borderWidth: root.selected ? 2.0 : 1.5
+            borderColor: QuiColor.Highlight
+            borderWidth: 2.0
             radius: root.radius
-            dashLength: root.selected ? 6.0 : 5.0
-            gapLength: root.selected ? 4.0 : 3.0
+            dashLength: 6.0
+            gapLength: 4.0
             viewScale: root.viewScale
         }
     }
@@ -180,7 +179,7 @@ Rectangle {
             root.pointerReleased(mouse, root);
         }
         onDoubleClicked: function (mouse) {
-            if (mouse.button === Qt.LeftButton && app.workspaceEnabled && !root.isMissing)
+            if (mouse.button === Qt.LeftButton && app.workspaceEnabled)
                 root.executeRequested();
         }
         onEntered: root.hoverEntered(Qt.point(mouseX, mouseY))

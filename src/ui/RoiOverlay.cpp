@@ -221,16 +221,10 @@ void RoiOverlay::paint(QPainter *p)
             label(center + QPointF(0, s.ROILabelOffset() + 16), coordinate(roiui::center(region)));
         if (region.kind() == RoiKind::Rectangle)
         {
-            const auto  rect            = region.rectangle();
-            const auto  controls        = v.handles(*active);
-            const auto  axis            = roiui::rotate({1, 0}, rect.angle());
-            const auto  normal          = roiui::rotate({0, 1}, rect.angle());
-            const qreal rectMinSide     = std::min(rect.width(), rect.height()) * v.zoom();
-            const qreal rectArrowStroke = rectMinSide < 50.0 ? 1.5 : 2.5;
-            const qreal rectArrowHead   = std::clamp(rectMinSide * 0.22, 6.0, s.ROIArrowHeadSize());
-            arrow(center, center + axis * rect.width() * v.zoom() / 2, c.ROIInput(), rectArrowStroke, rectArrowHead);
+            const auto rect = region.rectangle();
             if (writable)
             {
+                const auto controls  = v.handles(*active);
                 const auto rotations = roiui::rectangleRotationHandles(rect, v.imageTransform(), s.ROIRotationArrowSize());
                 p->setPen(QPen(c.ROIGuide(), 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
                 p->setBrush(Qt::NoBrush);
@@ -239,17 +233,19 @@ void RoiOverlay::paint(QPainter *p)
             }
             if (showMeasurements)
             {
+                const auto          axis        = roiui::rotate({1, 0}, rect.angle());
+                const auto          normal      = roiui::rotate({0, 1}, rect.angle());
                 const QFontMetricsF metrics(p->font());
-                const qreal labelHeight = metrics.height() + 2 * s.ROILabelVerticalPadding();
-                const qreal gap = s.ROILabelOffset();
+                const qreal         labelHeight = metrics.height() + 2 * s.ROILabelVerticalPadding();
+                const qreal         gap         = s.ROILabelOffset();
                 label(center - normal * (rect.height() * v.zoom() / 2 + gap + labelHeight / 2),
                       QStringLiteral("%1 px").arg(rect.width(), 0, 'f', 1), rect.angle());
                 label(center + axis * (rect.width() * v.zoom() / 2 + gap + labelHeight / 2),
                       QStringLiteral("%1 px").arg(rect.height(), 0, 'f', 1), rect.angle() + 90);
-                const auto angleText = QString::number(rect.angle(), 'f', 1) + QChar(0x00b0);
+                const auto  angleText  = QString::number(rect.angle(), 'f', 1) + QChar(0x00b0);
                 const qreal angleWidth = metrics.horizontalAdvance(angleText) + 2 * s.ROILabelHorizontalPadding();
-                const qreal along = (std::abs(axis.x()) * angleWidth + std::abs(axis.y()) * labelHeight) / 2;
-                const qreal across = (std::abs(normal.x()) * angleWidth + std::abs(normal.y()) * labelHeight) / 2;
+                const qreal along      = (std::abs(axis.x()) * angleWidth + std::abs(axis.y()) * labelHeight) / 2;
+                const qreal across     = (std::abs(normal.x()) * angleWidth + std::abs(normal.y()) * labelHeight) / 2;
                 label(map(roiui::contour(region)[1]) + axis * (gap + along) - normal * (gap + across), angleText);
             }
         }

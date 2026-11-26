@@ -302,7 +302,7 @@ void durationTextContract()
     require(durationText(1234.567) == QStringLiteral("1234.567 ms"), "three-decimal rounding is wrong");
 
     // A node that never ran has nothing to show: no dash, no fabricated zero.
-    const auto absent = nodeTimingText(nullptr, false);
+    const auto absent = nodeTimingText(nullptr);
     require(absent.total.isEmpty() && absent.toolCall.isEmpty() && absent.preprocess.isEmpty()
                 && absent.postprocess.isEmpty(),
             "absent execution snapshot fabricated a measurement");
@@ -316,12 +316,12 @@ void durationTextContract()
     snapshot.timing.validateMs       = 43;
     // A gated node publishes a terminal snapshot without entering a stage; it must stay blank even
     // though the snapshot carries array-initialised numbers.
-    const auto gated = nodeTimingText(&snapshot, false);
+    const auto gated = nodeTimingText(&snapshot);
     require(gated.total.isEmpty() && timingPhasesOf(gated).size() == 3,
             "a node that never entered a stage displayed a measurement");
 
     snapshot.timing.prepareMeasured = true;
-    const auto uncalled             = nodeTimingText(&snapshot, false);
+    const auto uncalled             = nodeTimingText(&snapshot);
     require(uncalled.total == QStringLiteral("1234.567 ms") && uncalled.toolCall.isEmpty(),
             "uncalled tool used an unmeasured adapter duration");
     require(uncalled.preprocess == QStringLiteral("27.000 ms") && uncalled.postprocess.isEmpty(),
@@ -334,7 +334,7 @@ void durationTextContract()
     snapshot.timing.toolCallMeasured = true;
     snapshot.timing.initMeasured     = true;
     snapshot.timing.validateMeasured = true;
-    const auto called = nodeTimingText(&snapshot, false);
+    const auto called = nodeTimingText(&snapshot);
     require(called.total == QStringLiteral("1234.567 ms") && called.toolCall == QStringLiteral("1.100 ms"),
             "node total and adapter call measurements were conflated");
     require(called.prepare == QStringLiteral("27.000 ms") && called.init == QStringLiteral("31.000 ms")
@@ -362,7 +362,7 @@ void durationTextContract()
     {
         snapshot.timing.totalMs          = value;
         snapshot.timing.adapterExecuteMs = value;
-        const auto measured              = nodeTimingText(&snapshot, false);
+        const auto measured              = nodeTimingText(&snapshot);
         require(measured.total == expected.value_or(QString()), "node total lost its measurement semantics");
         require(measured.toolCall == expected.value_or(QString()),
                 "operator time lost its measured zero, small value or invalid metric semantics");
@@ -387,7 +387,7 @@ void durationTextContract()
     snapshot.timing.pythonCallMs         = 4.0;
     snapshot.timing.pythonOutputMs       = 3.0;
     snapshot.timing.adapterExecuteMs     = 12.0;
-    const auto pythonCall = nodeTimingText(&snapshot, false);
+    const auto pythonCall = nodeTimingText(&snapshot);
     require(pythonCall.toolCall == QStringLiteral("4.000 ms"),
             "a Python operator must report its real call time instead of the whole adapter boundary");
     require(pythonCall.preprocess == QStringLiteral("5.000 ms"),
@@ -395,21 +395,11 @@ void durationTextContract()
     require(pythonCall.postprocess == QStringLiteral("4.000 ms"),
             "output conversion belongs to post-processing and must be counted once");
     snapshot.timing.pythonCallMeasured = false;
-    require(nodeTimingText(&snapshot, false).toolCall.isEmpty(),
+    require(nodeTimingText(&snapshot).toolCall.isEmpty(),
             "a bridge that never reached the function call must not claim operator time");
 
-    // A running node shows no timing at all: the previous round's numbers describe work that is no
-    // longer running, and the state is carried by colour and the status dot.
-    const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
-    for (const auto *previous : previousSnapshots)
-    {
-        const auto running = nodeTimingText(previous, true);
-        require(running.total.isEmpty() && running.toolCall.isEmpty() && running.preprocess.isEmpty()
-                    && running.postprocess.isEmpty() && timingPhasesOf(running).size() == 3 && timingPhasesOf(running).at(1).value == "0.000 ms",
-                "running node reused an earlier snapshot measurement");
-    }
     std::cout << "[Evidence T-03] Duration text formatting covers missing, zero, tiny, regular and non-finite values.\n";
-    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, gated, uncalled, measured and running values, and hover rows retain three stages.\n";
+    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, gated, uncalled and measured values, and hover rows retain three stages.\n";
 }
 
 void nodeDiagnosticsContract()

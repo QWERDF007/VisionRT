@@ -292,6 +292,8 @@ int main(int argc, char **argv)
     hover(viewport, QEvent::HoverEnter, viewport.imageToItem({480, 380}));
     rendered = renderedFrame(window);
     assert(at(rendered, {310, 260}) == QColor(45, 45, 45) && "Selected ROIs must not draw an outer frame");
+    assert(inputBluePixels(rendered, {500, 345, 50, 10}, dpr) == 0
+           && "Selected rectangles must not draw an internal orientation arrow");
     hover(viewport, QEvent::HoverEnter, viewport.imageToItem({450, 350}));
     rendered = renderedFrame(window);
     assert(inputBluePixels(rendered, {420, 235, 60, 25}, dpr) > 30

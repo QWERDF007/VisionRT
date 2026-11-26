@@ -908,7 +908,19 @@ void roiParameterContract()
                 && circleCommits.isEmpty() && !app.dirty(), "circle resize did not preview without committing");
     QTest::mouseRelease(&window, Qt::LeftButton, {}, circleEnd);
     require(circleCommits.size() == 1 && app.dirty(), "one circle gesture must produce one project commit");
+    const QPointF wheelPos(viewport.width() * 0.35, viewport.height() * 0.4);
+    QWheelEvent   wheel(wheelPos, viewport.mapToGlobal(wheelPos), QPoint(), QPoint(0, 120), Qt::NoButton,
+                        Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(&viewport, &wheel);
+    const auto zoomedState = viewport.viewState();
+    require(zoomedState.mode == ImageViewport::Manual, "wheel zoom did not enter manual zoom mode");
     app.endRoiPreview();
+    const auto afterEndState = viewport.viewState();
+    require(afterEndState.mode == ImageViewport::Manual
+                && std::abs(afterEndState.scale - zoomedState.scale) < 1e-6
+                && std::abs(afterEndState.imageCenter.x() - zoomedState.imageCenter.x()) < 1e-3
+                && std::abs(afterEndState.imageCenter.y() - zoomedState.imageCenter.y()) < 1e-3,
+            "ending ROI edit must preserve manual zoom and pan");
     app.setParameterMode(kRectInput, false);
     require(app.setParameter(kRectInput, false, "[[[10.123456789,20.987654321,40,30,0.123456789]]]"),
             "precise rectangle fixture was rejected");

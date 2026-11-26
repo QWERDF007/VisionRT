@@ -30,7 +30,7 @@ struct NodeTimingPhase
     QString value;
 };
 
-VISIONRT_UI_API NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
+VISIONRT_UI_API NodeTimingText nodeTimingText(const NodeSnapshot *snapshot);
 // Hover-card rows built from the same struct the node card uses, so both surfaces can never
 // disagree about which stage was measured.
 VISIONRT_UI_API QVector<NodeTimingPhase> timingPhasesOf(const NodeTimingText &text);

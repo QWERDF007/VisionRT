@@ -1,6 +1,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
+#include "ui/OutputModel.h"
 #include "ui/UiTypes.h"
 #include "ui/ToolTreeModel.h"
 
@@ -154,6 +155,19 @@ try
                         [](const QString &message) { return message.contains(QStringLiteral("Python 脚本缺失")); }),
             "missing-script diagnosis was not retained");
     require(controller.nodes().size() == 1, "refresh removed the existing node");
+
+    controller.selectNode(nodeId);
+    auto *outputModel = qobject_cast<OutputModel *>(controller.outputModel());
+    require(outputModel && isMissing(outputModel->capture(kStatusCodePort)->value)
+                && isMissing(outputModel->capture(kStatusMessagePort)->value),
+            "unexecuted missing tool must keep output status blank before running");
+    controller.runNode();
+    require(QTest::qWaitFor([&] { return !controller.busy(); }, 5000),
+            "running missing tool did not finish");
+    require(outputModel->capture(kStatusCodePort)
+                && std::get<std::int64_t>(outputModel->capture(kStatusCodePort)->value) != 0
+                && outputModel->get(1).value("preview").toString().contains(QStringLiteral("Python 脚本缺失")),
+            "running missing tool did not populate status code and message in OutputModel");
 
     controller.pasteNodes(0, 0);
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),

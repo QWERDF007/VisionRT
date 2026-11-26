@@ -318,7 +318,6 @@ void AppController::Impl::seatTrainingRegions()
     start.background = DataRef<Image>(Image{trainingAssistImage});
     start.draft      = shapeValue(start.type.type, ROI{training->regions(index)});
     start.original   = {BindingMode::Literal, start.draft, {}};
-    start.view       = viewport->viewState();
     roiSession.begin(std::move(start));
     viewport->beginRoiEdit(roiSession.target(), training->regions(index), false, false);
 }

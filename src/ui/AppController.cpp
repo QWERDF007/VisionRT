@@ -1864,7 +1864,7 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
             break;
         }
     const auto diagnostic = presentation.status(node);
-    const auto timingText = nodeTimingText(snapshot.get(), running);
+    const auto timingText = nodeTimingText(snapshot.get());
     QVariantList phases;
     for (const auto &phase : timingPhasesOf(timingText))
         phases.push_back(QVariantMap{{"label", phase.label}, {"value", phase.value}});

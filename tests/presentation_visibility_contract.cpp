@@ -87,11 +87,6 @@ struct FakeHost final : PresentationHost
         return nullptr;
     }
 
-    Availability toolAvailability(std::string_view) const override
-    {
-        return {ToolAvailability::Available, {}};
-    }
-
     bool runtimeIdle() const override
     {
         return true;

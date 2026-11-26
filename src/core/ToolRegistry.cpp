@@ -197,7 +197,7 @@ Availability ToolRegistry::availability(std::string_view id) const
     if (!definition)
         return {
             ToolAvailability::DefinitionMissing,
-            makeStatus(ErrorCode::NotFound, "工具定义缺失：" + std::string(id))
+            makeStatus(ErrorCode::ToolMissing, "工具定义缺失：" + std::string(id))
         };
     if (definition->kind == ToolKind::Host)
     {

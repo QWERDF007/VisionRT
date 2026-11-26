@@ -151,11 +151,6 @@ ResultSlot::Snapshot ResultPresentation::sharedSnapshot(NodeId node) const
 
 std::optional<NodeDiagnostic> ResultPresentation::status(const NodeDefinition &node) const
 {
-    if (active(node.id))
-        return NodeDiagnostic{node.id, node.toolId, NodePhase::Execute, makeStatus(ErrorCode::Busy, "运行中")};
-    const auto availability = host_.toolAvailability(node.toolId);
-    if (availability.state != ToolAvailability::Available)
-        return NodeDiagnostic{node.id, node.toolId, NodePhase::Create, availability.status};
     const auto currentResult = displaySnapshot(node);
     if (currentResult && currentResult->invocation == ProducedBy::Train)
         return NodeDiagnostic{node.id, node.toolId, currentResult->phase, currentResult->status};
@@ -204,13 +199,18 @@ ResultSlot::Snapshot ResultPresentation::displaySnapshot(const NodeDefinition &n
         return {};
     for (const auto &[port, value] : (*snapshot)->outputs)
     {
-        const auto declaration = node.signatures.outputs.find(port);
-        if (declaration == node.signatures.outputs.end())
+        std::optional<TypeSpec> expected;
+        if (isReservedPort(PortStage::Outputs, port))
+            expected = hostPort(PortStage::Outputs, port).type;
+        else if (const auto declaration = node.signatures.outputs.find(port);
+                 declaration != node.signatures.outputs.end())
+            expected = declaration->second;
+        if (!expected)
             return {};
         if (isMissing(value))
             continue;
         const auto actual = typeOf(value);
-        if (!actual || !compatible(*actual, declaration->second))
+        if (!actual || !compatible(*actual, *expected))
             return {};
     }
     return *snapshot;
@@ -371,8 +371,6 @@ void ResultPresentation::updateResults()
             }
             host_.resultsChanged();
         }
-        if (node && active(node->id))
-            outputs_.setStatus(status(*node));
         return;
     }
     const auto *node   = host_.selectedNode();

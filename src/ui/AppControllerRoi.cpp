@@ -8,15 +8,11 @@ void AppController::Impl::finishRoi()
     stopRoiDraftSync();
     if (!roiSession.active())
         return;
-    const auto view   = roiSession.view();
-    const int  result = roiSession.resultIndex();
+    const int result = roiSession.resultIndex();
     roiSession.end();
     presentation.restoreImageIndex(result);
     if (auto *viewport = presentation.viewport())
-    {
         viewport->endRoiEdit();
-        viewport->restoreViewState(view);
-    }
 }
 
 void AppController::Impl::commitRoi(const RoiEditTarget &target, const EncodedRegion *value)
@@ -99,7 +95,6 @@ bool AppController::Impl::beginParameterRoi(PortId port, PortStage stage, bool c
         start.draft           = copyProjectLiteral(roiValue);
         start.displayIndex    = 0;
         start.resultIndex     = presentation.imageIndex();
-        start.view            = viewport->viewState();
         roiSession.begin(std::move(start));
         if (declaration->editor == EditorKind::Rect)
             viewport->setDrawShape(shapeRegions(roiSession.draft())->empty() ? ImageViewport::DrawRectangle : ImageViewport::DrawNone);

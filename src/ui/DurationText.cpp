@@ -27,11 +27,9 @@ bool enteredExecution(const NodeSnapshot *snapshot)
 }
 } // namespace
 
-NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
+NodeTimingText nodeTimingText(const NodeSnapshot *snapshot)
 {
-    // While the node is running, reusing
-    // the previous round's numbers would describe work that is no longer running.
-    if (running || !enteredExecution(snapshot))
+    if (!enteredExecution(snapshot))
         return {};
 
     const auto &t  = snapshot->timing;

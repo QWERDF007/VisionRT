@@ -751,8 +751,6 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
         assert(
             std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
                         { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
-        assert((!engine.start(loaded.project, registry, RunMode::Once)));
-        std::erase_if(loaded.project.flows[0].nodes, [](const auto &node) { return node.id == 3; });
         std::cout << "[NOT_RUN] Model-file negative execution: DetectObjectsYolo is not included in this package.\n";
     }
     const auto startRes = engine.start(loaded.project, registry, RunMode::Once);
@@ -776,25 +774,33 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     // mistake the failure for a valid empty result.
     assert((std::holds_alternative<Missing>(s2->outputs.at(2))));
 
-    // Node 3: yolo fails because nonexistent model weights
+    // Node 3: yolo fails because nonexistent model weights (or ToolMissing when inference is excluded)
+    auto s3 = snapshot(update, 3);
+    assert((s3));
     if (inferenceIncluded)
     {
-        auto s3 = snapshot(update, 3);
-        assert((s3));
         assert((s3->status.code != 0));
         assert((!s3->status.message.empty()));
     }
+    else
+    {
+        assert((s3->disposition == NodeDisposition::Failed && s3->phase == NodePhase::Create));
+        assert((s3->status.code == hostCode(ErrorCode::ToolMissing)));
+    }
 
-    // Try starting the flow containing Node 4 (definition missing)
+    // Running the flow containing Node 4 (definition missing) fills back ErrorCode::ToolMissing without executing it
     loaded.project.flows[0].runSelected = false;
     loaded.project.flows[1].runSelected = true;
     const auto missingStartStatus       = engine.start(loaded.project, registry, RunMode::Once);
-    assert((!missingStartStatus));
-    assert((missingStartStatus.code == -2));
-    assert((missingStartStatus.message.find("unavailable.custom.plugin") != std::string::npos
-            && missingStartStatus.message.find("请删除对应节点后再执行") != std::string::npos));
-    assert((missingStartStatus.detail.empty()));
-    std::cout << "EXPECTED_MISSING_DEFINITION " << missingStartStatus.code << " " << missingStartStatus.message << '\n';
+    assert((missingStartStatus));
+    const auto missingUpdate = finish(engine);
+    const auto s4            = snapshot(missingUpdate, 4);
+    assert((s4 && s4->disposition == NodeDisposition::Failed && s4->phase == NodePhase::Create));
+    assert((s4->status.code == hostCode(ErrorCode::ToolMissing)));
+    assert((s4->status.message.find("unavailable.custom.plugin") != std::string::npos));
+    assert((std::get<std::int64_t>(s4->outputs.at(kStatusCodePort)) == hostCode(ErrorCode::ToolMissing)));
+    assert((!s4->timing.prepareMeasured && !s4->timing.toolCallMeasured));
+    std::cout << "EXPECTED_MISSING_DEFINITION " << s4->status.code << " " << s4->status.message << '\n';
 }
 
 void testRealPluginModulePipeline(PythonRuntime &python)

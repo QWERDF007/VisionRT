@@ -105,6 +105,74 @@ const char *exceptionSummary(RuntimePhase phase)
     std::terminate();
 }
 
+std::vector<DependencyEdge> runtimeDependencyEdges(const FlowDefinition &flow, const ToolRegistry &registry)
+{
+    std::map<NodeId, const NodeDefinition *> nodes;
+    for (const auto &node : flow.nodes)
+    {
+        if (!nodes.emplace(node.id, &node).second)
+            throw ContractError("节点标识重复：" + std::to_string(node.id));
+    }
+    std::vector<DependencyEdge> edges;
+    for (const auto &target : flow.nodes)
+    {
+        if (!registry.find(target.toolId))
+            continue;
+        for (const auto &[input, binding] : target.inputs)
+        {
+            if (!effectiveSource(binding))
+                continue;
+            const auto &source     = *binding.source;
+            const auto  sourceNode = nodes.find(source.node);
+            if (sourceNode != nodes.end() && !registry.find(sourceNode->second->toolId))
+            {
+                if (source.node == target.id)
+                    throw ContractError("不能连接自身节点");
+                if (sourceNode->second->position.y >= target.position.y)
+                    throw ContractError("只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）");
+                edges.push_back({source.node, target.id});
+                continue;
+            }
+            const auto check = validateBinding(flow, source.node, source.port, target.id, input);
+            if (!check)
+                throw ContractError(check.message + "：节点 " + std::to_string(source.node) + "."
+                                    + portLabel(source.port) + " -> 节点 " + std::to_string(target.id) + "."
+                                    + portLabel(input));
+            edges.push_back({source.node, target.id});
+        }
+    }
+    std::sort(edges.begin(), edges.end());
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    return edges;
+}
+
+bool hasRuntimeCycle(const std::vector<DependencyEdge> &edges)
+{
+    std::map<NodeId, std::vector<NodeId>> adjacency;
+    for (const auto &[from, to] : edges)
+        adjacency[from].push_back(to);
+    std::map<NodeId, int> state;
+    std::function<bool(NodeId)> visit = [&](NodeId id) -> bool
+    {
+        state[id] = 1;
+        if (const auto found = adjacency.find(id); found != adjacency.end())
+        {
+            for (const auto next : found->second)
+            {
+                const int nextState = state[next];
+                if (nextState == 1 || (nextState == 0 && visit(next)))
+                    return true;
+            }
+        }
+        state[id] = 2;
+        return false;
+    };
+    for (const auto &[node, _] : adjacency)
+        if (state[node] == 0 && visit(node))
+            return true;
+    return false;
+}
+
 // Single-node execution may reuse a previous session, but only while every
 // consumed publication is still the current, successful and type-compatible
 // source. The result is the first node that must be rerun.
@@ -403,6 +471,8 @@ struct RuntimeEngine::Impl
                 {
                     if (node.id != *frozen->target)
                         continue;
+                    if (frozen->registry.availability(node.toolId).state != ToolAvailability::Available)
+                        break;
                     for (const auto &[input, binding] : node.inputs)
                     {
                         if (binding.mode == BindingMode::Upstream && binding.source)
@@ -414,7 +484,8 @@ struct RuntimeEngine::Impl
                     }
                 }
             }
-            auto edges = frozen->mode == RunMode::Node ? std::vector<DependencyEdge>{} : dependencyEdges(flow);
+            auto edges = frozen->mode == RunMode::Node ? std::vector<DependencyEdge>{}
+                                                       : runtimeDependencyEdges(flow, frozen->registry);
             std::vector<NodeId>         ids;
             std::vector<ToolDefinition> contracts;
             for (const auto &node : flow.nodes)
@@ -767,18 +838,24 @@ ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegis
             nonempty = nonempty || !flow.nodes.empty();
             for (const auto &node : flow.nodes)
             {
-                if (!frozen->registry.find(node.toolId))
-                    throw ContractError("流程包含缺失插件节点 " + node.title() + "（" + node.toolId
-                                        + "），请删除对应节点后再执行");
-            }
-            for (const auto &node : flow.nodes)
-            {
                 if (mode == RunMode::Node && node.id != *target)
                     continue;
-                const auto *definition = frozen->registry.find(node.toolId);
-                frozen->contracts.emplace(node.id, nodeContract(node, *definition));
+                if (const auto *definition = frozen->registry.find(node.toolId))
+                    frozen->contracts.emplace(node.id, nodeContract(node, *definition));
+                else
+                {
+                    ToolDefinition missingContract;
+                    missingContract.nameEn  = node.toolId;
+                    missingContract.nameZh  = node.toolNameSnapshot;
+                    missingContract.version = node.toolVersionSnapshot;
+                    missingContract.outputs = {
+                        hostPort(PortStage::Outputs, kStatusCodePort),
+                        hostPort(PortStage::Outputs, kStatusMessagePort),
+                    };
+                    frozen->contracts.emplace(node.id, std::move(missingContract));
+                }
             }
-            if (mode != RunMode::Node && hasDependencyCycle(flow))
+            if (mode != RunMode::Node && hasRuntimeCycle(runtimeDependencyEdges(flow, frozen->registry)))
                 throw ContractError("执行流程存在依赖循环：" + flow.id);
         }
         if (mode == RunMode::Node && (!target || !targetFound))
@@ -789,25 +866,29 @@ ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegis
             return {ErrorCode::InvalidArgument, receiverError->message, receiverError->detail};
         if (mode == RunMode::Node)
         {
-            for (const auto &flow : frozen->project.flows)
+            const auto *targetNode = frozen->nodes.at(*target);
+            if (frozen->registry.availability(targetNode->toolId).state == ToolAvailability::Available)
             {
-                for (const auto &node : flow.nodes)
+                for (const auto &flow : frozen->project.flows)
                 {
-                    if (node.id != *target)
-                        continue;
-                    for (const auto &[input, binding] : node.inputs)
+                    for (const auto &node : flow.nodes)
                     {
-                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        if (node.id != *target)
+                            continue;
+                        for (const auto &[input, binding] : node.inputs)
                         {
-                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
-                            if (!check)
-                                return {ErrorCode::InvalidArgument, check.message};
+                            if (binding.mode == BindingMode::Upstream && binding.source)
+                            {
+                                const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
+                                if (!check)
+                                    return {ErrorCode::InvalidArgument, check.message};
+                            }
                         }
                     }
                 }
+                if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
+                    return {ErrorCode::InvalidArgument, *error};
             }
-            if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
-                return {ErrorCode::InvalidArgument, *error};
         }
         impl_->sessionMode   = mode;
         impl_->state         = mode == RunMode::Node ? RuntimeState::RunningNode

@@ -758,7 +758,7 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, PortId input,
     if (binding.mode != BindingMode::Literal && binding.mode != BindingMode::Upstream)
         throw ContractError("输入绑定模式无效");
     validateLiteral(type, binding.literal);
-    if (binding.source)
+    if (binding.source && (binding.mode == BindingMode::Upstream || binding.source != current.source))
     {
         const auto check = visionrt::validateBinding(target, binding.source->node, binding.source->port, id, input);
         if (!check)

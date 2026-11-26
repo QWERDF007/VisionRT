@@ -56,7 +56,6 @@ public:
                                       const std::map<PortId, bool> *connectable = nullptr,
                                       const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {},
                                       std::optional<NodeDiagnostic> status = {});
-    void                    setStatus(std::optional<NodeDiagnostic> status);
     std::optional<Captured> capture(int row) const;
     std::optional<Captured> capture(PortId port) const;
     static QString          fullText(const Captured &captured);

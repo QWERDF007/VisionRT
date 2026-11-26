@@ -186,6 +186,13 @@ class InitFailure:
     app.runNode();
     require(QTest::qWaitFor([&] { return stateOf(source).value("state").toInt() == static_cast<int>(NodeState::Running); }, 5000),
             "status source did not enter running state");
+    require(!stateOf(source).value("statusCode").isValid() && stateOf(source).value("statusMessage").toString().isEmpty(),
+            "running node must not emit a synthetic running status before completion");
+    require(stateOf(source).value("timingText").toString().isEmpty(),
+            "first running node must keep timing blank before completion");
+    require(initialOutputs && isMissing(initialOutputs->capture(kStatusCodePort)->value)
+                && isMissing(initialOutputs->capture(kStatusMessagePort)->value),
+            "output panel must keep status blank while first run is still in flight");
     auto *sourceItem = findItem(canvas, "flowNode_" + source);
     require(sourceItem, "status source delegate is missing");
     // A run owns the workspace: the selection cannot move while it is active, so the running node
@@ -196,6 +203,25 @@ class InitFailure:
     write(permission, "allow");
     idle();
     require(stateOf(source).value("state").toInt() == static_cast<int>(NodeState::Succeeded), "status source did not succeed");
+    require(std::get<std::int64_t>(initialOutputs->capture(kStatusCodePort)->value) == 0,
+            "completed node did not publish status code 0");
+    const auto completedTiming = stateOf(source).value("timingText").toString();
+    require(completedTiming.endsWith(QStringLiteral(" ms")), "completed node did not publish timing");
+    // Re-running a completed node preserves its previous completed outputs, status, and timing until completion.
+    require(QFile::remove(permission), "status permission file could not be removed for rerun");
+    app.runNode();
+    require(QTest::qWaitFor([&] { return stateOf(source).value("state").toInt() == static_cast<int>(NodeState::Running); }, 5000),
+            "status source did not re-enter running state");
+    require(stateOf(source).value("statusCode").toInt() == 0
+                && stateOf(source).value("statusMessage").toString() != QStringLiteral("运行中"),
+            "re-running node overwrote completed status with synthetic running status");
+    require(stateOf(source).value("timingText").toString() == completedTiming,
+            "re-running node must preserve previous completed timing until completion");
+    require(std::get<std::int64_t>(initialOutputs->capture(kStatusCodePort)->value) == 0
+                && initialOutputs->get(1).value("preview").toString() != QStringLiteral("运行中"),
+            "output panel overwrote previous completed status while re-running");
+    write(permission, "allow");
+    idle();
     // The border belongs to the status layer, so it is checked again once selection moved away and
     // the card shows its own neutral outline.
     app.selectNode(neighbour);

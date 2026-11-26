@@ -28,7 +28,6 @@ public:
         PortValue                draft;
         int                      displayIndex = 0;
         int                      resultIndex  = 0;
-        ImageViewport::ViewState view{ImageViewport::Contain, 1.0, {}};
     };
 
     // Starts a new session and returns its id. Any previous session ends first.
@@ -81,8 +80,6 @@ public:
         return draft_ ? draft_->resultIndex : 0;
     }
 
-    const ImageViewport::ViewState &view() const noexcept;
-
     bool commitGeometry(const RoiEditTarget &target, const EncodedRegion *value);
     bool   previewGeometry(const RoiEditTarget &target, const EncodedRegion &value);
     void   cancelPreview();
@@ -101,7 +98,6 @@ private:
         PortValue                draft;
         int                      displayIndex = 0;
         int                      resultIndex  = 0;
-        ImageViewport::ViewState view{ImageViewport::Contain, 1.0, {}};
     };
 
     bool                     stageGeometry(const RoiEditTarget &target, const EncodedRegion *value);

@@ -42,7 +42,6 @@ public:
         = 0;
 
     // Runtime facts the presentation must not duplicate.
-    virtual Availability toolAvailability(std::string_view toolId) const = 0;
     virtual bool         runtimeIdle() const                             = 0;
     virtual bool         closing() const                                 = 0;
 

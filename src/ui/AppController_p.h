@@ -334,11 +334,6 @@ struct AppController::Impl : PresentationHost
     const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                      const NodeDefinition &node) const override;
 
-    Availability toolAvailability(std::string_view id) const override
-    {
-        return registry.availability(id);
-    }
-
     bool runtimeIdle() const override
     {
         return state == RuntimeState::Idle;

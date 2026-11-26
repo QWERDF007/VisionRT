@@ -67,7 +67,8 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
     {
         const auto *definition = registry.find(node.toolId);
         if (!definition)
-            throw RegistryError(ToolAvailability::DefinitionMissing, "工具定义缺失：" + node.toolId);
+            throw RegistryError(ToolAvailability::DefinitionMissing,
+                                makeStatus(ErrorCode::ToolMissing, "工具定义缺失：" + node.toolId));
         return registry.create(nodeContract(node, *definition), HostToolContext{reader});
     }
     catch (const RegistryError &error)
@@ -124,7 +125,7 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
     deferredCreate    = configuration->kind == ToolKind::PythonFunction
                    || configuration->kind == ToolKind::PythonClass;
     preparation.store({}, std::memory_order_release);
-    if (deferredCreate)
+    if (deferredCreate || configuration->availability != ToolAvailability::Available)
         return;
     ToolStatus status;
     instance = createInstance(node, registry, reader, status);
@@ -241,6 +242,21 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->toolId            = definition->nameEn;
     snapshot->outputTypes       = resolvedOutputTypes(*definition);
     snapshot->executionRevision = config.executionRevision;
+    const auto availability     = frozen.registry.availability(config.toolId);
+    if (availability.state != ToolAvailability::Available)
+    {
+        snapshot->disposition = NodeDisposition::Failed;
+        snapshot->phase       = NodePhase::Create;
+        snapshot->status      = availability.status;
+        for (const auto &port : definition->outputs)
+            if (!isReservedPort(PortStage::Outputs, port.id))
+                snapshot->outputs.emplace(port.id, Missing{});
+        snapshot->outputs.insert_or_assign(kStatusCodePort, snapshot->status.code);
+        snapshot->outputs.insert_or_assign(kStatusMessagePort, snapshot->status.message);
+        report({id, config.toolId, NodePhase::Create, snapshot->status, DiagnosticOrigin::System});
+        slot.publish(std::move(snapshot));
+        return;
+    }
     // Python tools report their own inner stages; copying them in one place keeps a stage from being
     // counted twice or inherited from a previous round.
     const auto applyPythonMetrics = [&]
@@ -344,10 +360,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         {
                             const auto found = upstream->outputs.find(input.source->port);
                             if (found == upstream->outputs.end())
-                                throw ContractError("上游输出端口不存在");
-                            // A failed tool may still publish valid diagnostics or partial results;
-                            // dropping them would hide data the tool actually produced.
-                            value = found->second;
+                            {
+                                if (!frozen.registry.find(upstream->toolId))
+                                    value = Missing{};
+                                else
+                                    throw ContractError("上游输出端口不存在");
+                            }
+                            else
+                                // A failed tool may still publish valid diagnostics or partial results;
+                                // dropping them would hide data the tool actually produced.
+                                value = found->second;
                         }
                     }
                 }

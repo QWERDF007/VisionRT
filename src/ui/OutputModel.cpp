@@ -283,25 +283,6 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     endResetModel();
 }
 
-void OutputModel::setStatus(std::optional<NodeDiagnostic> status)
-{
-    for (int index = 0; index < rowCount(); ++index)
-    {
-        auto &row = rows_[index];
-        if (!row.system)
-            continue;
-        const PortValue value = !status ? PortValue{Missing{}} : row.id == kStatusCodePort ? PortValue{status->status.code}
-                                                        : PortValue{status->status.message};
-        if (equalValues(row.captured.value, value))
-            continue;
-        row.captured.value = value;
-        row.captured.diagnostic = status;
-        row.preview = displayValue(value, row.captured.type);
-        row.tooltip = row.preview;
-        emit dataChanged(this->index(index, 0), this->index(index, columnCount() - 1));
-    }
-}
-
 std::optional<OutputModel::Captured> OutputModel::capture(int row) const
 {
     if (row < 0 || static_cast<std::size_t>(row) >= rows_.size() || !rows_[row].resolved)

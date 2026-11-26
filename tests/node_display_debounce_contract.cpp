@@ -3,6 +3,7 @@
 #include "ui/NodeListModel.h"
 #include "ui/UiTypes.h"
 
+#include <QDir>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -184,10 +185,53 @@ try
     require(node1->property("border").value<QObject *>()->property("width").toInt() == 1,
             "unselected normal node lost its solid border");
 
-    // Missing unselected node activates dashed border and disables solid border (single border only)
-    require(loader2->property("active").toBool(), "missing node did not activate dashed border");
+    // Missing unselected node stays on a solid NodeMissing border without dashed warning frame or warning labels
+    require(!loader2->property("active").toBool(), "missing unselected node must not activate a dashed border");
+    require(node2->property("border").value<QObject *>()->property("width").toInt() == 1,
+            "missing unselected node lost its solid border");
+    require(node2->property("border").value<QObject *>()->property("color").value<QColor>()
+                == VisionRTColor::getInstance()->NodeMissing(),
+            "missing unselected node did not use NodeMissing border color");
+    {
+        QStringList missingTexts;
+        const auto collectText = [&](auto &&self, QQuickItem *parent) -> void
+        {
+            for (auto *child : parent->childItems())
+            {
+                if (child->isVisible() && child->property("text").isValid())
+                    missingTexts << child->property("text").toString();
+                self(self, child);
+            }
+        };
+        collectText(collectText, node2);
+        for (const auto &text : missingTexts)
+            require(!text.contains(QStringLiteral("缺失")) && !text.contains(QStringLiteral("删除")),
+                    "missing node card must not show warning or missing prompt text");
+        require(missingTexts.contains(QStringLiteral("工具")) && missingTexts.contains(QStringLiteral("v1.0"))
+                    && missingTexts.contains(QStringLiteral("节点-2")),
+                "missing node card did not keep normal card text");
+    }
+    QTest::qWait(50);
+    {
+        const QImage grab = window.grabWindow();
+        require(!grab.isNull(), "failed to grab missing node comparison frame");
+        const qreal  dpr     = grab.devicePixelRatio();
+        const QRectF bounds2 = node2->mapRectToScene(node2->boundingRect());
+        const QRect  header2(qRound(bounds2.left() * dpr), qRound(bounds2.top() * dpr),
+                             qRound(bounds2.width() * dpr), qRound(20 * dpr));
+        require(hasColorNear(grab, header2, VisionRTColor::getInstance()->NodeMissing()),
+                "missing node header did not render NodeMissing color");
+        QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
+        require(grab.save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/node-missing-card.png")),
+                "failed to save missing node card evidence");
+    }
+
+    // Selecting missing node 2 swaps its single border from solid to dashed highlight
+    root->setProperty("selectedId", QStringLiteral("2"));
+    QTest::qWait(50);
+    require(loader2->property("active").toBool(), "selected missing node did not activate dashed border");
     require(node2->property("border").value<QObject *>()->property("width").toInt() == 0,
-            "missing node kept a solid border under its dashed border");
+            "selected missing node stacked a solid border under its dashed border");
 
     // Selecting node 1 swaps its single border from solid to dashed highlight
     root->setProperty("selectedId", QStringLiteral("1"));

@@ -20,8 +20,7 @@ std::uint64_t RoiEditSession::begin(Start start)
                 std::move(start.background),
                 std::move(start.draft),
                 start.displayIndex,
-                start.resultIndex,
-                std::move(start.view)};
+                start.resultIndex};
     draft_ = std::move(draft);
     return draft_->id;
 }
@@ -72,12 +71,6 @@ const PortValue &RoiEditSession::draft() const noexcept
 {
     static const PortValue empty;
     return draft_ ? draft_->draft : empty;
-}
-
-const ImageViewport::ViewState &RoiEditSession::view() const noexcept
-{
-    static const ImageViewport::ViewState empty{ImageViewport::Contain, 1.0, {}};
-    return draft_ ? draft_->view : empty;
 }
 
 void RoiEditSession::setDisplayIndex(int value)

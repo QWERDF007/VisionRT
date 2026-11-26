@@ -1690,38 +1690,70 @@ void activityEventsFollowExecution()
         assert(events[index].sequence > events[index - 1].sequence);
 }
 
-void missingPluginBlocksEntireFlow()
+void missingPluginFillsStatusWithoutExecution()
 {
     ToolRegistry registry;
     auto         good = definition("test.good_node");
     install(registry, good, [](const Values &) { return toolResult({{2, std::int64_t{42}}}, {}); });
+    auto consumer = definition("test.consumer_node", {"input"});
+    bool consumerSawMissing = false;
+    install(registry, consumer,
+            [&](const Values &inputs)
+            {
+                consumerSawMissing = std::holds_alternative<Missing>(inputs.at(1));
+                return toolResult({{2, std::int64_t{consumerSawMissing ? 7 : 0}}}, {});
+            });
 
     auto validNode = node(1, good);
+    validNode.position = {0, 0};
+
     NodeDefinition missingNode;
     missingNode.id                  = 2;
     missingNode.toolId              = "missing.plugin.tool";
     missingNode.toolNameSnapshot    = "缺失工具";
     missingNode.toolVersionSnapshot = "1.0.0";
     missingNode.position            = {0, 1};
+    // Preserved incoming wire on a missing-definition node does not block execution.
+    missingNode.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{1, 2}};
+
+    auto downstreamNode = node(3, consumer);
+    downstreamNode.position = {0, 2};
+    downstreamNode.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{2, 2}};
 
     ProjectDefinition project;
-    project.flows.front().nodes = {validNode, missingNode};
+    project.flows.front().nodes = {validNode, missingNode, downstreamNode};
 
     RuntimeEngine engine(2);
-    // Entire flow is blocked in Once, Loop, and even single-node execution on a different valid node.
-    const auto onceBlocked = engine.start(project, registry, RunMode::Once);
-    assert(!onceBlocked && onceBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
-    const auto loopBlocked = engine.start(project, registry, RunMode::Loop);
-    assert(!loopBlocked && loopBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
-    const auto singleBlocked = engine.start(project, registry, RunMode::Node, 1);
-    assert(!singleBlocked && singleBlocked.message.find("请删除对应节点后再执行") != std::string::npos);
-
-    // Deleting the missing-plugin node restores execution.
-    project.flows.front().nodes.pop_back();
+    // Running a flow containing a wired missing-tool node succeeds: valid nodes run normally,
+    // the missing node is skipped and filled with ErrorCode::ToolMissing status, and downstream
+    // nodes wired to it receive Missing instead of blocking the run.
     assert(engine.start(project, registry, RunMode::Once));
-    const auto result = finish(engine);
-    assert(snapshot(result, 1) && snapshot(result, 1)->status.code == 0
-           && std::get<std::int64_t>(snapshot(result, 1)->outputs.at(2)) == 42);
+    const auto onceResult = finish(engine);
+    assert(snapshot(onceResult, 1) && snapshot(onceResult, 1)->status.code == 0
+           && std::get<std::int64_t>(snapshot(onceResult, 1)->outputs.at(2)) == 42);
+    const auto missingOnce = snapshot(onceResult, 2);
+    assert(missingOnce && missingOnce->disposition == NodeDisposition::Failed
+           && missingOnce->phase == NodePhase::Create
+           && missingOnce->status.code == hostCode(ErrorCode::ToolMissing)
+           && missingOnce->status.message.find("missing.plugin.tool") != std::string::npos
+           && std::get<std::int64_t>(missingOnce->outputs.at(kStatusCodePort)) == hostCode(ErrorCode::ToolMissing)
+           && std::get<std::string>(missingOnce->outputs.at(kStatusMessagePort)) == missingOnce->status.message
+           && !missingOnce->timing.prepareMeasured && !missingOnce->timing.toolCallMeasured);
+    const auto consumerOnce = snapshot(onceResult, 3);
+    assert(consumerOnce && consumerOnce->status.code == 0 && consumerSawMissing
+           && std::get<std::int64_t>(consumerOnce->outputs.at(2)) == 7);
+
+    // Single-node run on the missing node also publishes ErrorCode::ToolMissing without executing a tool.
+    assert(engine.start(project, registry, RunMode::Node, 2));
+    const auto missingSingle = snapshot(finish(engine), 2);
+    assert(missingSingle && missingSingle->status.code == hostCode(ErrorCode::ToolMissing)
+           && !missingSingle->timing.toolCallMeasured);
+
+    // Single-node run on a valid node in the same flow remains unaffected.
+    assert(engine.start(project, registry, RunMode::Node, 1));
+    const auto validSingle = snapshot(finish(engine), 1);
+    assert(validSingle && validSingle->status.code == 0
+           && std::get<std::int64_t>(validSingle->outputs.at(2)) == 42);
 }
 
 int main(int argc, char **argv)
@@ -1750,7 +1782,7 @@ try
     std::cout << "20\n"; businessNegativeIsNotCancellation();
     std::cout << "21\n"; authorContractErrorPassesThroughBusinessBoundary();
     std::cout << "22\n"; activityEventsFollowExecution();
-    std::cout << "23\n"; missingPluginBlocksEntireFlow();
+    std::cout << "23\n"; missingPluginFillsStatusWithoutExecution();
     std::cout << "runtime contracts passed\n";
     return 0;
 }
