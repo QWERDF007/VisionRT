@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-20T13:34:27Z",
-  "updated_at": "2026-11-26T09:35:06Z",
+  "updated_at": "2026-11-26T15:40:51Z",
   "files": {
     ".clang-format": {
       "role": "index",
@@ -59,15 +59,15 @@
     },
     "WORKLOG.md": {
       "role": "index",
-      "sha256": "11d5b04cd7aca45e6ab4d56c771014c8970b264c8457957cc51eb2afaae1b2ec",
-      "size": 576614,
-      "normalized_sha256": "11d5b04cd7aca45e6ab4d56c771014c8970b264c8457957cc51eb2afaae1b2ec"
+      "sha256": "b46c8c630fd57e1f54f0918c9f461164e449123e945974cf379c3ec45dc7084d",
+      "size": 566054,
+      "normalized_sha256": "b46c8c630fd57e1f54f0918c9f461164e449123e945974cf379c3ec45dc7084d"
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "b6f609251ee8a5d7b5d2539e4f6372d60dc4065f7d299074672d830ef41bbf01",
-      "size": 89837,
-      "normalized_sha256": "b6f609251ee8a5d7b5d2539e4f6372d60dc4065f7d299074672d830ef41bbf01"
+      "sha256": "254f39ac5ea3cb3fe0d0339c358de9a6c4bbef38db28f54770f1b4ebf947f12f",
+      "size": 90256,
+      "normalized_sha256": "254f39ac5ea3cb3fe0d0339c358de9a6c4bbef38db28f54770f1b4ebf947f12f"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -81,1256 +81,772 @@
       "size": 1044,
       "normalized_sha256": "045c5abec4734a880ccd4582bb4b5c5e05abd5e36e0008d645b6d9cbad4533ad"
     },
-    "build-contracts/tests/CMakeFiles/test_array_contract.dir/test_array_contract.cpp.obj": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test.dir/parameter_mapping_test.cpp.obj": {
       "role": "observe",
-      "sha256": "dc1c01b48da52bf4194c3131f4e11631daa6a746ca09a87117d0018ecf77cc07",
-      "size": 7778185
+      "sha256": "0326e7d0ebd5b1f69dfa92a6f8ff4a9df19dc968033b981ae34003c5dbfd54c9",
+      "size": 2112954
     },
-    "build-contracts/tests/CMakeFiles/test_data_ref_contract.dir/test_data_ref_contract.cpp.obj": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test.dir/parameter_mapping_test_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "d038adb6c3e4444f1cb71354e02045becf542ef5d916345bde609cf9127454c6",
-      "size": 646844
+      "sha256": "a1574788b1c1022d62cfa7fa5c30ecd6b92b41ee37f8e4ccd6ebf59182f16ef1",
+      "size": 671
     },
-    "build-contracts/tests/CMakeFiles/test_sdk_function_tool.dir/test_sdk_function_tool.cpp.obj": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "e906975f164abca87dd691ff8e873e3477fc8376becf486df849189035cb1bcb",
-      "size": 2459991
+      "sha256": "5d506f9ffde31749dc0fd83c28893f17d1c782ccc214f656343ad491ebe30845",
+      "size": 4251,
+      "normalized_sha256": "5d506f9ffde31749dc0fd83c28893f17d1c782ccc214f656343ad491ebe30845"
     },
-    "build-contracts/tests/CMakeFiles/test_sdk_parameters.dir/test_sdk_parameters.cpp.obj": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "f3ca45a95797486af07321b0d58cd531cb955ddb031402ef4c79da38ec431f89",
-      "size": 4094337
-    },
-    "build-contracts/tests/CMakeFiles/test_sdk_value_contract.dir/test_sdk_value_contract.cpp.obj": {
-      "role": "observe",
-      "sha256": "fdd8350363158f2385aaa6ea1d81074b80bebf0f277d1596e9b9a961c55f4212",
-      "size": 3844233
-    },
-    "build-contracts/tests/CTestTestfile.cmake": {
-      "role": "observe",
-      "sha256": "7092ae6dca19684dfdaa159ee9593376037be83af5066952a6a0535ad319ed5d",
-      "size": 3434,
-      "normalized_sha256": "6e52ccb27506d6f87c1069d7cd6cd91ef134c0c0460f639cb709a692dca1f77d"
-    },
-    "build-contracts/tests/cmake_install.cmake": {
-      "role": "observe",
-      "sha256": "f64c1ed835fbd0c79a07e39fc0b862fb25417b4cd42c7dfbe95fdf2c91e8c59d",
-      "size": 1069,
-      "normalized_sha256": "d4696fed24c70817a08f8d5a811a55265edf57cf9f70401394d8de61a1d8d849"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "0d0cc7ff905afcc90f2a6cb78a01f8a125138e5717844947130bb333e9eff802",
-      "size": 4315,
-      "normalized_sha256": "0d0cc7ff905afcc90f2a6cb78a01f8a125138e5717844947130bb333e9eff802"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c533c5c8245c50db9e4a67c9e32849629507c4359bed2158a8b6b6cf82bd9a2a",
-      "size": 3789,
-      "normalized_sha256": "c533c5c8245c50db9e4a67c9e32849629507c4359bed2158a8b6b6cf82bd9a2a"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "fa9872f050c2cfb5c8b63c741e1ea3a1c9c474e60c0f0afd20d6ad8de2817aac",
-      "size": 3559,
-      "normalized_sha256": "fa9872f050c2cfb5c8b63c741e1ea3a1c9c474e60c0f0afd20d6ad8de2817aac"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c71139b9569392237fbd9298fcb78f7a0f1f85b93ae0311855f485f631b6d4e8",
-      "size": 4569,
-      "normalized_sha256": "c71139b9569392237fbd9298fcb78f7a0f1f85b93ae0311855f485f631b6d4e8"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8a1f9eb8db4a67f41b06aa1739a8913b7336c1d65407aed87d38a06bc3562c66",
-      "size": 3305,
-      "normalized_sha256": "8a1f9eb8db4a67f41b06aa1739a8913b7336c1d65407aed87d38a06bc3562c66"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "06005c6b2eb2403ddfc68adf369fa8eb78cfb63c3b2dc88fa65bfe533bd15eb9",
-      "size": 4061,
-      "normalized_sha256": "06005c6b2eb2403ddfc68adf369fa8eb78cfb63c3b2dc88fa65bfe533bd15eb9"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/CTestTestfile.cmake": {
-      "role": "observe",
-      "sha256": "607325596f1317277f284fbd559fe0dc28db418b869a0739fe6e5ab1ee3c28bd",
-      "size": 4006,
-      "normalized_sha256": "679df61440d795bdb15fad5ecf84ad2cacd94b90874f9a604c48c94eec949726"
-    },
-    "build-dll-debug/3rdparty/VisionRTContracts/tests/cmake_install.cmake": {
-      "role": "observe",
-      "sha256": "b78941be44f85e7361d242a1553eb9fc1cea7b18d4cc4eb2a4eeb4863f3776c9",
-      "size": 1084,
-      "normalized_sha256": "50114cd703b8d1791555494c71e08ac31bab60c008d770e174d5c32ff6d18f39"
-    },
-    "build-dll-debug/tests/CMakeFiles/assist_viewport_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "fbbfba94dec71d26ffe56b1ab2da2981fd9ff8efb7eadaac785bedcf93eefad0",
-      "size": 19829,
-      "normalized_sha256": "fbbfba94dec71d26ffe56b1ab2da2981fd9ff8efb7eadaac785bedcf93eefad0"
-    },
-    "build-dll-debug/tests/CMakeFiles/cpu_tools_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "f775b4772dcfe8cd36dbdb0c991ca99a8977306175092c5957b49e3ca17205c8",
-      "size": 10970,
-      "normalized_sha256": "f775b4772dcfe8cd36dbdb0c991ca99a8977306175092c5957b49e3ca17205c8"
-    },
-    "build-dll-debug/tests/CMakeFiles/custom_tool_store_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ac994ea7264afa9d8d0a650577e7332c8cd36c6abb39b90cbf87bef8165cced1",
-      "size": 7337,
-      "normalized_sha256": "ac994ea7264afa9d8d0a650577e7332c8cd36c6abb39b90cbf87bef8165cced1"
-    },
-    "build-dll-debug/tests/CMakeFiles/definition_json_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c8b735d08133ebabef6627d4c42258ebf882f06d41811577208a0837ef45f0ce",
-      "size": 6906,
-      "normalized_sha256": "c8b735d08133ebabef6627d4c42258ebf882f06d41811577208a0837ef45f0ce"
-    },
-    "build-dll-debug/tests/CMakeFiles/display_conversion_benchmark_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ea3920f5d137a61aee7359ee6820752721bb68ed0d5a6c47713581f388f2b262",
-      "size": 15409,
-      "normalized_sha256": "ea3920f5d137a61aee7359ee6820752721bb68ed0d5a6c47713581f388f2b262"
-    },
-    "build-dll-debug/tests/CMakeFiles/display_reader_drain_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ea512ea72254380fe7f0b80e6f2eb8b4203257b69893a3241024070009d627da",
-      "size": 19642,
-      "normalized_sha256": "ea512ea72254380fe7f0b80e6f2eb8b4203257b69893a3241024070009d627da"
-    },
-    "build-dll-debug/tests/CMakeFiles/display_storage_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "82b2c46871e2d6ac50259d81208be3fc2a4032b194643093beead0ff0a2dd58b",
-      "size": 15162,
-      "normalized_sha256": "82b2c46871e2d6ac50259d81208be3fc2a4032b194643093beead0ff0a2dd58b"
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/dll_consumer_contract.cpp.obj": {
-      "role": "observe",
-      "sha256": "6e225434553830fa1902194b999edb6b5d220a6d41c3005caa76dee7c3e52b48",
-      "size": 623685
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/dll_consumer_contract_autogen/mocs_compilation.cpp.obj": {
-      "role": "observe",
-      "sha256": "9a5517e8679b340bdcab9053064e48081482cdc3a8159339a67d06be60734754",
-      "size": 892
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/embed.manifest": {
-      "role": "observe",
-      "sha256": "be8918559280a2e74748bf8f6238b568ed7cbf75183b2180a6a8a979a1ebf243",
-      "size": 406,
-      "normalized_sha256": "531b41aa28b24f319b16b9dec9160656248064cd5263625dc13b00301ac4cdbe"
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/intermediate.manifest": {
-      "role": "observe",
-      "sha256": "4bb79dcea0a901f7d9eac5aa05728ae92acb42e0cb22e5dd14134f4421a3d8df",
-      "size": 381,
-      "normalized_sha256": "9ba3db1d132aead1b9c6a5033da960cf775630b44bbb214cfc70e15a85295b37"
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/manifest.rc": {
-      "role": "observe",
-      "sha256": "474699c3599f39cdcefb4bc8d5a0d5c9acf89f477f95640532e168cb358ea638",
-      "size": 186,
-      "normalized_sha256": "acdb50bf3fa7287fdee279c28e2538e80d69e0e6deac47214ee50587e88b9c86"
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/manifest.res": {
-      "role": "observe",
-      "sha256": "215b9d4f3f5df87dd63db022aa1c5af1ccbfd18973ca451508398a9338945d94",
-      "size": 472
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/vc140.pdb": {
-      "role": "observe",
-      "sha256": "2594519c6561ed23dbbbe8592ee6fd8497ab9c5e87b52d56a124e56ec6e27221",
-      "size": 4435968
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "b71733661f45d21b466a57032f4c5271452ad306669884be9cd5bd26988bcf41",
-      "size": 7816,
-      "normalized_sha256": "b71733661f45d21b466a57032f4c5271452ad306669884be9cd5bd26988bcf41"
-    },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/AutogenUsed.txt": {
-      "role": "observe",
-      "sha256": "66efa8f6e1a252a56cf4d849be98f1803f5152a08ed20561dd1ce65a42d915d5",
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
       "size": 69,
-      "normalized_sha256": "66efa8f6e1a252a56cf4d849be98f1803f5152a08ed20561dd1ce65a42d915d5"
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/ParseCache.txt": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "b2065f7ab6e5163dcf991e30fde4da85a13d06edaf0e4f50b73adc2cdc68dd9c",
-      "size": 106,
-      "normalized_sha256": "d7cb87e6239012e155617b87a2180b98ed35b203ed692610479aa59590e9c128"
+      "sha256": "f92da69509ee1093dec8991b323913a22c997c9b0d8c8562b4477331462a06eb",
+      "size": 133,
+      "normalized_sha256": "29d6e7e5051524bb9efea9380ee78f574ec307b1346a56a84aae0f9ec6b7cd89"
     },
-    "build-dll-debug/tests/CMakeFiles/edge_hierarchy_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract.dir/test_array_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "ba8c608e247d6e58c17f2576ed9e47dd68164acee8f195e9d704540bf7a4c466",
-      "size": 10404,
-      "normalized_sha256": "ba8c608e247d6e58c17f2576ed9e47dd68164acee8f195e9d704540bf7a4c466"
+      "sha256": "ce76bd44fc09b177b5ba81038db425cba0f7bf4ccc53964b32ad066da525fc5c",
+      "size": 2489393
     },
-    "build-dll-debug/tests/CMakeFiles/example_metadata_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract.dir/test_array_contract_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "09cfa10ac47e0a5e3c7e952f193374a5e71627bb59d096a4eeea371d2ef03e65",
-      "size": 11121,
-      "normalized_sha256": "09cfa10ac47e0a5e3c7e952f193374a5e71627bb59d096a4eeea371d2ef03e65"
+      "sha256": "cb834688c4aaae5138da9c0ce2fa3d3cc2b1216f4622e41e90ab8d196c7c5a97",
+      "size": 667
     },
-    "build-dll-debug/tests/CMakeFiles/example_pipelines_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "e39f55436e5dd00ec743cf86b1bb14fc1fd7d24f8ed397d17117239b18ab6bec",
-      "size": 26738,
-      "normalized_sha256": "e39f55436e5dd00ec743cf86b1bb14fc1fd7d24f8ed397d17117239b18ab6bec"
+      "sha256": "7dc472f54e626a6ae05463362455d7d60fb40e3f3b1179dd42f553191cafe573",
+      "size": 3741,
+      "normalized_sha256": "7dc472f54e626a6ae05463362455d7d60fb40e3f3b1179dd42f553191cafe573"
     },
-    "build-dll-debug/tests/CMakeFiles/example_project_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "91e634fc2bcc5e20d039822022cad944f4830cc8cbb0fc9ff3b77ea1c0c3f6ee",
-      "size": 23611,
-      "normalized_sha256": "91e634fc2bcc5e20d039822022cad944f4830cc8cbb0fc9ff3b77ea1c0c3f6ee"
-    },
-    "build-dll-debug/tests/CMakeFiles/gpu_tools_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "b20f6e8f9a7fa23feb6ceafda958224da04fb27c1934bab5723c1a0421f29084",
-      "size": 11476,
-      "normalized_sha256": "b20f6e8f9a7fa23feb6ceafda958224da04fb27c1934bab5723c1a0421f29084"
-    },
-    "build-dll-debug/tests/CMakeFiles/installed_pipeline_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "d87a502c77d203019fa27986b99faec122857b75f455f31cc5df351328566b4e",
-      "size": 12440,
-      "normalized_sha256": "d87a502c77d203019fa27986b99faec122857b75f455f31cc5df351328566b4e"
-    },
-    "build-dll-debug/tests/CMakeFiles/installed_python_author_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "2a5a5176fbc1b6caac9408525f94bbdcc7470671f1141df66666dcea304670bb",
-      "size": 12690,
-      "normalized_sha256": "2a5a5176fbc1b6caac9408525f94bbdcc7470671f1141df66666dcea304670bb"
-    },
-    "build-dll-debug/tests/CMakeFiles/libavoid_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "61b2fd480ef2f6aacd2173cb9a2ef31458366b6e44de65fe97b662be786e1066",
-      "size": 14032,
-      "normalized_sha256": "61b2fd480ef2f6aacd2173cb9a2ef31458366b6e44de65fe97b662be786e1066"
-    },
-    "build-dll-debug/tests/CMakeFiles/log_aggregation_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "9e2e6c7adf582aedcc60fbf845406ad055bf2e04e738dae70794d9aa6a58d8f5",
-      "size": 8243,
-      "normalized_sha256": "9e2e6c7adf582aedcc60fbf845406ad055bf2e04e738dae70794d9aa6a58d8f5"
-    },
-    "build-dll-debug/tests/CMakeFiles/log_level_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "0a320386d0e5c57c638baae691b79ee860d22df7492d2a495f3d504f85b7a8b8",
-      "size": 8599,
-      "normalized_sha256": "0a320386d0e5c57c638baae691b79ee860d22df7492d2a495f3d504f85b7a8b8"
-    },
-    "build-dll-debug/tests/CMakeFiles/log_lifecycle_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "2938d8c5b12ae14cf31620c9b1aab15f2d89713e9645dc8ec6eab2cb0c6992ac",
-      "size": 8431,
-      "normalized_sha256": "2938d8c5b12ae14cf31620c9b1aab15f2d89713e9645dc8ec6eab2cb0c6992ac"
-    },
-    "build-dll-debug/tests/CMakeFiles/log_text_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "99233875bdb1c5410bb22b38fdb3ac7a63a8923f633ba174ee168fc6325c9fd6",
-      "size": 7997,
-      "normalized_sha256": "99233875bdb1c5410bb22b38fdb3ac7a63a8923f633ba174ee168fc6325c9fd6"
-    },
-    "build-dll-debug/tests/CMakeFiles/logic_node_execution_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "f5b6bba5a7dceca27bcaae848bb2508106c6204ee3984a34cb52946694b91e10",
-      "size": 10329,
-      "normalized_sha256": "f5b6bba5a7dceca27bcaae848bb2508106c6204ee3984a34cb52946694b91e10"
-    },
-    "build-dll-debug/tests/CMakeFiles/module_registration_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "20786fa4439d37d8431315877099da9d64327d71d5d1fc79cfd3832f4e90e831",
-      "size": 25099,
-      "normalized_sha256": "20786fa4439d37d8431315877099da9d64327d71d5d1fc79cfd3832f4e90e831"
-    },
-    "build-dll-debug/tests/CMakeFiles/native_value_lifetime_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "49e15dfedcd81ef9f5a46b445b9899fa11404d00a7ee6a5e75fbb777550ce9fb",
-      "size": 25535,
-      "normalized_sha256": "49e15dfedcd81ef9f5a46b445b9899fa11404d00a7ee6a5e75fbb777550ce9fb"
-    },
-    "build-dll-debug/tests/CMakeFiles/node_activity_mailbox_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "de9705fef3e0e419571179cd0f3e2bc0447688f9bca99962a894f588ab32068b",
-      "size": 12679,
-      "normalized_sha256": "de9705fef3e0e419571179cd0f3e2bc0447688f9bca99962a894f588ab32068b"
-    },
-    "build-dll-debug/tests/CMakeFiles/node_list_model_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c93014577e7082b9d5803c9b1bd48ff3d7e92b30f30108e9e046794ac85210a4",
-      "size": 17743,
-      "normalized_sha256": "c93014577e7082b9d5803c9b1bd48ff3d7e92b30f30108e9e046794ac85210a4"
-    },
-    "build-dll-debug/tests/CMakeFiles/output_text_readback_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8fc9fcb3cfa28622d71abd79e1343777cd5dd82cba14a0141127b3280e9ab44c",
-      "size": 19897,
-      "normalized_sha256": "8fc9fcb3cfa28622d71abd79e1343777cd5dd82cba14a0141127b3280e9ab44c"
-    },
-    "build-dll-debug/tests/CMakeFiles/output_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "d7cf5c17c164af7df3bdb39156bffd49bad39b37684eadee4a90aa7f66095072",
-      "size": 15554,
-      "normalized_sha256": "d7cf5c17c164af7df3bdb39156bffd49bad39b37684eadee4a90aa7f66095072"
-    },
-    "build-dll-debug/tests/CMakeFiles/package_replacement_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "1d76a3eaf35aaef686ed96d49e8fe67522d9e18daffab7609f63eb019e96c48f",
-      "size": 26993,
-      "normalized_sha256": "1d76a3eaf35aaef686ed96d49e8fe67522d9e18daffab7609f63eb019e96c48f"
-    },
-    "build-dll-debug/tests/CMakeFiles/performance_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ece126c9074c7bb91f82dfb32ae03a6ac69a2260c54e3d6fcd07c411ac4eb4d2",
-      "size": 24453,
-      "normalized_sha256": "ece126c9074c7bb91f82dfb32ae03a6ac69a2260c54e3d6fcd07c411ac4eb4d2"
-    },
-    "build-dll-debug/tests/CMakeFiles/plugin_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "253d4cc01bef1190117b111a905684a0f9f8d9ccbf577fe22f1efdb243a9e88a",
-      "size": 27122,
-      "normalized_sha256": "253d4cc01bef1190117b111a905684a0f9f8d9ccbf577fe22f1efdb243a9e88a"
-    },
-    "build-dll-debug/tests/CMakeFiles/presentation_visibility_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "1019cfa3c29e031e1874f06aa6957755bfd60e13af1969994b4c91074ba69fb2",
-      "size": 18047,
-      "normalized_sha256": "1019cfa3c29e031e1874f06aa6957755bfd60e13af1969994b4c91074ba69fb2"
-    },
-    "build-dll-debug/tests/CMakeFiles/project_editor_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "06b6b49be5c465e11b63b34a317b7398f0eeccc5aae4dc848154c7f81b697f19",
-      "size": 9888,
-      "normalized_sha256": "06b6b49be5c465e11b63b34a317b7398f0eeccc5aae4dc848154c7f81b697f19"
-    },
-    "build-dll-debug/tests/CMakeFiles/project_storage_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "a11a913ba546b423d1cd77302b47960b30d5cde76b4b979fed70ce5e12992635",
-      "size": 10506,
-      "normalized_sha256": "a11a913ba546b423d1cd77302b47960b30d5cde76b4b979fed70ce5e12992635"
-    },
-    "build-dll-debug/tests/CMakeFiles/project_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "d8fb5b414585bc5aa5cf56e522e28fd439f38b1bc28c043d5ac5941763cb7e71",
-      "size": 10694,
-      "normalized_sha256": "d8fb5b414585bc5aa5cf56e522e28fd439f38b1bc28c043d5ac5941763cb7e71"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_adapter_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "137ee61e85299fd6a204ebc77ffd1512534f6663f6bdb9b06dcbe19542d476ed",
-      "size": 9759,
-      "normalized_sha256": "137ee61e85299fd6a204ebc77ffd1512534f6663f6bdb9b06dcbe19542d476ed"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_array_lifetime_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "a35da808f3e39431a770be5bf6a856218e6e81788d2f2a7de95fbd9c358a451d",
-      "size": 26113,
-      "normalized_sha256": "a35da808f3e39431a770be5bf6a856218e6e81788d2f2a7de95fbd9c358a451d"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_environment_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ec49e67c007a22a45e525b2bfab20176914cdfa944090b9fdc2bf1afc5dddee3",
-      "size": 18605,
-      "normalized_sha256": "ec49e67c007a22a45e525b2bfab20176914cdfa944090b9fdc2bf1afc5dddee3"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_loading_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "eb2172d6416edbf6878267e3cbbd59ddbe3cfc007173d2f24a7a8895230039e9",
-      "size": 9557,
-      "normalized_sha256": "eb2172d6416edbf6878267e3cbbd59ddbe3cfc007173d2f24a7a8895230039e9"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_probe_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8335928e08783da069c8752ca274b81ff5b654cac66615ba3a41093912bd29ca",
-      "size": 9055,
-      "normalized_sha256": "8335928e08783da069c8752ca274b81ff5b654cac66615ba3a41093912bd29ca"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_shutdown_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "75842187e7bb261e8a4c2157c3029f8b39b0956abdd60a3f1916181ef3788a46",
-      "size": 9969,
-      "normalized_sha256": "75842187e7bb261e8a4c2157c3029f8b39b0956abdd60a3f1916181ef3788a46"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_tools_execution_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "a550c437e16c3fe552a4dadb4924645621a13e0a607e2634bcebc15a936eb165",
-      "size": 12014,
-      "normalized_sha256": "a550c437e16c3fe552a4dadb4924645621a13e0a607e2634bcebc15a936eb165"
-    },
-    "build-dll-debug/tests/CMakeFiles/python_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "2238bc86bae2886a76cb4a91d2ab9a039821ae1083584a57172e2cc0ade970a7",
-      "size": 9028,
-      "normalized_sha256": "2238bc86bae2886a76cb4a91d2ab9a039821ae1083584a57172e2cc0ade970a7"
-    },
-    "build-dll-debug/tests/CMakeFiles/recent_projects_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "f7e3aaf7c6cdd10e72399030842053a9f44ff03bbce6f171f353ea28a76c0fce",
-      "size": 23000,
-      "normalized_sha256": "f7e3aaf7c6cdd10e72399030842053a9f44ff03bbce6f171f353ea28a76c0fce"
-    },
-    "build-dll-debug/tests/CMakeFiles/result_readback_barrier_test_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "3aab062b1377da03af2876d241e6de7ade62571ab2837a409c15a42d26863da5",
-      "size": 13527,
-      "normalized_sha256": "3aab062b1377da03af2876d241e6de7ade62571ab2837a409c15a42d26863da5"
-    },
-    "build-dll-debug/tests/CMakeFiles/roi_view_benchmark_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "99b5630c0b1fb5e480d2113b1597fb352953ed55c89dc21920791b6946348397",
-      "size": 7973,
-      "normalized_sha256": "99b5630c0b1fb5e480d2113b1597fb352953ed55c89dc21920791b6946348397"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "6f64385ea76a47fe9f7fb41be9bec94eee5e681c9e035efd868591d050e34bd6",
-      "size": 12288,
-      "normalized_sha256": "6f64385ea76a47fe9f7fb41be9bec94eee5e681c9e035efd868591d050e34bd6"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_diagnostics_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "b6a5120704cb08d7b010cc6d12bfcd4007fb90c4696ef5833201eea4fe821331",
-      "size": 13115,
-      "normalized_sha256": "b6a5120704cb08d7b010cc6d12bfcd4007fb90c4696ef5833201eea4fe821331"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_hotpath_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "094030e0cc1b9a27de4fd2ce6bbe8d6a85d5de92421b2c96339540212ebc547c",
-      "size": 20708,
-      "normalized_sha256": "094030e0cc1b9a27de4fd2ce6bbe8d6a85d5de92421b2c96339540212ebc547c"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_node_activity_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "d013eef69b3461ed9d7a022987a9f0da076e6424fa1674827e7a58a9af85adbe",
-      "size": 12495,
-      "normalized_sha256": "d013eef69b3461ed9d7a022987a9f0da076e6424fa1674827e7a58a9af85adbe"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_python_lazy_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "5b475ca5bedca622c15d54c0df18c3127fa158ddf011762d9037449d03b344bf",
-      "size": 13382,
-      "normalized_sha256": "5b475ca5bedca622c15d54c0df18c3127fa158ddf011762d9037449d03b344bf"
-    },
-    "build-dll-debug/tests/CMakeFiles/runtime_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "11dff93e0b25aee5c666bffa856d1a09d369148cff85109c2b5f3895d4460b1c",
-      "size": 13268,
-      "normalized_sha256": "11dff93e0b25aee5c666bffa856d1a09d369148cff85109c2b5f3895d4460b1c"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dep_a_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "e72f28266e0b62b1ed65bf2269182a6b921b93d8416fcd179349b0cd497cc8fc",
-      "size": 22346,
-      "normalized_sha256": "e72f28266e0b62b1ed65bf2269182a6b921b93d8416fcd179349b0cd497cc8fc"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dep_b_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "621b68b1aee9c9aaedff5b6c46cb69c8606c8d928073688f1741d5ad22d7ddf5",
-      "size": 22522,
-      "normalized_sha256": "621b68b1aee9c9aaedff5b6c46cb69c8606c8d928073688f1741d5ad22d7ddf5"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/embed.manifest": {
-      "role": "observe",
-      "sha256": "be8918559280a2e74748bf8f6238b568ed7cbf75183b2180a6a8a979a1ebf243",
-      "size": 406,
-      "normalized_sha256": "531b41aa28b24f319b16b9dec9160656248064cd5263625dc13b00301ac4cdbe"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/intermediate.manifest": {
-      "role": "observe",
-      "sha256": "4bb79dcea0a901f7d9eac5aa05728ae92acb42e0cb22e5dd14134f4421a3d8df",
-      "size": 381,
-      "normalized_sha256": "9ba3db1d132aead1b9c6a5033da960cf775630b44bbb214cfc70e15a85295b37"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/manifest.rc": {
-      "role": "observe",
-      "sha256": "02757dbe20ef5fb24db36dc1553111d2c653ae347f38845ac680d0d384bf8cbb",
-      "size": 182,
-      "normalized_sha256": "6d85dac3ae3e8cddbf9fe1e0b9e51799eab0ddb0e02c9f27a4beff0ea47cc3d4"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/manifest.res": {
-      "role": "observe",
-      "sha256": "b16afbd1f40da446441b9fa2f30bd0be4bb90e9d3969c9b93e5c12b82d34e2b9",
-      "size": 472
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/test_dll_consumer_autogen/mocs_compilation.cpp.obj": {
-      "role": "observe",
-      "sha256": "9a1847e1844688dc9df87c91fae061a2e294f8086a1a889edbea53f95e00ed86",
-      "size": 880
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/test_dll_consumer_logging.cpp.obj": {
-      "role": "observe",
-      "sha256": "a14f30e02a0c9dec28348340db1cafc6fc56bf483df8d1911f72616b062ae54a",
-      "size": 231059
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/vc140.pdb": {
-      "role": "observe",
-      "sha256": "0634cc96d432b54a6d41b3585dc61ba04ef6e5d95e71fb535468b7af4cb3b6bb",
-      "size": 3575808
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "b3b0a74feedd25bc766650a6a8a8e1446c634816355eb7e06f1c135157d25087",
-      "size": 7653,
-      "normalized_sha256": "b3b0a74feedd25bc766650a6a8a8e1446c634816355eb7e06f1c135157d25087"
-    },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/AutogenUsed.txt": {
-      "role": "observe",
-      "sha256": "99591f6b1ed0300d10ca355cd5a79d247f5567963f3bf170ee6093f3bb68c139",
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
       "size": 69,
-      "normalized_sha256": "99591f6b1ed0300d10ca355cd5a79d247f5567963f3bf170ee6093f3bb68c139"
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/ParseCache.txt": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "d4b7074f57b1585e0c497b8b9a1e62a839f29d11f4c168520708ba21c7289c42",
-      "size": 232,
-      "normalized_sha256": "ba6a63b01da9511a25a524061409c504c29b5989ee3d7cfbbccd4c4a813ecfd7"
+      "sha256": "368e792fe516ad58a094f4db2f155bfe7ca7c4bd964601011057c0fcd2d91650",
+      "size": 130,
+      "normalized_sha256": "05c687927e31ed4b6f42b55661ac0a5ac3d5bbda7773e9d0a42089d534f26e83"
     },
-    "build-dll-debug/tests/CMakeFiles/test_plugin_a_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract.dir/test_data_ref_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "f3af297e938a2a18564f0bdbcd6f1e622872961bc5cb08c9147ee6d190f60bbc",
-      "size": 22867,
-      "normalized_sha256": "f3af297e938a2a18564f0bdbcd6f1e622872961bc5cb08c9147ee6d190f60bbc"
+      "sha256": "05bca256a50ec90061395af6360638f3672205cae424d064c7e83b3401a9fdbe",
+      "size": 609577
     },
-    "build-dll-debug/tests/CMakeFiles/test_plugin_b_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract.dir/test_data_ref_contract_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "734e8c37603b6ee3288e95b702430f4037b20107ca52fd44945c19763894cc54",
-      "size": 23049,
-      "normalized_sha256": "734e8c37603b6ee3288e95b702430f4037b20107ca52fd44945c19763894cc54"
+      "sha256": "5e4f7cff61cc439b73931b1eb88a94e10245984c0f5ef3a11cae6fdd0606f5b5",
+      "size": 671
     },
-    "build-dll-debug/tests/CMakeFiles/test_plugin_legacy_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "b36cf35f09816af940118a077960fb4561f7a33b29d2d5d9530b0f47dbd1cbb9",
-      "size": 23292,
-      "normalized_sha256": "b36cf35f09816af940118a077960fb4561f7a33b29d2d5d9530b0f47dbd1cbb9"
+      "sha256": "398ca7a49d33a4683ddf46a76a19b4908694b15d9aa5c4d938135c689a2a7f88",
+      "size": 3519,
+      "normalized_sha256": "398ca7a49d33a4683ddf46a76a19b4908694b15d9aa5c4d938135c689a2a7f88"
     },
-    "build-dll-debug/tests/CMakeFiles/test_plugin_module_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "e92c9d77c9519b97792dc3cdc5e20fb165e137be6e6129cd85d7c4f6b709bac7",
-      "size": 22359,
-      "normalized_sha256": "e92c9d77c9519b97792dc3cdc5e20fb165e137be6e6129cd85d7c4f6b709bac7"
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
+      "size": 69,
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/test_plugin_value_lifetime_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "ff1cd6bc747ef7ccb87e57c15196bba733bed01cb83a898ba368edb110163c0f",
-      "size": 24796,
-      "normalized_sha256": "ff1cd6bc747ef7ccb87e57c15196bba733bed01cb83a898ba368edb110163c0f"
+      "sha256": "c2cba048b3e413389f5eb622b1d5f7578b736634c829ecc61f83149826e9a64a",
+      "size": 133,
+      "normalized_sha256": "8f21e9fa6b4c1d5f64917ce4f05a7587d1c3f670e0f58ec71bbe285cc093865e"
     },
-    "build-dll-debug/tests/CMakeFiles/test_registration_collision_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract.dir/test_roi_view_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "6f901f4bc706ad3b13e5aea606edff591afce3edc6ea1b7b3d4703292de1b521",
-      "size": 24380,
-      "normalized_sha256": "6f901f4bc706ad3b13e5aea606edff591afce3edc6ea1b7b3d4703292de1b521"
+      "sha256": "dd94af771357721a0796d6a5a513ad7735e52f847673644c75587de1014979fc",
+      "size": 186039
     },
-    "build-dll-debug/tests/CMakeFiles/test_registration_duplicate_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract.dir/test_roi_view_contract_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "bc457ae9f64f19381a0d8dcb075df2905a0dfd7afe0c87475131f24670389b1f",
-      "size": 23805,
-      "normalized_sha256": "bc457ae9f64f19381a0d8dcb075df2905a0dfd7afe0c87475131f24670389b1f"
+      "sha256": "ee6f9e0f9729787894f58e09af159f0254b0b6980e6a9f35de07e1eb91bb3442",
+      "size": 671
     },
-    "build-dll-debug/tests/CMakeFiles/test_registration_null_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "9256f933c0a97b8061bfaeb053a6b036a4aa896cbf00546146509b2a1a824cf9",
-      "size": 24172,
-      "normalized_sha256": "9256f933c0a97b8061bfaeb053a6b036a4aa896cbf00546146509b2a1a824cf9"
+      "sha256": "0dc46792381dd866c165040acbbadb0ce72b5153c5f5d28c3e3d754c7e5e4b8f",
+      "size": 4497,
+      "normalized_sha256": "0dc46792381dd866c165040acbbadb0ce72b5153c5f5d28c3e3d754c7e5e4b8f"
     },
-    "build-dll-debug/tests/CMakeFiles/test_registration_short_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "99f2dfa5c3256d846cc9707f9dbda64ed67b0c7f8fdc2d3c1d828e4ace0e1f6a",
-      "size": 23973,
-      "normalized_sha256": "99f2dfa5c3256d846cc9707f9dbda64ed67b0c7f8fdc2d3c1d828e4ace0e1f6a"
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
+      "size": 69,
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/test_registration_valid_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "6660dcb00c264572a1d63485f547d87d5f623deabd6b489eb9ea683782aeca18",
-      "size": 23534,
-      "normalized_sha256": "6660dcb00c264572a1d63485f547d87d5f623deabd6b489eb9ea683782aeca18"
+      "sha256": "b774b53f9eb895215d11db8dca14fbd9eaea24159d4d6455f06b0b991e0f997d",
+      "size": 133,
+      "normalized_sha256": "045121227fdfb9cbf2cc8bb63dac2fb2d9a7c6733b832a4dd3e3d494110712a4"
     },
-    "build-dll-debug/tests/CMakeFiles/tool_discovery_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract.dir/test_sdk_value_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "65bd47029073517447d67807534fe6f02efd09bd335270dba1b5c10c94280541",
-      "size": 9686,
-      "normalized_sha256": "65bd47029073517447d67807534fe6f02efd09bd335270dba1b5c10c94280541"
+      "sha256": "665668e444b501c9a2f7acb73bbba0ad0c267bfbf1b5ad8961e6acb23c132939",
+      "size": 1920571
     },
-    "build-dll-debug/tests/CMakeFiles/tool_editor_controller_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract.dir/test_sdk_value_contract_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "2f86a2ec51ee3573c62d98a1e389c25d4a0fee3edd0529242e8a63f4884093c4",
-      "size": 18730,
-      "normalized_sha256": "2f86a2ec51ee3573c62d98a1e389c25d4a0fee3edd0529242e8a63f4884093c4"
+      "sha256": "4995928762556ecc047b7afbaaa9633a090a85e88998bef68c3d44c6b5a9f4fc",
+      "size": 675
     },
-    "build-dll-debug/tests/CMakeFiles/tool_editor_dialog_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "95c9d20b38027ad1628a260b482acd701f6ef8a1255517e45c2aae0f88588963",
-      "size": 19013,
-      "normalized_sha256": "95c9d20b38027ad1628a260b482acd701f6ef8a1255517e45c2aae0f88588963"
+      "sha256": "fd8f809de94da562cc892957d31544ce98972f3d99de44cbe296502ac5541e5d",
+      "size": 3273,
+      "normalized_sha256": "fd8f809de94da562cc892957d31544ce98972f3d99de44cbe296502ac5541e5d"
     },
-    "build-dll-debug/tests/CMakeFiles/tool_port_list_model_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "1f4bf71993ad91ab60c062678fb7dd7f492227706e08cb96cd2b4f149bb878bf",
-      "size": 17990,
-      "normalized_sha256": "1f4bf71993ad91ab60c062678fb7dd7f492227706e08cb96cd2b4f149bb878bf"
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
+      "size": 69,
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/tool_registry_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "75c7394e8b028bc9af37b44efc7dcad819c468f751fdf3c60a30c6358b9568e8",
-      "size": 6798,
-      "normalized_sha256": "75c7394e8b028bc9af37b44efc7dcad819c468f751fdf3c60a30c6358b9568e8"
+      "sha256": "0d23c5ba78679e135679fc0c7f97b9d6e4242eeb570cf679c2ac26920cae5b06",
+      "size": 134,
+      "normalized_sha256": "fd6092f6fb402f9ac08871fd76e29805cb08b9279ede3d9d9eb7839a0c71afbf"
     },
-    "build-dll-debug/tests/CMakeFiles/tools_package_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test.dir/tool_registration_test.cpp.obj": {
       "role": "observe",
-      "sha256": "c331221b209f3970c451ed2020d9e72060cf714ce34cf8ba25cdeeb6e758c5bc",
-      "size": 7094,
-      "normalized_sha256": "c331221b209f3970c451ed2020d9e72060cf714ce34cf8ba25cdeeb6e758c5bc"
+      "sha256": "3a340725a55e40feacc471cf598f72585be2f25495813901c741f17a8aa00a7b",
+      "size": 1106804
     },
-    "build-dll-debug/tests/CMakeFiles/training_session_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test.dir/tool_registration_test_autogen/mocs_compilation.cpp.obj": {
       "role": "observe",
-      "sha256": "eb4a103bf6196ecc7245c90eae59a98a01dbf7e792f3fddf78ea17abc352998a",
-      "size": 14975,
-      "normalized_sha256": "eb4a103bf6196ecc7245c90eae59a98a01dbf7e792f3fddf78ea17abc352998a"
+      "sha256": "aac99b468178eea78ff5cd11a8aaa1168a7409b035e31aa707854a6999a75554",
+      "size": 671
     },
-    "build-dll-debug/tests/CMakeFiles/ui_completion_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenInfo.json": {
       "role": "observe",
-      "sha256": "3f30ebb293c6d5235a8a153400883e46087bf192166968d75a148c7008a7a376",
-      "size": 19662,
-      "normalized_sha256": "3f30ebb293c6d5235a8a153400883e46087bf192166968d75a148c7008a7a376"
+      "sha256": "544ac1bde8de29bf176ba6ab5bcfd01b6e0a7bdbfe68d67c9d163853cd04286c",
+      "size": 4005,
+      "normalized_sha256": "544ac1bde8de29bf176ba6ab5bcfd01b6e0a7bdbfe68d67c9d163853cd04286c"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_notifications_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenUsed.txt": {
       "role": "observe",
-      "sha256": "b719f33da642fe3eb27c7a8b82b82c8ac036974791b9f78066d2c34314737a08",
-      "size": 18049,
-      "normalized_sha256": "b719f33da642fe3eb27c7a8b82b82c8ac036974791b9f78066d2c34314737a08"
+      "sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2",
+      "size": 69,
+      "normalized_sha256": "6aaed9d4139ef464a1cbeb853a610867f110b61713b849af5d08260765bfecd2"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_preferences_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/ParseCache.txt": {
       "role": "observe",
-      "sha256": "fbddd4d9fd451cee01de00be46a2889c8f3f238ea29b1e4e072c50b152175992",
-      "size": 23196,
-      "normalized_sha256": "fbddd4d9fd451cee01de00be46a2889c8f3f238ea29b1e4e072c50b152175992"
+      "sha256": "173db71877b39416433a343d5a240d917f1809ebdb4d1ebb3b928648acf18ee0",
+      "size": 133,
+      "normalized_sha256": "b84e85e63b53270357ace17871185685f8c6de3abca0f3d60ac4f02c6c85d1c6"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_receiver_identity_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/CTestTestfile.cmake": {
       "role": "observe",
-      "sha256": "fa2c40920d9a82d9ba083a0e8d61d7a5f3a83e1accef4dc1c463e0c82731c8b0",
-      "size": 17983,
-      "normalized_sha256": "fa2c40920d9a82d9ba083a0e8d61d7a5f3a83e1accef4dc1c463e0c82731c8b0"
+      "sha256": "62c6740466dd1f74d8a0319f1eb44f91d328243e75fac45d6f84264a8c0c8000",
+      "size": 3875,
+      "normalized_sha256": "0980ff3f51256398bdbe529fda0358bb4cd36f94a6438c3fee31725a9fec14c8"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_result_isolation_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/cmake_install.cmake": {
       "role": "observe",
-      "sha256": "9f4184df60f5b34cd7c7f7a6812fe1f7896a5680b02b57b5dc9cdf0fa6355b5d",
-      "size": 23209,
-      "normalized_sha256": "9f4184df60f5b34cd7c7f7a6812fe1f7896a5680b02b57b5dc9cdf0fa6355b5d"
+      "sha256": "03728cc9343106e5f2dc16452e464b838f78789c7ed82ebd527d030340d917f7",
+      "size": 1360,
+      "normalized_sha256": "096f5fa1dcfba63cf4d7a55a326cb4e12e5eec5fbbbd74021b53d2c5faa39189"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_storage_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/parameter_mapping_test_autogen/deps": {
       "role": "observe",
-      "sha256": "b3e4d6c07ae4d8fa126967a9f76099c7be25f67eda6cf5b8e05f899dacc370e8",
-      "size": 24148,
-      "normalized_sha256": "b3e4d6c07ae4d8fa126967a9f76099c7be25f67eda6cf5b8e05f899dacc370e8"
+      "sha256": "031474236ef29dae3f92fa48dd6b0f5345115535225fb3e206c022d7cbc3f114",
+      "size": 802,
+      "normalized_sha256": "031474236ef29dae3f92fa48dd6b0f5345115535225fb3e206c022d7cbc3f114"
     },
-    "build-dll-debug/tests/CMakeFiles/ui_unc_paths_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "398e94fc8c8034c2ef6591f05d6fca04c875f801a0fbddd1f04ac3978cd28007",
-      "size": 19506,
-      "normalized_sha256": "398e94fc8c8034c2ef6591f05d6fca04c875f801a0fbddd1f04ac3978cd28007"
-    },
-    "build-dll-debug/tests/CMakeFiles/ui_value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8548f6a9ec314d6e81bd58f8533d2f4a779b76e5b48711f457948da491fb70cd",
-      "size": 17482,
-      "normalized_sha256": "8548f6a9ec314d6e81bd58f8533d2f4a779b76e5b48711f457948da491fb70cd"
-    },
-    "build-dll-debug/tests/CMakeFiles/value_bridge_benchmark_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "207e697185c5cdaa339067d70ba5a5031b5ff044879caf2230ccb16b8aaac1e4",
-      "size": 16016,
-      "normalized_sha256": "207e697185c5cdaa339067d70ba5a5031b5ff044879caf2230ccb16b8aaac1e4"
-    },
-    "build-dll-debug/tests/CMakeFiles/value_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "cb7ace335447e0a56f624d95d75ff03720e4b31feb96a372ab05a0778119deb8",
-      "size": 6442,
-      "normalized_sha256": "cb7ace335447e0a56f624d95d75ff03720e4b31feb96a372ab05a0778119deb8"
-    },
-    "build-dll-debug/tests/CMakeFiles/value_json_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "71c1f46f286f7adee135f5d1e3de231c25feb6f36017008ecaf535252f4ed076",
-      "size": 7478,
-      "normalized_sha256": "71c1f46f286f7adee135f5d1e3de231c25feb6f36017008ecaf535252f4ed076"
-    },
-    "build-dll-debug/tests/CMakeFiles/version_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "2061f524896950612ad005fd00343ee8ae524c24063fedca3bbaccc3de84867f",
-      "size": 5899,
-      "normalized_sha256": "2061f524896950612ad005fd00343ee8ae524c24063fedca3bbaccc3de84867f"
-    },
-    "build-dll-debug/tests/CMakeFiles/viewport_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "71d2a456dafa0eb34bcca72feaa1802b79c0b459508ef83186532a396214b07e",
-      "size": 16506,
-      "normalized_sha256": "71d2a456dafa0eb34bcca72feaa1802b79c0b459508ef83186532a396214b07e"
-    },
-    "build-dll-debug/tests/CMakeFiles/viewport_lifetime_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "0c5488d5c197299eb31de2ed5f29d920a90a93e7bc953a01867a44fd9c9062d1",
-      "size": 16984,
-      "normalized_sha256": "0c5488d5c197299eb31de2ed5f29d920a90a93e7bc953a01867a44fd9c9062d1"
-    },
-    "build-dll-debug/tests/CMakeFiles/visionrt_python_testing_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "5a37791cc628fdb526d2772a3fa3d855b2fbfe23d03938bd907cdad5f3741b2e",
-      "size": 6340,
-      "normalized_sha256": "5a37791cc628fdb526d2772a3fa3d855b2fbfe23d03938bd907cdad5f3741b2e"
-    },
-    "build-dll-debug/tests/CMakeFiles/wire_router_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "cee439c1a0f2a558875026806914e7564ad376a4fdc4ad6a95820f962e70e6e9",
-      "size": 16134,
-      "normalized_sha256": "cee439c1a0f2a558875026806914e7564ad376a4fdc4ad6a95820f962e70e6e9"
-    },
-    "build-dll-debug/tests/CMakeFiles/wire_routing_benchmark_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c743e52ab8ee78522ae7c438d924f6cb7fc1b9cc4fc88a38f4867c0cad075dab",
-      "size": 17128,
-      "normalized_sha256": "c743e52ab8ee78522ae7c438d924f6cb7fc1b9cc4fc88a38f4867c0cad075dab"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_assist_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8455abe6877b63151a001546c2013783f93a046ec50c6af4733f58a31025d40e",
-      "size": 21991,
-      "normalized_sha256": "8455abe6877b63151a001546c2013783f93a046ec50c6af4733f58a31025d40e"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_assist_release_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "c3eda57188125931b0bf5df70d1bd8d8e7f20c11ccf795a2e9f189688e7ff8cd",
-      "size": 21372,
-      "normalized_sha256": "c3eda57188125931b0bf5df70d1bd8d8e7f20c11ccf795a2e9f189688e7ff8cd"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_clipboard_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "e423e7eeff258fff3bf22dd45806c6d9ee3da281e3ff7db61c3a1f3840a4642c",
-      "size": 21275,
-      "normalized_sha256": "e423e7eeff258fff3bf22dd45806c6d9ee3da281e3ff7db61c3a1f3840a4642c"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "8ae38d2648dbca8a56e7845e96aecba0d2c2d5df1b17d00c96c4da620c9bf7f0",
-      "size": 25123,
-      "normalized_sha256": "8ae38d2648dbca8a56e7845e96aecba0d2c2d5df1b17d00c96c4da620c9bf7f0"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_exit_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "ecabf3677f8657d47ae56b79ab003190977d071f996786a96b92b8242173fe48",
-      "size": 23360,
-      "normalized_sha256": "ecabf3677f8657d47ae56b79ab003190977d071f996786a96b92b8242173fe48"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_expression_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "faae79199f08f981b109ac46d1d4f24adb5299b49e28ef2a9fa358a0286f0a7d",
-      "size": 20661,
-      "normalized_sha256": "faae79199f08f981b109ac46d1d4f24adb5299b49e28ef2a9fa358a0286f0a7d"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_flows_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "6fd836ab5cfe462fe709fd0d401a649c3e81a2f5e5cdc8fcb322608d201a126b",
-      "size": 20655,
-      "normalized_sha256": "6fd836ab5cfe462fe709fd0d401a649c3e81a2f5e5cdc8fcb322608d201a126b"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_interaction_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "54ec7e405a5a6d9bd791fe4e2c54b08da7d0847334f3750838592e21c90e68d4",
-      "size": 21709,
-      "normalized_sha256": "54ec7e405a5a6d9bd791fe4e2c54b08da7d0847334f3750838592e21c90e68d4"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_lifecycle_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "5e2a85a919d20060ced70600bcf8a0a6f8e022aecb311493af4a12ff27701c4e",
-      "size": 23199,
-      "normalized_sha256": "5e2a85a919d20060ced70600bcf8a0a6f8e022aecb311493af4a12ff27701c4e"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_publication_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "2b0b1e51b118a492ee443cbdfbd7ba0a677f4ebc6f18917ad0a3dfc4688fb8ef",
-      "size": 22789,
-      "normalized_sha256": "2b0b1e51b118a492ee443cbdfbd7ba0a677f4ebc6f18917ad0a3dfc4688fb8ef"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_status_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "bdfd9b49abe4eb567cea2de058e8b833427bb96db6fda3c29ea779c8810719c6",
-      "size": 21463,
-      "normalized_sha256": "bdfd9b49abe4eb567cea2de058e8b833427bb96db6fda3c29ea779c8810719c6"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_tooltree_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "dede2fc38384fe67f659e26fd933dd3903414c8f2b0de53dbe4219f7f2b3bd24",
-      "size": 22329,
-      "normalized_sha256": "dede2fc38384fe67f659e26fd933dd3903414c8f2b0de53dbe4219f7f2b3bd24"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_training_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "6b6c6f783f4139ba80c5ac78a842381eab8e9d7a58038bbabb3ba25d50d89366",
-      "size": 22608,
-      "normalized_sha256": "6b6c6f783f4139ba80c5ac78a842381eab8e9d7a58038bbabb3ba25d50d89366"
-    },
-    "build-dll-debug/tests/CMakeFiles/workbench_unavailable_tool_contract_autogen.dir/AutogenInfo.json": {
-      "role": "observe",
-      "sha256": "6dcfb78baf6ca4f1200498e1743ef6332137b79a67328836d9ca7896dbd34a1a",
-      "size": 22603,
-      "normalized_sha256": "6dcfb78baf6ca4f1200498e1743ef6332137b79a67328836d9ca7896dbd34a1a"
-    },
-    "build-dll-debug/tests/CTestTestfile.cmake": {
-      "role": "observe",
-      "sha256": "62de629fcdbf741d94ea4ac64eed2189eb81fee4824135ce5451fa76dc3ad527",
-      "size": 658852,
-      "normalized_sha256": "d558dc682b8f83f46e267125ac6bac6d6b519c1c13d90a8770a60bf43502269d"
-    },
-    "build-dll-debug/tests/cmake_install.cmake": {
-      "role": "observe",
-      "sha256": "6513167967c79d4d5e912dec08974dc67857ffa43f8644197930631ca9c60021",
-      "size": 1057,
-      "normalized_sha256": "a32d833954639438b637067914465af0fe59bb57a9a5b4d763f8969a7e06c1f8"
-    },
-    "build-dll-debug/tests/dll_consumer_contract_autogen/deps": {
-      "role": "observe",
-      "sha256": "6d0f576e56004dabb682704f810cc2affab09ddd30ced59fecd46a1c6f13aa7f",
-      "size": 2911,
-      "normalized_sha256": "6d0f576e56004dabb682704f810cc2affab09ddd30ced59fecd46a1c6f13aa7f"
-    },
-    "build-dll-debug/tests/dll_consumer_contract_autogen/mocs_compilation.cpp": {
+    "build-verify/3rdparty/VisionRTContracts/tests/parameter_mapping_test_autogen/mocs_compilation.cpp": {
       "role": "observe",
       "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
       "size": 173,
       "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-debug/tests/dll_consumer_contract_autogen/timestamp": {
+    "build-verify/3rdparty/VisionRTContracts/tests/parameter_mapping_test_autogen/timestamp": {
       "role": "observe",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-debug/tests/include/test_consumer/Export.h": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_array_contract_autogen/deps": {
       "role": "observe",
-      "sha256": "2f738d8ba36ec7cc5ae427f22381317b51021c1fba194cb75637711e593f0b1e",
-      "size": 1319,
-      "normalized_sha256": "423522a2df1a9d38ae03f0c5c45897a758d1f8e183b632f5b8118787fa81a145"
+      "sha256": "eb5a46fcb26ad08f2ac3dc134ee7e170941e632f0fed52f1bc076413b83aa96f",
+      "size": 796,
+      "normalized_sha256": "eb5a46fcb26ad08f2ac3dc134ee7e170941e632f0fed52f1bc076413b83aa96f"
     },
-    "build-dll-debug/tests/include/test_consumer/Logging.h": {
-      "role": "observe",
-      "sha256": "01858ed71df6f7d960a64d0d8852e1c38f930363f30e3b8e5049b55babf20b17",
-      "size": 299,
-      "normalized_sha256": "112d856d3b9d6f79f851bc795b6acce9df9db87aca7259048dc963957db0164e"
-    },
-    "build-dll-debug/tests/test_dll_consumer_autogen/deps": {
-      "role": "observe",
-      "sha256": "be44c46be087286d13924e62aab7ebe1f735c4e3d610187267e7c067cdaee2cf",
-      "size": 3037,
-      "normalized_sha256": "be44c46be087286d13924e62aab7ebe1f735c4e3d610187267e7c067cdaee2cf"
-    },
-    "build-dll-debug/tests/test_dll_consumer_autogen/mocs_compilation.cpp": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_array_contract_autogen/mocs_compilation.cpp": {
       "role": "observe",
       "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
       "size": 173,
       "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-debug/tests/test_dll_consumer_autogen/timestamp": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_array_contract_autogen/timestamp": {
       "role": "observe",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-debug/tests/test_dll_consumer_logging.cpp": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_data_ref_contract_autogen/deps": {
       "role": "observe",
-      "sha256": "be74f2c077a0a06eb51ba945d964140885790ed7653b7e3d37ae4758a56ad78b",
-      "size": 546,
-      "normalized_sha256": "6c8f7b7c90338cf396dafe829e398a69c9917ef036e52753dfa9fac1d1e7fbbf"
+      "sha256": "0a1e5d3994326e95c18d684284cca421e68393d54975d6c1ccc3380a8391b3bf",
+      "size": 802,
+      "normalized_sha256": "0a1e5d3994326e95c18d684284cca421e68393d54975d6c1ccc3380a8391b3bf"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_data_ref_contract_autogen/mocs_compilation.cpp": {
       "role": "observe",
-      "sha256": "657201fd672bd0ab95c319844f733e1e31cd45ffdcaf999ae95ea7b1f3b6e26e",
-      "size": 4363,
-      "normalized_sha256": "657201fd672bd0ab95c319844f733e1e31cd45ffdcaf999ae95ea7b1f3b6e26e"
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_data_ref_contract_autogen/timestamp": {
       "role": "observe",
-      "sha256": "e6a3255a596879e63e03493513fcc3b40389d4ddcef7a2132bf550c54121f25b",
-      "size": 3825,
-      "normalized_sha256": "e6a3255a596879e63e03493513fcc3b40389d4ddcef7a2132bf550c54121f25b"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_roi_view_contract_autogen/deps": {
       "role": "observe",
-      "sha256": "e866186158feccd5111018c5c85a7b59cd7c36b61928734ec4f3791ebb5c2eeb",
-      "size": 3589,
-      "normalized_sha256": "e866186158feccd5111018c5c85a7b59cd7c36b61928734ec4f3791ebb5c2eeb"
+      "sha256": "7fc7af033167b696edeb43a1202367ce7b30a4167841b9101b37c93e631c8af8",
+      "size": 802,
+      "normalized_sha256": "7fc7af033167b696edeb43a1202367ce7b30a4167841b9101b37c93e631c8af8"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_roi_view_contract_autogen/mocs_compilation.cpp": {
       "role": "observe",
-      "sha256": "7c54513e65b068ab19b9e32c7bf318796502e5b9080227997321cd9cf75314e9",
-      "size": 4623,
-      "normalized_sha256": "7c54513e65b068ab19b9e32c7bf318796502e5b9080227997321cd9cf75314e9"
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_roi_view_contract_autogen/timestamp": {
       "role": "observe",
-      "sha256": "63e67a9d4e99edb6de559a848fa22f9f137ebcf1fbe86c1e25d1b504a8cda225",
-      "size": 3329,
-      "normalized_sha256": "63e67a9d4e99edb6de559a848fa22f9f137ebcf1fbe86c1e25d1b504a8cda225"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_sdk_value_contract_autogen/deps": {
       "role": "observe",
-      "sha256": "f862c62fe40bf2ebbaf8cda37ec3833587f30eab9a7e7a6a28fe32356a5318a7",
-      "size": 4103,
-      "normalized_sha256": "f862c62fe40bf2ebbaf8cda37ec3833587f30eab9a7e7a6a28fe32356a5318a7"
+      "sha256": "9d7193e4a01678830b1ea893ab1ab052990933209ab7cfa84a13e9d6abec7e8d",
+      "size": 804,
+      "normalized_sha256": "9d7193e4a01678830b1ea893ab1ab052990933209ab7cfa84a13e9d6abec7e8d"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/CTestTestfile.cmake": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_sdk_value_contract_autogen/mocs_compilation.cpp": {
       "role": "observe",
-      "sha256": "8c500ac1ebbf02f2915dde94b606aca5d7bdccc6c6dc441186b39dec0ea31c9a",
-      "size": 4032,
-      "normalized_sha256": "e39a9b7810e2e76fd658f17980dfb804a6720b1e3d6a6e1fecac550c94b193c4"
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-headless/3rdparty/VisionRTContracts/tests/cmake_install.cmake": {
+    "build-verify/3rdparty/VisionRTContracts/tests/test_sdk_value_contract_autogen/timestamp": {
       "role": "observe",
-      "sha256": "90b6ebd17e48e443d872ca46be7b83331e51651bf9d8f9001f24333bb7244106",
-      "size": 1086,
-      "normalized_sha256": "8a4d2374114db44e8ab34689d93d91a15a3fbc741e3a8ba5749852878bb73015"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-headless/tests/CMakeFiles/cpu_tools_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/tool_registration_test_autogen/deps": {
       "role": "observe",
-      "sha256": "6c0f93becf52042f97d386f98050a42c1ae97d77f42d955f1a25731841395f30",
-      "size": 10602,
-      "normalized_sha256": "6c0f93becf52042f97d386f98050a42c1ae97d77f42d955f1a25731841395f30"
+      "sha256": "71912a4f7b84ee7842c43d2f376c7a43465b0af852678f088998460039d977f2",
+      "size": 802,
+      "normalized_sha256": "71912a4f7b84ee7842c43d2f376c7a43465b0af852678f088998460039d977f2"
     },
-    "build-dll-headless/tests/CMakeFiles/custom_tool_store_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/tool_registration_test_autogen/mocs_compilation.cpp": {
       "role": "observe",
-      "sha256": "8cb75296fe839ee2d1b3a8eb4a47edf2f15a6f1148a1be19493b081ca2a24188",
-      "size": 6858,
-      "normalized_sha256": "8cb75296fe839ee2d1b3a8eb4a47edf2f15a6f1148a1be19493b081ca2a24188"
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
     },
-    "build-dll-headless/tests/CMakeFiles/definition_json_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/3rdparty/VisionRTContracts/tests/tool_registration_test_autogen/timestamp": {
       "role": "observe",
-      "sha256": "8f2294895a5f348f5f9b390ca01a8ba7caade850e38d6a1b392840ff89b27966",
-      "size": 6415,
-      "normalized_sha256": "8f2294895a5f348f5f9b390ca01a8ba7caade850e38d6a1b392840ff89b27966"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "build-dll-headless/tests/CMakeFiles/edge_hierarchy_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/assist_viewport_contract.dir/tests/assist_viewport_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "921d0bdfb742aba55c0b574c417ec7b7b53c18b22bac27a45d3ef465e2db0f8d",
-      "size": 10018,
-      "normalized_sha256": "921d0bdfb742aba55c0b574c417ec7b7b53c18b22bac27a45d3ef465e2db0f8d"
+      "sha256": "9cf7b622b95a9b33828aa0df0ad18b28df4b1db5ebb1cbef857994e3b06e2da9",
+      "size": 148771
     },
-    "build-dll-headless/tests/CMakeFiles/example_metadata_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/cpu_tools_contract.dir/tests/cpu_tools_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "78b1a941cecde3bcb08755e4b17f2418632191855e98b48d7a69aa35d4743c9c",
-      "size": 10756,
-      "normalized_sha256": "78b1a941cecde3bcb08755e4b17f2418632191855e98b48d7a69aa35d4743c9c"
+      "sha256": "363e7a41e92f7b34891f30c3387770e6982e3829003c86aa02a5ced352395129",
+      "size": 3497904
     },
-    "build-dll-headless/tests/CMakeFiles/example_pipelines_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/custom_tool_store_contract.dir/tests/custom_tool_store_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "38b4f2ab3a01b48976c893eb5e19bc20dedb6a3d280057f032bca7ae9728e8cf",
-      "size": 17317,
-      "normalized_sha256": "38b4f2ab3a01b48976c893eb5e19bc20dedb6a3d280057f032bca7ae9728e8cf"
+      "sha256": "cb9b1c69dde664223bf49e2637b97ed003fea4025823a8efb19b2d71ff87e189",
+      "size": 1458082
     },
-    "build-dll-headless/tests/CMakeFiles/gpu_tools_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/definition_json_contract.dir/tests/definition_json_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "1274ec7ebb17d27cc00fd3e6003dce064eb63b2d6a8f7ee0e55e5b2122d1490e",
-      "size": 11123,
-      "normalized_sha256": "1274ec7ebb17d27cc00fd3e6003dce064eb63b2d6a8f7ee0e55e5b2122d1490e"
+      "sha256": "2822946f92e935ddd8c74a032e3dbb57fbd15aebdcbeee8c8b589031feb2fe4f",
+      "size": 1018789
     },
-    "build-dll-headless/tests/CMakeFiles/installed_pipeline_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/display_conversion_benchmark.dir/tests/display_conversion_benchmark.cpp.obj": {
       "role": "observe",
-      "sha256": "7ceb3113c3c3d684929c6dbc1345cb74cf3a26daf9eafcb289fd6a90aab2d941",
-      "size": 12105,
-      "normalized_sha256": "7ceb3113c3c3d684929c6dbc1345cb74cf3a26daf9eafcb289fd6a90aab2d941"
+      "sha256": "b3a06a2c0089f15fc0fe3c8190d250551e36e5d8fecd30958e912586f7537c02",
+      "size": 275351
     },
-    "build-dll-headless/tests/CMakeFiles/installed_python_author_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/display_reader_drain_test.dir/tests/display_reader_drain_test.cpp.obj": {
       "role": "observe",
-      "sha256": "1d11242f9744739b1d3d29b7051d795be7894bcdd4baf4d18794f99bcf416304",
-      "size": 12361,
-      "normalized_sha256": "1d11242f9744739b1d3d29b7051d795be7894bcdd4baf4d18794f99bcf416304"
+      "sha256": "e858db6a48cdff10d52418dddb135b4696bfd047899be995d572ea7bedf9a1ba",
+      "size": 182483
     },
-    "build-dll-headless/tests/CMakeFiles/log_aggregation_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/display_storage_contract.dir/tests/display_storage_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "40b128fd1722a94ac3a01874de8650362dc952064a660138ab6d1c633ede2411",
-      "size": 7785,
-      "normalized_sha256": "40b128fd1722a94ac3a01874de8650362dc952064a660138ab6d1c633ede2411"
+      "sha256": "9fefb69332d1569532706436e683212477c73563547b66cecaa4f74a0c8b7689",
+      "size": 1280266
     },
-    "build-dll-headless/tests/CMakeFiles/log_level_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/edge_hierarchy_contract.dir/tests/edge_hierarchy_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "3aca046c53593a691399bf75f5b076773ac9e40cc2944898bdef79f58c02cd81",
-      "size": 8153,
-      "normalized_sha256": "3aca046c53593a691399bf75f5b076773ac9e40cc2944898bdef79f58c02cd81"
+      "sha256": "075bd32ac79472935cec8287e5fb78374621ead275538cebcedb7ec28f9da927",
+      "size": 2420277
     },
-    "build-dll-headless/tests/CMakeFiles/log_lifecycle_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/example_metadata_contract.dir/tests/example_metadata_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "c4b8013c170e084183c4dd4808c5b9bf4b387d16206f5377d6e8eeed5d7ad671",
-      "size": 7979,
-      "normalized_sha256": "c4b8013c170e084183c4dd4808c5b9bf4b387d16206f5377d6e8eeed5d7ad671"
+      "sha256": "655b20be2222a0643707d31e5a62dd083faf493ed4bc2b44efce444e96e04f75",
+      "size": 1147498
     },
-    "build-dll-headless/tests/CMakeFiles/log_text_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/example_pipelines_contract.dir/tests/example_pipelines.cpp.obj": {
       "role": "observe",
-      "sha256": "6fe3fd7fe1e2f81bad1496117b3b06ebeb4e9de5f7dd877585e693b2f36b06d3",
-      "size": 7533,
-      "normalized_sha256": "6fe3fd7fe1e2f81bad1496117b3b06ebeb4e9de5f7dd877585e693b2f36b06d3"
+      "sha256": "c56d56495545df439ee6ef9e1e42ac78ee5d17a464ad1d51ffa92cac0c4756c4",
+      "size": 5716879
     },
-    "build-dll-headless/tests/CMakeFiles/logic_node_execution_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/example_project_contract.dir/tests/example_project_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "3f55d5201d23d780010fd9dbe4b014b2cc760db75fe311763fd92335444491a5",
-      "size": 9940,
-      "normalized_sha256": "3f55d5201d23d780010fd9dbe4b014b2cc760db75fe311763fd92335444491a5"
+      "sha256": "0ba97f7e60306a7d9a58213ca3778d04309a25ad3da06e6763094f8e62d1b43c",
+      "size": 1927256
     },
-    "build-dll-headless/tests/CMakeFiles/module_registration_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/gpu_tools_contract.dir/tests/gpu_tools_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "d4717b0d1021aa5af9a18c260969af2e2499dbf13ee021e3d4dc5430284126fb",
-      "size": 15639,
-      "normalized_sha256": "d4717b0d1021aa5af9a18c260969af2e2499dbf13ee021e3d4dc5430284126fb"
+      "sha256": "bfc158c1b3937a768812a09dab85d6e6aebee367afcb0d97d343da3af67eb346",
+      "size": 1968750
     },
-    "build-dll-headless/tests/CMakeFiles/native_value_lifetime_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/installed_pipeline_contract.dir/tests/installed_pipeline_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "0f6a5f0ef4f73bb96d9bd245921146b81649d2ac8be6af69ddeb79cc1a4b76db",
-      "size": 16087,
-      "normalized_sha256": "0f6a5f0ef4f73bb96d9bd245921146b81649d2ac8be6af69ddeb79cc1a4b76db"
+      "sha256": "1fbcc5a568bf89f182335cc03aadaa804a0a88498f4b52d458a7ede6bf2cd4cf",
+      "size": 6712954
     },
-    "build-dll-headless/tests/CMakeFiles/node_activity_mailbox_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/installed_python_author_contract.dir/tests/installed_python_author_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "1f1b49b74803416049cabe4be474f17b84a53ad51acfe365c052ad55f4ae9ba3",
-      "size": 12359,
-      "normalized_sha256": "1f1b49b74803416049cabe4be474f17b84a53ad51acfe365c052ad55f4ae9ba3"
+      "sha256": "f1694ec058bca99bcd14f7619482a37648fe33a0ec241294eb4bbaf679729a7e",
+      "size": 2035488
     },
-    "build-dll-headless/tests/CMakeFiles/package_replacement_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/libavoid_contract.dir/tests/libavoid_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "39b6111b10819269b681bec456e75116ae5b1306f4fd123358cd32ec6def198e",
-      "size": 17581,
-      "normalized_sha256": "39b6111b10819269b681bec456e75116ae5b1306f4fd123358cd32ec6def198e"
+      "sha256": "15c657aed03e682eb2c6d3592bf2d02d14bfa5de04709769af8959699c4c98ff",
+      "size": 52168
     },
-    "build-dll-headless/tests/CMakeFiles/plugin_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/log_aggregation_contract.dir/tests/log_aggregation_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "e18392262c8c60923f062a366c0321f0a37bd46e9af667c95ff668bbf07c1d12",
-      "size": 17065,
-      "normalized_sha256": "e18392262c8c60923f062a366c0321f0a37bd46e9af667c95ff668bbf07c1d12"
+      "sha256": "cc2d7565d9cc437fe43bc3f2fb840aad34b73fc9019dc973a895ca5e684077ac",
+      "size": 760979
     },
-    "build-dll-headless/tests/CMakeFiles/project_editor_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/log_level_contract.dir/tests/log_level_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "393544719329c05c1f7aeb9f801382a308e1e606264a4d95eaac3c13b159921e",
-      "size": 9487,
-      "normalized_sha256": "393544719329c05c1f7aeb9f801382a308e1e606264a4d95eaac3c13b159921e"
+      "sha256": "98576d9ccefd26448ec712306830c12a06905118deb028532f784fa255d32535",
+      "size": 98966
     },
-    "build-dll-headless/tests/CMakeFiles/project_storage_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/log_lifecycle_contract.dir/tests/log_lifecycle_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "3bd8cdf745d0e411519ba8d9b0b59e9e65dc35ea51cd759762e32b4cf1265eee",
-      "size": 10123,
-      "normalized_sha256": "3bd8cdf745d0e411519ba8d9b0b59e9e65dc35ea51cd759762e32b4cf1265eee"
+      "sha256": "b81224fd906d8a45e4759fbff25a6a1e2f11b6c37fa240d210ed0ba25f06089e",
+      "size": 586219
     },
-    "build-dll-headless/tests/CMakeFiles/project_value_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/log_text_contract.dir/tests/log_text_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "7ce144fef561bda588e75bd2df5b35b49fd62769000194d760fb4ec43fe53767",
-      "size": 10317,
-      "normalized_sha256": "7ce144fef561bda588e75bd2df5b35b49fd62769000194d760fb4ec43fe53767"
+      "sha256": "bfb0c86fc20714438f72bf6d2e0ed93353bd24e045780a8459d8a4bb9eef4f46",
+      "size": 300770
     },
-    "build-dll-headless/tests/CMakeFiles/python_adapter_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/logic_node_execution_test.dir/tests/logic_node_execution_test.cpp.obj": {
       "role": "observe",
-      "sha256": "bdd7368fbcfddb1b78a51df7c4b44857aa02be361285c59e7898474d77a82b1f",
-      "size": 9346,
-      "normalized_sha256": "bdd7368fbcfddb1b78a51df7c4b44857aa02be361285c59e7898474d77a82b1f"
+      "sha256": "26cb09ba14a1c3aae87c1a53aac87bf6dac7423bab4cbf4fb9443066ef78eaa0",
+      "size": 3715448
     },
-    "build-dll-headless/tests/CMakeFiles/python_array_lifetime_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/module_registration_contract.dir/tests/module_registration_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "1002aece7bf07cba1cbdc8f0799149f84fb85be0d44bef52c985c62a49c73eb0",
-      "size": 16677,
-      "normalized_sha256": "1002aece7bf07cba1cbdc8f0799149f84fb85be0d44bef52c985c62a49c73eb0"
+      "sha256": "854796644351853be950ead9066ca414a84d74a8380cea99b13666a1a17629f2",
+      "size": 1544632
     },
-    "build-dll-headless/tests/CMakeFiles/python_loading_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/native_value_lifetime_contract.dir/tests/native_value_lifetime_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "6c7a531e58f1913e6467734e233e0c8ff4fb15e394a9d023b6362b4895c1c29a",
-      "size": 9138,
-      "normalized_sha256": "6c7a531e58f1913e6467734e233e0c8ff4fb15e394a9d023b6362b4895c1c29a"
+      "sha256": "810aa04b55de8e89f877f21d69e91f510761010df349b1bd0b33071eb6346444",
+      "size": 1091950
     },
-    "build-dll-headless/tests/CMakeFiles/python_probe_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/node_activity_mailbox_test.dir/tests/node_activity_mailbox_test.cpp.obj": {
       "role": "observe",
-      "sha256": "730ca1f752dd23a3e48c21797faefe3319e2e586b674dd4bb15b0fbe7a72a4d4",
-      "size": 8627,
-      "normalized_sha256": "730ca1f752dd23a3e48c21797faefe3319e2e586b674dd4bb15b0fbe7a72a4d4"
+      "sha256": "08fe45601aa9cee54c4836e292b7120e1beed1958f04ea9808f987ac256ff0be",
+      "size": 187842
     },
-    "build-dll-headless/tests/CMakeFiles/python_shutdown_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/node_list_model_test.dir/tests/node_list_model_test.cpp.obj": {
       "role": "observe",
-      "sha256": "75cbbbc9ab7d10cea5649f714fa875fc0cfd5db385694d9ddd9f0f15ca855c76",
-      "size": 9562,
-      "normalized_sha256": "75cbbbc9ab7d10cea5649f714fa875fc0cfd5db385694d9ddd9f0f15ca855c76"
+      "sha256": "b4e93a8a7c35dee0aad604da4ca0393c6a842d32a46548cb357313e0fcd61c43",
+      "size": 475521
     },
-    "build-dll-headless/tests/CMakeFiles/python_tools_execution_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/output_text_readback_test.dir/tests/output_text_readback_test.cpp.obj": {
       "role": "observe",
-      "sha256": "eb302566d2df798ed77e06815dcef549d26f137746bbce9e280e12226ed6d44a",
-      "size": 11667,
-      "normalized_sha256": "eb302566d2df798ed77e06815dcef549d26f137746bbce9e280e12226ed6d44a"
+      "sha256": "011ccc343e6b3c096067e5f4c52e24d32e8734353926eed710b0d0dc29a821c8",
+      "size": 1327283
     },
-    "build-dll-headless/tests/CMakeFiles/python_value_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/output_value_contract.dir/tests/output_value_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "1002eb5e0ddc18e2fb95931973b9b0bcbd3f815de75ceff21eca679cf63e2703",
-      "size": 8597,
-      "normalized_sha256": "1002eb5e0ddc18e2fb95931973b9b0bcbd3f815de75ceff21eca679cf63e2703"
+      "sha256": "0e217d59cab205bd80cc34ae45b94d112524e65fdfbc5b53396ce676bba36afa",
+      "size": 5955764
     },
-    "build-dll-headless/tests/CMakeFiles/result_readback_barrier_test_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/package_replacement_test.dir/tests/package_replacement_test.cpp.obj": {
       "role": "observe",
-      "sha256": "7bba5cb2fef32f1054a3c1b986bd9468e6af70d1014417d55d6d2b0b71ad37a3",
-      "size": 13231,
-      "normalized_sha256": "7bba5cb2fef32f1054a3c1b986bd9468e6af70d1014417d55d6d2b0b71ad37a3"
+      "sha256": "cf9cc571d8e53d389ef1e307fb693929401c686c9eae407a858d7597ce9f14bd",
+      "size": 2882721
     },
-    "build-dll-headless/tests/CMakeFiles/roi_view_benchmark_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/performance_contract.dir/tests/performance_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "472000c3ab61df35648538759ce5fab8716ffa7ad121eb54a060f861b50b192f",
-      "size": 7507,
-      "normalized_sha256": "472000c3ab61df35648538759ce5fab8716ffa7ad121eb54a060f861b50b192f"
+      "sha256": "e5da398cab399ade9445b3454c10a9937e380773bd630ef72ad226ec7c60090d",
+      "size": 7245461
     },
-    "build-dll-headless/tests/CMakeFiles/runtime_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/plugin_contract.dir/tests/plugin_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "188839f673f0e9a1ce24545e8804adb7bc1b07bf867858560f6848bd29213428",
-      "size": 11959,
-      "normalized_sha256": "188839f673f0e9a1ce24545e8804adb7bc1b07bf867858560f6848bd29213428"
+      "sha256": "fae3eedf4598fdf3b6bf984ea801488bdf712253bd99f2d5b68f42c29729b367",
+      "size": 3789893
     },
-    "build-dll-headless/tests/CMakeFiles/runtime_diagnostics_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/port_value_validation_test.dir/tests/port_value_validation_test.cpp.obj": {
       "role": "observe",
-      "sha256": "4a46f7ba173af0cfc5aaeca780a8208cd382e1c7de774fb842f8a6910f3a5b9e",
-      "size": 12807,
-      "normalized_sha256": "4a46f7ba173af0cfc5aaeca780a8208cd382e1c7de774fb842f8a6910f3a5b9e"
+      "sha256": "8657e5074727100d5f5e6121ab2a0aff25e2ae76913f0df6a8f533946bdfc695",
+      "size": 1740626
     },
-    "build-dll-headless/tests/CMakeFiles/runtime_node_activity_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/presentation_visibility_contract.dir/tests/presentation_visibility_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "99469dc5b77a15533af0b83e5e7c851bedb17b5aafcb19a87ce0907186512fe0",
-      "size": 12169,
-      "normalized_sha256": "99469dc5b77a15533af0b83e5e7c851bedb17b5aafcb19a87ce0907186512fe0"
+      "sha256": "86c25520d89fad4d454ca8fb56091acc0dc7067d8fde68073ce6ebbb3a405b26",
+      "size": 1914405
     },
-    "build-dll-headless/tests/CMakeFiles/runtime_python_lazy_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/project_editor_contract.dir/tests/project_editor_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "0a7bb192a1cdf22c049f8a4cec24c188c17293b9e8f7d43796de47da4acd183f",
-      "size": 13074,
-      "normalized_sha256": "0a7bb192a1cdf22c049f8a4cec24c188c17293b9e8f7d43796de47da4acd183f"
+      "sha256": "a8c9e72e6dc4cff9f078ccfbbd80579e1582aba6d600de1a5e662805b090f43d",
+      "size": 2598999
     },
-    "build-dll-headless/tests/CMakeFiles/runtime_value_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/project_storage_contract.dir/tests/project_storage_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "736ac68a476bb43470f90d39264edaa7377534b871cdccdab264cce8d3da311b",
-      "size": 12966,
-      "normalized_sha256": "736ac68a476bb43470f90d39264edaa7377534b871cdccdab264cce8d3da311b"
+      "sha256": "882651219a6e0bc75e14fc3483e992b7fe88a10c4e45d6f1c0aa3cdc0f2b2f7d",
+      "size": 3302477
     },
-    "build-dll-headless/tests/CMakeFiles/test_dep_a_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/project_value_contract.dir/tests/project_value_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "ed56abe270d099f6c7eeb115a3cbb8cbf7b3652cea9349776c5dd576d1c8c143",
-      "size": 12800,
-      "normalized_sha256": "ed56abe270d099f6c7eeb115a3cbb8cbf7b3652cea9349776c5dd576d1c8c143"
+      "sha256": "cae2c2e88549ba593ecd66f631020f30f954ebee52bce745c9d876b1bc0ca0af",
+      "size": 6164668
     },
-    "build-dll-headless/tests/CMakeFiles/test_dep_b_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_adapter_contract.dir/tests/python_adapter_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "a66b227b74247591cd32b3b914a278558b7516f9735ca42d25d9b3cf3af68af9",
-      "size": 12982,
-      "normalized_sha256": "a66b227b74247591cd32b3b914a278558b7516f9735ca42d25d9b3cf3af68af9"
+      "sha256": "dbb81657eb9dd4163bf3d38a2400f79d377a7eaa268e43595eece90af9daf505",
+      "size": 5026184
     },
-    "build-dll-headless/tests/CMakeFiles/test_plugin_a_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_array_lifetime_contract.dir/tests/python_array_lifetime_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "88f4702457eb29b96d6f9033f3c54d265dfd898d06af34504f4756c6e26fabdc",
-      "size": 13333,
-      "normalized_sha256": "88f4702457eb29b96d6f9033f3c54d265dfd898d06af34504f4756c6e26fabdc"
+      "sha256": "306094e4a80f7e80767a897c77736f71c758e7497770e08b0545d2ed40bae56c",
+      "size": 4015982
     },
-    "build-dll-headless/tests/CMakeFiles/test_plugin_b_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_environment_contract.dir/tests/python_environment_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "490ddc0a3044d3a48bb1ab8912ab41f5a3c5c9888e0876e24eef2960f3d868c8",
-      "size": 13521,
-      "normalized_sha256": "490ddc0a3044d3a48bb1ab8912ab41f5a3c5c9888e0876e24eef2960f3d868c8"
+      "sha256": "ada3a83203b853d40208fa1ee3fbf8054c3f931a8cfc9b2a4e774af099efee70",
+      "size": 801663
     },
-    "build-dll-headless/tests/CMakeFiles/test_plugin_legacy_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_loading_contract.dir/tests/python_loading_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "8565ad6c0c597423e01d7ba3e8c29fcc1252db60a4f9e91fb51dbc0e151193e5",
-      "size": 13770,
-      "normalized_sha256": "8565ad6c0c597423e01d7ba3e8c29fcc1252db60a4f9e91fb51dbc0e151193e5"
+      "sha256": "f0e7c4f8eca6f6102b9084515e176888d2e331d28ea81c2399d76715d55379da",
+      "size": 5025122
     },
-    "build-dll-headless/tests/CMakeFiles/test_plugin_module_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_probe_contract.dir/tests/python_probe_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "9f315321eab7ed7bd2368188d3fbf2a807fb1aba631ef90b04ada9c34720f188",
-      "size": 12807,
-      "normalized_sha256": "9f315321eab7ed7bd2368188d3fbf2a807fb1aba631ef90b04ada9c34720f188"
+      "sha256": "08ab6f83a8a9bc4de7c26a04f608961f7fd5958a954a1ebe6767c592de3ec3b3",
+      "size": 145866
     },
-    "build-dll-headless/tests/CMakeFiles/test_plugin_value_lifetime_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_shutdown_contract.dir/tests/python_shutdown_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "1d53f53ba8433af76de203a4dc60fdf2ea2a319b37657dbd16409ec1d1bcb916",
-      "size": 15316,
-      "normalized_sha256": "1d53f53ba8433af76de203a4dc60fdf2ea2a319b37657dbd16409ec1d1bcb916"
+      "sha256": "2ee1db7493c2ae879085e87042be9b6b88e2de2096eebab956737d016b073371",
+      "size": 4388200
     },
-    "build-dll-headless/tests/CMakeFiles/test_registration_collision_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_tools_execution_test.dir/tests/python_tools_execution_test.cpp.obj": {
       "role": "observe",
-      "sha256": "c3fd150d223b1d5eeedc4f4fc01d4a8e3b1235e45aa69abc3651a0725859d095",
-      "size": 14888,
-      "normalized_sha256": "c3fd150d223b1d5eeedc4f4fc01d4a8e3b1235e45aa69abc3651a0725859d095"
+      "sha256": "5ba6961bba54dca83a71856137c79a1296fd79509f382d00253263cb453a6834",
+      "size": 2869465
     },
-    "build-dll-headless/tests/CMakeFiles/test_registration_duplicate_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/python_value_contract.dir/tests/python_value_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "d97084ecd8f5530252d643830ce42c45d30e61a62cc0b690c4a762217bbb8567",
-      "size": 14295,
-      "normalized_sha256": "d97084ecd8f5530252d643830ce42c45d30e61a62cc0b690c4a762217bbb8567"
+      "sha256": "3d362f03ad4cb91effa8a853c401c22caf8cfda9fd872f34a65527e56094537d",
+      "size": 5144452
     },
-    "build-dll-headless/tests/CMakeFiles/test_registration_null_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/recent_projects_contract.dir/tests/recent_projects_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "572aa22658c09c8784c74b54686535ba7947eb8b4ecee64cf86c5d830c8e8651",
-      "size": 14674,
-      "normalized_sha256": "572aa22658c09c8784c74b54686535ba7947eb8b4ecee64cf86c5d830c8e8651"
+      "sha256": "f130f718a6f7bc7b40f927f2cc1b725a669eef72738782ceaf7fb7d9b01302e9",
+      "size": 258545
     },
-    "build-dll-headless/tests/CMakeFiles/test_registration_short_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/result_readback_barrier_test.dir/tests/result_readback_barrier_test.cpp.obj": {
       "role": "observe",
-      "sha256": "e90bc66c34f53b1160b9372636ec77b0a2c5799d3bc6a88e15018ca37aa5ce47",
-      "size": 14469,
-      "normalized_sha256": "e90bc66c34f53b1160b9372636ec77b0a2c5799d3bc6a88e15018ca37aa5ce47"
+      "sha256": "240b80ff1168c1cebab35a78501f3839059c298c930679cf746f89e80a65ea50",
+      "size": 2279264
     },
-    "build-dll-headless/tests/CMakeFiles/test_registration_valid_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/roi_view_benchmark.dir/tests/roi_view_benchmark.cpp.obj": {
       "role": "observe",
-      "sha256": "7f6e53c4b2e750e997fc70e69fff5337ac88afff0af7093c9f3d8c855fe7eef5",
-      "size": 14018,
-      "normalized_sha256": "7f6e53c4b2e750e997fc70e69fff5337ac88afff0af7093c9f3d8c855fe7eef5"
+      "sha256": "597d2c91770913de659373ba8622d1c4a293c5a733392819a758134f85d6d4d7",
+      "size": 285362
     },
-    "build-dll-headless/tests/CMakeFiles/tool_discovery_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_contract.dir/tests/runtime_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "26e44b2ceb728d1b31bb5424504fdbd817cb6db1e259123a99bc75b701a1de4b",
-      "size": 9279,
-      "normalized_sha256": "26e44b2ceb728d1b31bb5424504fdbd817cb6db1e259123a99bc75b701a1de4b"
+      "sha256": "5d2c5517b7d78a0ed984c85caf48824353dad7e35982f392defa52bd0db5cb1a",
+      "size": 11043259
     },
-    "build-dll-headless/tests/CMakeFiles/tool_registry_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_diagnostics_contract.dir/tests/runtime_diagnostics_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "c3391a23eb1b8f322b86faeb17860688cbdfb826d215ed3725aff76658f468a4",
-      "size": 6304,
-      "normalized_sha256": "c3391a23eb1b8f322b86faeb17860688cbdfb826d215ed3725aff76658f468a4"
+      "sha256": "312d76c4d04d13c79c31737e1c038f5aaade02fb68e788762fef7a60b8a60b5e",
+      "size": 2286013
     },
-    "build-dll-headless/tests/CMakeFiles/tools_package_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_hotpath_contract.dir/tests/runtime_hotpath_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "7ca6b888a7a60f411776101f02c704a2258c4283545d02c8306bb8375b1d9616",
-      "size": 6609,
-      "normalized_sha256": "7ca6b888a7a60f411776101f02c704a2258c4283545d02c8306bb8375b1d9616"
+      "sha256": "a025e3af2dfb821b029c3932140dc84c5fee7fbf18db39b21e13ade9338cd90e",
+      "size": 1278872
     },
-    "build-dll-headless/tests/CMakeFiles/value_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_node_activity_contract.dir/tests/runtime_node_activity_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "41c72622a56efb5bcd05b82642d25bdf374f139ab4fc652b680ee6f7b12da2f7",
-      "size": 5939,
-      "normalized_sha256": "41c72622a56efb5bcd05b82642d25bdf374f139ab4fc652b680ee6f7b12da2f7"
+      "sha256": "75d9d76b48c87c4b059656e36f6058dec6f456662002bb895f2fe68fe3f62cba",
+      "size": 3710381
     },
-    "build-dll-headless/tests/CMakeFiles/value_json_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_python_lazy_contract.dir/tests/runtime_python_lazy_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "37876cfe410c14b2b8ed366aff0d747ca25c1c901a2fd0d3410fcca78739954c",
-      "size": 7005,
-      "normalized_sha256": "37876cfe410c14b2b8ed366aff0d747ca25c1c901a2fd0d3410fcca78739954c"
+      "sha256": "7ac57bf46b3d4944574e3d9b4569379099e655568986a1a4733cf2c323300775",
+      "size": 2207726
     },
-    "build-dll-headless/tests/CMakeFiles/version_contract_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/runtime_value_contract.dir/tests/runtime_value_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "f58ff6dec360c8e5b8f60e85d0999cb6554ed5d004862d760d87f2e673e0b5b5",
-      "size": 5370,
-      "normalized_sha256": "f58ff6dec360c8e5b8f60e85d0999cb6554ed5d004862d760d87f2e673e0b5b5"
+      "sha256": "af520db840ce99e5bc36c2bf6089fbe0b5e05d9352b569a917359caa3210f85f",
+      "size": 4410053
     },
-    "build-dll-headless/tests/CMakeFiles/visionrt_python_testing_autogen.dir/AutogenInfo.json": {
+    "build-verify/CMakeFiles/test_plugin_module.dir/tests/test_plugin_module.cpp.obj": {
       "role": "observe",
-      "sha256": "06f4ca64b283330e1598ec5c5e284d753856885b7c2b34489e2eac8741ad26c9",
-      "size": 6219,
-      "normalized_sha256": "06f4ca64b283330e1598ec5c5e284d753856885b7c2b34489e2eac8741ad26c9"
+      "sha256": "2068f0ceff1e8aff3dcb109ff4eaf815d533a84a78cdcd56752520b181c68144",
+      "size": 933079
     },
-    "build-dll-headless/tests/CTestTestfile.cmake": {
+    "build-verify/CMakeFiles/tool_definition_validation_test.dir/tests/tool_definition_validation_test.cpp.obj": {
       "role": "observe",
-      "sha256": "6269940c641965129597f2046d03d76248fa9691df5e881290cd226701b4c9a9",
-      "size": 312952,
-      "normalized_sha256": "66d5f1594556e40ce6096a2741a7ec62aa2fd0945e88946e3fe4bdd02da23280"
+      "sha256": "65ee40093ddda2013073da8ce0c0c20011e52b60ffe5fe07bca348ce40843f85",
+      "size": 1401349
     },
-    "build-dll-headless/tests/cmake_install.cmake": {
+    "build-verify/CMakeFiles/tool_discovery_contract.dir/tests/tool_discovery_contract.cpp.obj": {
       "role": "observe",
-      "sha256": "69f574b78e7344444ad078a49571653aca2f472b0d2a58d248108dedd79ac793",
-      "size": 1059,
-      "normalized_sha256": "85e0e7e5c7a86b707869d70b846f1e91a78637e83695a9fa1ae543bcbce7b2d4"
+      "sha256": "b1739c38451ef9375c1301ccf670380f7e96dfa3d43e628fb21fe9bc473104bd",
+      "size": 1106660
+    },
+    "build-verify/CMakeFiles/tool_editor_controller_test.dir/tests/tool_editor_controller_test.cpp.obj": {
+      "role": "observe",
+      "sha256": "c542843e6e38da01a629d1abaef004f263000e5224dcbff8c802146729eae0d7",
+      "size": 846412
+    },
+    "build-verify/CMakeFiles/tool_editor_dialog_test.dir/tests/tool_editor_dialog_test.cpp.obj": {
+      "role": "observe",
+      "sha256": "eed2332cda6e97a9edcfcf5cd098ae2ccab6f254b554d964e9ad4c2b71656278",
+      "size": 713189
+    },
+    "build-verify/CMakeFiles/tool_port_list_model_test.dir/tests/tool_port_list_model_test.cpp.obj": {
+      "role": "observe",
+      "sha256": "78fcc30e866d653481d5cee7ad28bdce13c6e97c59578d646f16caa0e252707a",
+      "size": 849525
+    },
+    "build-verify/CMakeFiles/tool_registry_contract.dir/tests/tool_registry_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "48dc2130f31570e32a40722732634c658c7e60eeefd3badf3fc59e36bf952638",
+      "size": 2425239
+    },
+    "build-verify/CMakeFiles/tools_package_contract.dir/tests/tools_package_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "248151943615b53b10a9b719d76278a77a9875d92316be988e216b07a68eff5c",
+      "size": 687523
+    },
+    "build-verify/CMakeFiles/ui_completion_contract.dir/tests/ui_completion_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "7567c7efff4e9b3f41c6dc04f1324541fe4366a820533da47f2314ff9b9dac13",
+      "size": 1438994
+    },
+    "build-verify/CMakeFiles/ui_notifications_contract.dir/tests/ui_notifications_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "27d43feecd7442d2f555e616349012acd52d4613f4f5832d5458c883800614ea",
+      "size": 1367290
+    },
+    "build-verify/CMakeFiles/ui_preferences_contract.dir/tests/ui_preferences_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "5f809ca4f7f70fdad5bf5dcbd01bb4746ff463e695e9e17dd9338f14b3bcdcaf",
+      "size": 103142
+    },
+    "build-verify/CMakeFiles/ui_receiver_identity_contract.dir/tests/ui_receiver_identity_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "c83dea47cab701a4477c16089765fb38eeb201119c6d38c11566d12bdc629b5f",
+      "size": 2363132
+    },
+    "build-verify/CMakeFiles/ui_result_isolation_contract.dir/tests/ui_result_isolation_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "2dd8b1b0d1c80234ee6b44d0118fbcb9fcecc97ea7783805211b42af48199c5e",
+      "size": 2532573
+    },
+    "build-verify/CMakeFiles/ui_storage_contract.dir/tests/ui_storage_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "c2f47c4b37ad0df073df40f38e54a520399322fc4966e751d8ff79f9de84b93d",
+      "size": 652728
+    },
+    "build-verify/CMakeFiles/ui_unc_paths_contract.dir/tests/ui_unc_paths_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "597948d2cee0b6aea1d01a3e74175ec56ff3a0aaadd92cdb11557265ecb1a112",
+      "size": 712016
+    },
+    "build-verify/CMakeFiles/ui_value_contract.dir/tests/ui_value_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "7740eea84ad33374510a0052e86d3cab174e6e85b5107da38db7d6d146ba0658",
+      "size": 629544
+    },
+    "build-verify/CMakeFiles/value_bridge_benchmark.dir/tests/value_bridge_benchmark.cpp.obj": {
+      "role": "observe",
+      "sha256": "dfc0ab9da6bdc21edcf3db7e37dbe19c27a532780763340571c1177effa78b1d",
+      "size": 8237441
+    },
+    "build-verify/CMakeFiles/value_contract.dir/tests/value_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "9125490549d958da78a8db3c06744566ecc0da0c740376c21e5b358ee1094466",
+      "size": 1414446
+    },
+    "build-verify/CMakeFiles/value_json_contract.dir/tests/value_json_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "cc0c34cfb0341464f47629a8a820fb1515f5e47969d6d3f0e4a4f074b8b040a5",
+      "size": 1382286
+    },
+    "build-verify/CMakeFiles/version_contract.dir/tests/version_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "126b08a0b167bd8a7907e623a12e28648faf15043e94ee24d61d6b7877c26467",
+      "size": 47358
+    },
+    "build-verify/CMakeFiles/viewport_contract.dir/tests/viewport_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "19cfdf1925d5bc068ea1bacd58787daf06a738a93e6fc04504649f935c11b90b",
+      "size": 997386
+    },
+    "build-verify/CMakeFiles/viewport_lifetime_contract.dir/tests/viewport_lifetime_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "f11ebcf0f9255f9ac609d6a3767150642f39313a39c30683506096e731824800",
+      "size": 68171
+    },
+    "build-verify/CMakeFiles/visionrt_python_testing.dir/tests/TestPythonEnvironment.cpp.obj": {
+      "role": "observe",
+      "sha256": "85070e3b38f7e791a1b2f2cb095a82fa18e2e9940412cfaca043dfed1de24ea0",
+      "size": 92285
+    },
+    "build-verify/CMakeFiles/wire_router_contract.dir/tests/wire_router_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "0c205e170e572d0541f6fc951327b0ef96ce0327ee39a76e64070d4e0aa0c59a",
+      "size": 272721
+    },
+    "build-verify/CMakeFiles/wire_routing_benchmark.dir/tests/wire_routing_benchmark.cpp.obj": {
+      "role": "observe",
+      "sha256": "53706c410375f05ded83c7bbca1509b27282a0435c2acb93abdc1e251f015e34",
+      "size": 2171485
+    },
+    "build-verify/CMakeFiles/workbench_assist_contract.dir/tests/workbench_assist_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "f9f40063d95680219f20a2041f2951bac0d51875b1c480a32f9768b8bc99ff14",
+      "size": 736421
+    },
+    "build-verify/CMakeFiles/workbench_assist_release_contract.dir/tests/workbench_assist_release_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "ff1a7b680a98f6380b0a712e12f19b921491d220ac2eb2c84426d8136b465569",
+      "size": 2226783
+    },
+    "build-verify/CMakeFiles/workbench_clipboard_contract.dir/tests/workbench_clipboard_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "9c7cc492279ba26560156e4e10d67f1b59ee99f686fd628d57cbca2fe6d97711",
+      "size": 734678
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/flow_canvas_scenarios.cpp.obj": {
+      "role": "observe",
+      "sha256": "131d425cbd6443001da7b04aadae74054414a10be33c48f3dedbb2853d138d5c",
+      "size": 1747862
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_cancellation.cpp.obj": {
+      "role": "observe",
+      "sha256": "694d2885ad6bbdcd615e9e1f69553d364f2374fcdbf79ba5392d0f144062956b",
+      "size": 2672301
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "08e79ea1f0953f8aef185183eacb3701d84f2250d55d97aaf0fdd20a2d4ec8f8",
+      "size": 3651582
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_parameter_states.cpp.obj": {
+      "role": "observe",
+      "sha256": "c44d1e3cc4216e1ac221ca56853b05ba7857dea6e30aee51e2c2bfc6c0df1ab9",
+      "size": 317404
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_parameters.cpp.obj": {
+      "role": "observe",
+      "sha256": "3d0028811b29d5e1c72b8a38cf8189569aa6ccb4a65c6b411d12dafb14661907",
+      "size": 711341
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_paths.cpp.obj": {
+      "role": "observe",
+      "sha256": "70ee75439e02d0d2fba27062b5657b9c8b28d1e963400b7d4bc9145cd7828ee2",
+      "size": 1080582
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_popups.cpp.obj": {
+      "role": "observe",
+      "sha256": "75e992fd8522c400abb96bd4f09dde2339f9d641f0ab35931623e8124af83a93",
+      "size": 1380443
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_roi.cpp.obj": {
+      "role": "observe",
+      "sha256": "048195e322077b2b41986979ef066fe2bca9720e1cc16482efdfe8c244e4b1d4",
+      "size": 1392740
+    },
+    "build-verify/CMakeFiles/workbench_contract.dir/tests/workbench_startup.cpp.obj": {
+      "role": "observe",
+      "sha256": "a66741c0b6fe14e45961724424e927a775da2280cc5b19cc337d3a23e7fe954d",
+      "size": 1129512
+    },
+    "build-verify/CMakeFiles/workbench_expression_contract.dir/tests/workbench_expression_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "c0f547b31d12a2e9309f074f5e7a3a3ee043428fa5a68e7d7ccb55b27f2a117a",
+      "size": 807460
+    },
+    "build-verify/CMakeFiles/workbench_flows_contract.dir/tests/workbench_flows_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "832152e2182bf856355bfc641c974c92f260b9b86236aced0f26efb6336126fe",
+      "size": 755072
+    },
+    "build-verify/CMakeFiles/workbench_interaction_contract.dir/tests/workbench_interaction_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "ec39eb11420409adce4681c933471fa558aba981ce5604ed2af624992eea82e8",
+      "size": 1463895
+    },
+    "build-verify/CMakeFiles/workbench_layout_contract.dir/tests/workbench_layout_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "09bbfaf1b8dc5aaa5edd9f82984c50105fdd9c6043cc9c6ed8277b09336230c7",
+      "size": 628648
+    },
+    "build-verify/CMakeFiles/workbench_lifecycle_contract.dir/tests/workbench_lifecycle_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "a3b2b43b4cb345366426f70cb086778dd3636d3c351f0f66afdbb219cf0d2427",
+      "size": 1623630
+    },
+    "build-verify/CMakeFiles/workbench_publication_contract.dir/tests/workbench_publication_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "a55699beae062fbbe3d931be923a7e9faaac8e5b7073b24ce8bdef18315c87b5",
+      "size": 1346350
+    },
+    "build-verify/CMakeFiles/workbench_status_contract.dir/tests/workbench_status_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "47d4a6bd4fc57e30dc8c0cbebe4ed846c51892d614bc13f267737113aeabcfdf",
+      "size": 1706953
+    },
+    "build-verify/CMakeFiles/workbench_tooltree_contract.dir/tests/workbench_tooltree_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "36d24ab0c235e4375f1c10766fd14be17310082f336634ecfe6104e67066951d",
+      "size": 664938
+    },
+    "build-verify/CMakeFiles/workbench_unavailable_tool_contract.dir/tests/workbench_unavailable_tool_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "612b166dacacb3cd99e99fcb6e6407bca7e454e268a6273df8ac66f3601b8190",
+      "size": 666472
     },
     "cmake/AddModule.cmake": {
       "role": "index",
@@ -2108,6 +1624,360 @@
       "size": 1409,
       "normalized_sha256": "22def60c7eb871c859977cb5ada084fda1ab2388f66ed1c77e0965b81b979331"
     },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_autocomplete.py": {
+      "role": "observe",
+      "sha256": "0ee1af80bb645bd57e6f6383f5e5473f901e9d40524992abf9c48a4163997eef",
+      "size": 11093,
+      "normalized_sha256": "0ee1af80bb645bd57e6f6383f5e5473f901e9d40524992abf9c48a4163997eef"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_autocomplete_w.py": {
+      "role": "observe",
+      "sha256": "f8cd80196c2841f65f53ca5ae1c4fb99c7c215b29cf88774e0b189c99e4cee79",
+      "size": 720,
+      "normalized_sha256": "f8cd80196c2841f65f53ca5ae1c4fb99c7c215b29cf88774e0b189c99e4cee79"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_autoexpand.py": {
+      "role": "observe",
+      "sha256": "85f913f8cbd5dfd5d52d3b7d00eedec231ec3e4ee7d117db4a2bb714eb1a7243",
+      "size": 4638,
+      "normalized_sha256": "85f913f8cbd5dfd5d52d3b7d00eedec231ec3e4ee7d117db4a2bb714eb1a7243"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_browser.py": {
+      "role": "observe",
+      "sha256": "bdfd3bd9ab02ee535e77f3233920f80891eb84d7042f7db381afc7766b3702eb",
+      "size": 8420,
+      "normalized_sha256": "bdfd3bd9ab02ee535e77f3233920f80891eb84d7042f7db381afc7766b3702eb"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_calltip.py": {
+      "role": "observe",
+      "sha256": "a67efd1c92e824321254f615d35a72508ee09d75e1058c3d01ad7d8bf3be1ebf",
+      "size": 13658,
+      "normalized_sha256": "a67efd1c92e824321254f615d35a72508ee09d75e1058c3d01ad7d8bf3be1ebf"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_calltip_w.py": {
+      "role": "observe",
+      "sha256": "7462c048c689f82c3ae6b5782a18776762f88055b80ae77a92243b6c0606e004",
+      "size": 686,
+      "normalized_sha256": "7462c048c689f82c3ae6b5782a18776762f88055b80ae77a92243b6c0606e004"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_codecontext.py": {
+      "role": "observe",
+      "sha256": "84e6b890b22b2abcc0865c691162b93c6ffb9b4e17f05011bdaffa770a52fcf0",
+      "size": 16082,
+      "normalized_sha256": "84e6b890b22b2abcc0865c691162b93c6ffb9b4e17f05011bdaffa770a52fcf0"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_colorizer.py": {
+      "role": "observe",
+      "sha256": "6a3fbb630e0ecc7aafc9c8bc56ece3462911c733aa3bb4c52ee55c1d897301d4",
+      "size": 22882,
+      "normalized_sha256": "6a3fbb630e0ecc7aafc9c8bc56ece3462911c733aa3bb4c52ee55c1d897301d4"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_config.py": {
+      "role": "observe",
+      "sha256": "02546eb557e57b1654da9016cf56f1826869f3e6c78bcafffb8a89013641c1a1",
+      "size": 32091,
+      "normalized_sha256": "02546eb557e57b1654da9016cf56f1826869f3e6c78bcafffb8a89013641c1a1"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_config_key.py": {
+      "role": "observe",
+      "sha256": "54d0c65e1f66d37c415d3fe533c8db891974f08e8fca6374596280d64db86586",
+      "size": 11462,
+      "normalized_sha256": "54d0c65e1f66d37c415d3fe533c8db891974f08e8fca6374596280d64db86586"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_configdialog.py": {
+      "role": "observe",
+      "sha256": "ff4cb730050116208c232cef2e4875b90765da6e7497b1b8ea73f43372e06a67",
+      "size": 55442,
+      "normalized_sha256": "ff4cb730050116208c232cef2e4875b90765da6e7497b1b8ea73f43372e06a67"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_debugger.py": {
+      "role": "observe",
+      "sha256": "6bd4a3eaf6a24022bfc355a84d2a6a5f57b4083668ced98ef2c10b5762083d75",
+      "size": 9788,
+      "normalized_sha256": "6bd4a3eaf6a24022bfc355a84d2a6a5f57b4083668ced98ef2c10b5762083d75"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_debugger_r.py": {
+      "role": "observe",
+      "sha256": "ccc0ba5e03ee1df449f78a164efdc6739f5a530315ab3971ac05c652bc779cea",
+      "size": 965,
+      "normalized_sha256": "ccc0ba5e03ee1df449f78a164efdc6739f5a530315ab3971ac05c652bc779cea"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_debugobj.py": {
+      "role": "observe",
+      "sha256": "5427a574cfcfd36a48e365f6f8864b226ee8d7eb48702ff1496570302b1d9acc",
+      "size": 1611,
+      "normalized_sha256": "5427a574cfcfd36a48e365f6f8864b226ee8d7eb48702ff1496570302b1d9acc"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_debugobj_r.py": {
+      "role": "observe",
+      "sha256": "22d74368ba175175b9c14315f9d82fd7ddde60ae93d2e5572e9a647de7e869eb",
+      "size": 545,
+      "normalized_sha256": "22d74368ba175175b9c14315f9d82fd7ddde60ae93d2e5572e9a647de7e869eb"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_delegator.py": {
+      "role": "observe",
+      "sha256": "559d39df8c1ff38d177943f245b87f5379ee5ea93399fd6b5f7bfa882e6ed8ca",
+      "size": 1567,
+      "normalized_sha256": "559d39df8c1ff38d177943f245b87f5379ee5ea93399fd6b5f7bfa882e6ed8ca"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_editmenu.py": {
+      "role": "observe",
+      "sha256": "ed3800137d48ffcf86ecb71afe5a24cd9ed381571f23036438ba8a97f502326a",
+      "size": 2564,
+      "normalized_sha256": "ed3800137d48ffcf86ecb71afe5a24cd9ed381571f23036438ba8a97f502326a"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_editor.py": {
+      "role": "observe",
+      "sha256": "654ae5ca7f747a4a88d2868de48c7bff1f35b26098075f840722e955fe4cb83e",
+      "size": 8151,
+      "normalized_sha256": "654ae5ca7f747a4a88d2868de48c7bff1f35b26098075f840722e955fe4cb83e"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_filelist.py": {
+      "role": "observe",
+      "sha256": "d4cea5fdba68fb9e361541820d44eed003c317f4ef14bb9df3406b8d2c53ef7c",
+      "size": 795,
+      "normalized_sha256": "d4cea5fdba68fb9e361541820d44eed003c317f4ef14bb9df3406b8d2c53ef7c"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_format.py": {
+      "role": "observe",
+      "sha256": "b356a2a8f5fe14c39c6af73623484df4ed930cc16ef4605f3b04fd9b618867a6",
+      "size": 23610,
+      "normalized_sha256": "b356a2a8f5fe14c39c6af73623484df4ed930cc16ef4605f3b04fd9b618867a6"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_grep.py": {
+      "role": "observe",
+      "sha256": "9d3128f6b027c648bee7f3c6d44b473d60ee17a000af366f00c00741e6033e16",
+      "size": 5134,
+      "normalized_sha256": "9d3128f6b027c648bee7f3c6d44b473d60ee17a000af366f00c00741e6033e16"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_help.py": {
+      "role": "observe",
+      "sha256": "85bccf41fc642e9814e15ac9c2e2a8b2b86864120dcc0d1fec2b1057bd9310ba",
+      "size": 891,
+      "normalized_sha256": "85bccf41fc642e9814e15ac9c2e2a8b2b86864120dcc0d1fec2b1057bd9310ba"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_help_about.py": {
+      "role": "observe",
+      "sha256": "47663dfbcddced35ad97631cebb690a30ab3aa724bde0a7174d11290ac79eb02",
+      "size": 5904,
+      "normalized_sha256": "47663dfbcddced35ad97631cebb690a30ab3aa724bde0a7174d11290ac79eb02"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_history.py": {
+      "role": "observe",
+      "sha256": "6319fe7810ed91786b503de80701a291a4f9abe54c9e101c19c0917b709e62f3",
+      "size": 5517,
+      "normalized_sha256": "6319fe7810ed91786b503de80701a291a4f9abe54c9e101c19c0917b709e62f3"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_hyperparser.py": {
+      "role": "observe",
+      "sha256": "cd2fbc788d4d75b514e53951dc90d00d41a8a87baad31bc1e380b7449bfcf183",
+      "size": 9082,
+      "normalized_sha256": "cd2fbc788d4d75b514e53951dc90d00d41a8a87baad31bc1e380b7449bfcf183"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_iomenu.py": {
+      "role": "observe",
+      "sha256": "8250eb60ea1d7760589febf38c171c8c6e202e527a680030233539db59439d8d",
+      "size": 2457,
+      "normalized_sha256": "8250eb60ea1d7760589febf38c171c8c6e202e527a680030233539db59439d8d"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_macosx.py": {
+      "role": "observe",
+      "sha256": "975e48ab453711c5072988e2e66a7fe51e716ac64e494f022a5ff82781ccd368",
+      "size": 3444,
+      "normalized_sha256": "975e48ab453711c5072988e2e66a7fe51e716ac64e494f022a5ff82781ccd368"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_mainmenu.py": {
+      "role": "observe",
+      "sha256": "faa064ffd9c8e30b1205e46bb4ede816c74b7948cfa34c7795ed19c35eac10d5",
+      "size": 1638,
+      "normalized_sha256": "faa064ffd9c8e30b1205e46bb4ede816c74b7948cfa34c7795ed19c35eac10d5"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_multicall.py": {
+      "role": "observe",
+      "sha256": "a199d3377480440d5d822248dc0b25bcd6351c9da47138c2d91fbfeff9dbf583",
+      "size": 1378,
+      "normalized_sha256": "a199d3377480440d5d822248dc0b25bcd6351c9da47138c2d91fbfeff9dbf583"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_outwin.py": {
+      "role": "observe",
+      "sha256": "4496f1158880573b8f3c11438109c93f7f36175ae5ad5005210687be4a6cbf89",
+      "size": 5669,
+      "normalized_sha256": "4496f1158880573b8f3c11438109c93f7f36175ae5ad5005210687be4a6cbf89"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_parenmatch.py": {
+      "role": "observe",
+      "sha256": "5e0ba86116e28d46e7db9ed33d85cf7caa837e1779e1b8feb5f6b6b4a837551e",
+      "size": 3544,
+      "normalized_sha256": "5e0ba86116e28d46e7db9ed33d85cf7caa837e1779e1b8feb5f6b6b4a837551e"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_pathbrowser.py": {
+      "role": "observe",
+      "sha256": "a7d9c5085ff5c64232897f6ee0a09258a41a35f153f47ff0f3b8fa97ec67be9e",
+      "size": 2422,
+      "normalized_sha256": "a7d9c5085ff5c64232897f6ee0a09258a41a35f153f47ff0f3b8fa97ec67be9e"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_percolator.py": {
+      "role": "observe",
+      "sha256": "133b134a46b23cf2c635be3116415fd388e3a1c1581bf1a77d7f7f0aff3a725b",
+      "size": 4065,
+      "normalized_sha256": "133b134a46b23cf2c635be3116415fd388e3a1c1581bf1a77d7f7f0aff3a725b"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_pyparse.py": {
+      "role": "observe",
+      "sha256": "8f386a9f535369afb495322e104077c66c5a3abb91917ec69f868b405120cf35",
+      "size": 19365,
+      "normalized_sha256": "8f386a9f535369afb495322e104077c66c5a3abb91917ec69f868b405120cf35"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_pyshell.py": {
+      "role": "observe",
+      "sha256": "ff47aecd0657edbd7bc920473fe2e55b0bb0db6f347dc52f5e81b767897d3bc5",
+      "size": 4965,
+      "normalized_sha256": "ff47aecd0657edbd7bc920473fe2e55b0bb0db6f347dc52f5e81b767897d3bc5"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_query.py": {
+      "role": "observe",
+      "sha256": "5e67e6fae841c5a70e6f0947cdcbd934db4ce057618ce3b564054c608158ad06",
+      "size": 15523,
+      "normalized_sha256": "5e67e6fae841c5a70e6f0947cdcbd934db4ce057618ce3b564054c608158ad06"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_redirector.py": {
+      "role": "observe",
+      "sha256": "2ad01e9c58ba94cbff0749aa7cb7d9cfd5cf458b6f46a6fde586dc6a9d8def8a",
+      "size": 4239,
+      "normalized_sha256": "2ad01e9c58ba94cbff0749aa7cb7d9cfd5cf458b6f46a6fde586dc6a9d8def8a"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_replace.py": {
+      "role": "observe",
+      "sha256": "321333b3eaad9ecbf633186bc625d4a60c4c736def0fa00665add2ab899eecb1",
+      "size": 8299,
+      "normalized_sha256": "321333b3eaad9ecbf633186bc625d4a60c4c736def0fa00665add2ab899eecb1"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_rpc.py": {
+      "role": "observe",
+      "sha256": "1e2d997f442002389b3dadb47ed8134947c664a32ef637f43afdcbd1b5c13823",
+      "size": 805,
+      "normalized_sha256": "1e2d997f442002389b3dadb47ed8134947c664a32ef637f43afdcbd1b5c13823"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_run.py": {
+      "role": "observe",
+      "sha256": "3cbd9ab33ef7ad8e575f798cc205988d5f106d8be0df20e12b794394c3342b9e",
+      "size": 15756,
+      "normalized_sha256": "3cbd9ab33ef7ad8e575f798cc205988d5f106d8be0df20e12b794394c3342b9e"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_runscript.py": {
+      "role": "observe",
+      "sha256": "4264a834dc230d397725f398d905d0746321d543c56644e5c89af59fe3fedb61",
+      "size": 777,
+      "normalized_sha256": "4264a834dc230d397725f398d905d0746321d543c56644e5c89af59fe3fedb61"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_scrolledlist.py": {
+      "role": "observe",
+      "sha256": "a84ec601c8786daf0564e978c97c0e14095c23f9a08bb64950f9cb541b074b3a",
+      "size": 496,
+      "normalized_sha256": "a84ec601c8786daf0564e978c97c0e14095c23f9a08bb64950f9cb541b074b3a"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_search.py": {
+      "role": "observe",
+      "sha256": "c0550b241c99a566f61929515ca97aedf99f73568df3dfe93078ed22cb54892b",
+      "size": 2459,
+      "normalized_sha256": "c0550b241c99a566f61929515ca97aedf99f73568df3dfe93078ed22cb54892b"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_searchbase.py": {
+      "role": "observe",
+      "sha256": "2b8550dd411b75c6152c4da90843e1221094400080f9a1752e383d0b776f775b",
+      "size": 5691,
+      "normalized_sha256": "2b8550dd411b75c6152c4da90843e1221094400080f9a1752e383d0b776f775b"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_searchengine.py": {
+      "role": "observe",
+      "sha256": "519ddd5633eb8732539594f79ed21a6544f65e599a0d5c8c84db3a488ccdad97",
+      "size": 11588,
+      "normalized_sha256": "519ddd5633eb8732539594f79ed21a6544f65e599a0d5c8c84db3a488ccdad97"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_sidebar.py": {
+      "role": "observe",
+      "sha256": "5279cd252f50c70cb7bcfb77894bc90281fc0c422820bf08ada4391f1fec0a2c",
+      "size": 26905,
+      "normalized_sha256": "5279cd252f50c70cb7bcfb77894bc90281fc0c422820bf08ada4391f1fec0a2c"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_squeezer.py": {
+      "role": "observe",
+      "sha256": "fd5f695e2b1c296719e0a5b494a93184cc7e28cca22e9265def8171b23276b6c",
+      "size": 19656,
+      "normalized_sha256": "fd5f695e2b1c296719e0a5b494a93184cc7e28cca22e9265def8171b23276b6c"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_stackviewer.py": {
+      "role": "observe",
+      "sha256": "15eaeabf43bbaf7d7bc795fb3dfd59c92f3691c73a20548513dcadef8d45b8bf",
+      "size": 991,
+      "normalized_sha256": "15eaeabf43bbaf7d7bc795fb3dfd59c92f3691c73a20548513dcadef8d45b8bf"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_statusbar.py": {
+      "role": "observe",
+      "sha256": "0e9b262b9ad0046cbb0af1101a651fcb88cd1cba38e474b863abbb074b260a02",
+      "size": 1133,
+      "normalized_sha256": "0e9b262b9ad0046cbb0af1101a651fcb88cd1cba38e474b863abbb074b260a02"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_text.py": {
+      "role": "observe",
+      "sha256": "55abe8a9d0bdb45efecb879207f1259702cdcf47dbc636d7cca8dd458f0dc70f",
+      "size": 6970,
+      "normalized_sha256": "55abe8a9d0bdb45efecb879207f1259702cdcf47dbc636d7cca8dd458f0dc70f"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_textview.py": {
+      "role": "observe",
+      "sha256": "e45b199106608c7c981c149d3b4ccf092e7a2e7e9430cc76887cd769b9aaf533",
+      "size": 7364,
+      "normalized_sha256": "e45b199106608c7c981c149d3b4ccf092e7a2e7e9430cc76887cd769b9aaf533"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_tooltip.py": {
+      "role": "observe",
+      "sha256": "b9a82e57761bbca3d4e07193652e8294895765092ef8a651f4dcf63acec7f153",
+      "size": 5385,
+      "normalized_sha256": "b9a82e57761bbca3d4e07193652e8294895765092ef8a651f4dcf63acec7f153"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_tree.py": {
+      "role": "observe",
+      "sha256": "62ae68d64105485107e8173f94ce09739f276004bc8fa65efa5add2c6188e166",
+      "size": 1752,
+      "normalized_sha256": "62ae68d64105485107e8173f94ce09739f276004bc8fa65efa5add2c6188e166"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_undo.py": {
+      "role": "observe",
+      "sha256": "c5178b2dd77d794938fa52adce719d4948a92ba1a689068cec1fb6888d033e0e",
+      "size": 4228,
+      "normalized_sha256": "c5178b2dd77d794938fa52adce719d4948a92ba1a689068cec1fb6888d033e0e"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_util.py": {
+      "role": "observe",
+      "sha256": "300f627fc2199deb246ec793ef47b032de742d763a4170c8bb15e19ccbf602a5",
+      "size": 308,
+      "normalized_sha256": "300f627fc2199deb246ec793ef47b032de742d763a4170c8bb15e19ccbf602a5"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_warning.py": {
+      "role": "observe",
+      "sha256": "d1efc442b3fb93de89fb0988c73f8536fc5099afb761d2b69ec101c239c8c193",
+      "size": 2740,
+      "normalized_sha256": "d1efc442b3fb93de89fb0988c73f8536fc5099afb761d2b69ec101c239c8c193"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_window.py": {
+      "role": "observe",
+      "sha256": "336f2b6994f5aacca9689f32249db20a8dac36934314b7d5ba391d94169d63c6",
+      "size": 1075,
+      "normalized_sha256": "336f2b6994f5aacca9689f32249db20a8dac36934314b7d5ba391d94169d63c6"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_zoomheight.py": {
+      "role": "observe",
+      "sha256": "6300aa47014a5c2dfc9bc0d6c3fb234dff4e4b60a6527d4cdfbb8c416f99df44",
+      "size": 999,
+      "normalized_sha256": "6300aa47014a5c2dfc9bc0d6c3fb234dff4e4b60a6527d4cdfbb8c416f99df44"
+    },
+    "install/VisionRT-0.1.0/python/Lib/idlelib/idle_test/test_zzdummy.py": {
+      "role": "observe",
+      "sha256": "4502524aaa1923393725c04e6b2f27077399190e42bc8903415e95718c5f3c6f",
+      "size": 4455,
+      "normalized_sha256": "4502524aaa1923393725c04e6b2f27077399190e42bc8903415e95718c5f3c6f"
+    },
     "src/common/CMakeLists.txt": {
       "role": "index",
       "sha256": "cd8d0d6c5b5ec3863fe60e546f3285d368b1be56fae96b1bc38a75fbf67087cf",
@@ -2194,9 +2064,9 @@
     },
     "src/core/ProjectEditor.cpp": {
       "role": "index",
-      "sha256": "461b24731e460cb764499e665bf8376914c63b635bc93b39d43c88ee852df0a7",
-      "size": 54981,
-      "normalized_sha256": "461b24731e460cb764499e665bf8376914c63b635bc93b39d43c88ee852df0a7"
+      "sha256": "1c7704104a56273660e80507a977e678dd0b8e306375be5f9a93426a41f0738a",
+      "size": 55060,
+      "normalized_sha256": "1c7704104a56273660e80507a977e678dd0b8e306375be5f9a93426a41f0738a"
     },
     "src/core/ProjectStorage.cpp": {
       "role": "index",
@@ -2230,9 +2100,9 @@
     },
     "src/core/ToolRegistry.cpp": {
       "role": "index",
-      "sha256": "40ac951568c04344d4bfd860cf4bfa6e8bb63c60ed2f7164aeb2d147704b8a00",
-      "size": 12779,
-      "normalized_sha256": "40ac951568c04344d4bfd860cf4bfa6e8bb63c60ed2f7164aeb2d147704b8a00"
+      "sha256": "75d6a1f35736920641ec4f7a63efa72e418d41a88cf56e92c4640cc9cff6b11c",
+      "size": 12782,
+      "normalized_sha256": "75d6a1f35736920641ec4f7a63efa72e418d41a88cf56e92c4640cc9cff6b11c"
     },
     "src/core/ToolValueValidation.cpp": {
       "role": "index",
@@ -2272,9 +2142,9 @@
     },
     "src/core/include/core/Errors.def": {
       "role": "index",
-      "sha256": "e5658b31380585d5cdb9b051dc386779de905cedb13a0c3ec80ec54ac3451205",
-      "size": 822,
-      "normalized_sha256": "e5658b31380585d5cdb9b051dc386779de905cedb13a0c3ec80ec54ac3451205"
+      "sha256": "f4e531d4376c9c2af3a1002d2daad7347a8b98190141483d31eb4cc0fbe7c260",
+      "size": 871,
+      "normalized_sha256": "f4e531d4376c9c2af3a1002d2daad7347a8b98190141483d31eb4cc0fbe7c260"
     },
     "src/core/include/core/ExampleProject.h": {
       "role": "index",
@@ -2608,9 +2478,9 @@
     },
     "src/runtime/NodeRuntime.cpp": {
       "role": "index",
-      "sha256": "1da5684a952e54f2a80993e4155f85ba6bec6c1394836c6662a9b80a1f939d74",
-      "size": 22719,
-      "normalized_sha256": "1da5684a952e54f2a80993e4155f85ba6bec6c1394836c6662a9b80a1f939d74"
+      "sha256": "758a6a3d5c87cada27d3f54e088775856c3de064676a9cda04655388e29e3e07",
+      "size": 23949,
+      "normalized_sha256": "758a6a3d5c87cada27d3f54e088775856c3de064676a9cda04655388e29e3e07"
     },
     "src/runtime/Receiver.cpp": {
       "role": "index",
@@ -2620,9 +2490,9 @@
     },
     "src/runtime/RuntimeEngine.cpp": {
       "role": "index",
-      "sha256": "9b631a4fd0d45387cd33b27404199529e8f9529c85ac25f88ec09adba9783412",
-      "size": 44007,
-      "normalized_sha256": "9b631a4fd0d45387cd33b27404199529e8f9529c85ac25f88ec09adba9783412"
+      "sha256": "969a4adfec873ba2cfc2d3c1df547ce1dc808f7ac56d8bd2bffa8271e3420aa6",
+      "size": 47553,
+      "normalized_sha256": "969a4adfec873ba2cfc2d3c1df547ce1dc808f7ac56d8bd2bffa8271e3420aa6"
     },
     "src/runtime/RuntimeInternal.h": {
       "role": "index",
@@ -2704,9 +2574,9 @@
     },
     "src/ui/AppController.cpp": {
       "role": "index",
-      "sha256": "1df2abe916c3d4c4ae511b8a71e1b34212b573a848f09088eccb89f1ca4d7472",
-      "size": 85208,
-      "normalized_sha256": "1df2abe916c3d4c4ae511b8a71e1b34212b573a848f09088eccb89f1ca4d7472"
+      "sha256": "b66ce9c05e88ac69669086589369c1e650f0c4336ffda7084d140c2902f0dde6",
+      "size": 85199,
+      "normalized_sha256": "b66ce9c05e88ac69669086589369c1e650f0c4336ffda7084d140c2902f0dde6"
     },
     "src/ui/AppControllerAssist.cpp": {
       "role": "index",
@@ -2758,9 +2628,9 @@
     },
     "src/ui/AppControllerRoi.cpp": {
       "role": "index",
-      "sha256": "cc735a05aef99628134d12f7346c58d308fced15fc2156d0ec38cdb889cbb139",
-      "size": 8281,
-      "normalized_sha256": "cc735a05aef99628134d12f7346c58d308fced15fc2156d0ec38cdb889cbb139"
+      "sha256": "fc55e8009678077a742fac8e5a541c661d7fd893ede1391ee85062914efa4ac4",
+      "size": 8128,
+      "normalized_sha256": "fc55e8009678077a742fac8e5a541c661d7fd893ede1391ee85062914efa4ac4"
     },
     "src/ui/AppControllerRouting.cpp": {
       "role": "index",
@@ -2770,15 +2640,15 @@
     },
     "src/ui/AppControllerTraining.cpp": {
       "role": "index",
-      "sha256": "e6f76645a6e99617a372fa091a7dfcd40b8c3347e5b08af0a38b8589eba43ae7",
-      "size": 31660,
-      "normalized_sha256": "e6f76645a6e99617a372fa091a7dfcd40b8c3347e5b08af0a38b8589eba43ae7"
+      "sha256": "d1d824ca4b4018c7c9ac52e83c81665174d36ca487d4a4a150cb955e793ec7ce",
+      "size": 31614,
+      "normalized_sha256": "d1d824ca4b4018c7c9ac52e83c81665174d36ca487d4a4a150cb955e793ec7ce"
     },
     "src/ui/AppController_p.h": {
       "role": "index",
-      "sha256": "846b957fed46135c95df79cfcdbde92f968568b32bf567d861610ffff70df220",
-      "size": 22711,
-      "normalized_sha256": "846b957fed46135c95df79cfcdbde92f968568b32bf567d861610ffff70df220"
+      "sha256": "4bc0efd84829202778eefceed2b0862573d7790f2431dd51f9c97afcf4f2012f",
+      "size": 22586,
+      "normalized_sha256": "4bc0efd84829202778eefceed2b0862573d7790f2431dd51f9c97afcf4f2012f"
     },
     "src/ui/AssistPreview.cpp": {
       "role": "index",
@@ -2794,9 +2664,9 @@
     },
     "src/ui/Color.cpp": {
       "role": "index",
-      "sha256": "99c23ab16de088ae55d1c86348a7e13454b915605e8c60d5462598697aae0698",
+      "sha256": "2af12ee873b1e2098ae43b179a26394bcf5ab487f834ee0b40a9d8b7db6f334a",
       "size": 1103,
-      "normalized_sha256": "99c23ab16de088ae55d1c86348a7e13454b915605e8c60d5462598697aae0698"
+      "normalized_sha256": "2af12ee873b1e2098ae43b179a26394bcf5ab487f834ee0b40a9d8b7db6f334a"
     },
     "src/ui/DashedBorderItem.cpp": {
       "role": "index",
@@ -2824,9 +2694,9 @@
     },
     "src/ui/DurationText.cpp": {
       "role": "index",
-      "sha256": "b3168f3aa3b374d68c206fe262d828b53a3ff496081b750838e9230499696287",
-      "size": 4765,
-      "normalized_sha256": "b3168f3aa3b374d68c206fe262d828b53a3ff496081b750838e9230499696287"
+      "sha256": "b0ee33023068aefb40cb9136a3322efa8845164d52ba54cd8acc9da3131fab3c",
+      "size": 4615,
+      "normalized_sha256": "b0ee33023068aefb40cb9136a3322efa8845164d52ba54cd8acc9da3131fab3c"
     },
     "src/ui/ImageViewport.cpp": {
       "role": "index",
@@ -2854,9 +2724,9 @@
     },
     "src/ui/OutputModel.cpp": {
       "role": "index",
-      "sha256": "d76ff1e7b5173864361c67ecabcbbfc17d608fbda7162ea617e4bcc9189ff76d",
-      "size": 16474,
-      "normalized_sha256": "d76ff1e7b5173864361c67ecabcbbfc17d608fbda7162ea617e4bcc9189ff76d"
+      "sha256": "640ba78b86ba26c3f6e831c2ad2c55505ed7f5655c3f648dc5bece04b77ebf57",
+      "size": 15703,
+      "normalized_sha256": "640ba78b86ba26c3f6e831c2ad2c55505ed7f5655c3f648dc5bece04b77ebf57"
     },
     "src/ui/ParameterListModel.cpp": {
       "role": "index",
@@ -2878,21 +2748,21 @@
     },
     "src/ui/ResultPresentation.cpp": {
       "role": "index",
-      "sha256": "933c4af33c822bdc7d79dddf39243b710b6d30f028989cc30bad28370bd85d7d",
-      "size": 45699,
-      "normalized_sha256": "933c4af33c822bdc7d79dddf39243b710b6d30f028989cc30bad28370bd85d7d"
+      "sha256": "ce891bb98779af774fa38f8efb4c17f12c2407aa94c2b2bd0bfe293adcb17cbc",
+      "size": 45486,
+      "normalized_sha256": "ce891bb98779af774fa38f8efb4c17f12c2407aa94c2b2bd0bfe293adcb17cbc"
     },
     "src/ui/ResultPresentation.h": {
       "role": "index",
-      "sha256": "0d2203412ce4bc117fb9fb030c23551516f7e27e122e43007e90601796113688",
-      "size": 12467,
-      "normalized_sha256": "0d2203412ce4bc117fb9fb030c23551516f7e27e122e43007e90601796113688"
+      "sha256": "ab0e4e9225791864ad62a11857f8818f2e1733b6721c84ae392fefd42bde6aad",
+      "size": 12389,
+      "normalized_sha256": "ab0e4e9225791864ad62a11857f8818f2e1733b6721c84ae392fefd42bde6aad"
     },
     "src/ui/RoiEditSession.cpp": {
       "role": "index",
-      "sha256": "7149199d53bc4861a927c343e88cf8082dcff66895cd0f5808ecfa4abc8a549f",
-      "size": 4526,
-      "normalized_sha256": "7149199d53bc4861a927c343e88cf8082dcff66895cd0f5808ecfa4abc8a549f"
+      "sha256": "9c74b0e5f140ce3b5f2cf970baed4953843e1da91e5087d53c4a59fc31b24e4c",
+      "size": 4288,
+      "normalized_sha256": "9c74b0e5f140ce3b5f2cf970baed4953843e1da91e5087d53c4a59fc31b24e4c"
     },
     "src/ui/RoiGeometry.h": {
       "role": "index",
@@ -2902,9 +2772,9 @@
     },
     "src/ui/RoiOverlay.cpp": {
       "role": "index",
-      "sha256": "5d4cea1016e00e96a427c0317f4a31f917f4dcbed75873dad8152ffc60aad37a",
-      "size": 14779,
-      "normalized_sha256": "5d4cea1016e00e96a427c0317f4a31f917f4dcbed75873dad8152ffc60aad37a"
+      "sha256": "7153d37ff3acbd1d535715ccdc84d7c9509fa9bbc0a3bda12e009aa45da95c7f",
+      "size": 14430,
+      "normalized_sha256": "7153d37ff3acbd1d535715ccdc84d7c9509fa9bbc0a3bda12e009aa45da95c7f"
     },
     "src/ui/RoiOverlay.h": {
       "role": "index",
@@ -3004,9 +2874,9 @@
     },
     "src/ui/include/ui/Color.h": {
       "role": "index",
-      "sha256": "e754c6f6f40dc254eecb9be0ba1bf1ae34da6dae11c872cd916d9ae58b082494",
+      "sha256": "68c62e21722a91b4dce3d4ccf7092883af58f1e2fe39d72bb27e3e4160da7a28",
       "size": 1214,
-      "normalized_sha256": "e754c6f6f40dc254eecb9be0ba1bf1ae34da6dae11c872cd916d9ae58b082494"
+      "normalized_sha256": "68c62e21722a91b4dce3d4ccf7092883af58f1e2fe39d72bb27e3e4160da7a28"
     },
     "src/ui/include/ui/DashedBorderItem.h": {
       "role": "index",
@@ -3040,9 +2910,9 @@
     },
     "src/ui/include/ui/DurationText.h": {
       "role": "index",
-      "sha256": "29d38d15a063a7e11a80d6212d650278c677948a98a1a0a369777b13ce90cf63",
-      "size": 1375,
-      "normalized_sha256": "29d38d15a063a7e11a80d6212d650278c677948a98a1a0a369777b13ce90cf63"
+      "sha256": "f63fc00415d24dbc8b7e0fa9ba380c9a204e55a52189ac29911fba96ace6f01e",
+      "size": 1361,
+      "normalized_sha256": "f63fc00415d24dbc8b7e0fa9ba380c9a204e55a52189ac29911fba96ace6f01e"
     },
     "src/ui/include/ui/ImageViewport.h": {
       "role": "index",
@@ -3064,9 +2934,9 @@
     },
     "src/ui/include/ui/OutputModel.h": {
       "role": "index",
-      "sha256": "1521dff7cfdab5eb2af750a883b4b59ddad452ae0ed64795f6c1d454607a7705",
-      "size": 3391,
-      "normalized_sha256": "1521dff7cfdab5eb2af750a883b4b59ddad452ae0ed64795f6c1d454607a7705"
+      "sha256": "bfbecf30c2196e5bb728dcee6d2229adaacca99b2b5d7d5ee94b9a579fb6d624",
+      "size": 3314,
+      "normalized_sha256": "bfbecf30c2196e5bb728dcee6d2229adaacca99b2b5d7d5ee94b9a579fb6d624"
     },
     "src/ui/include/ui/ParameterListModel.h": {
       "role": "index",
@@ -3088,9 +2958,9 @@
     },
     "src/ui/include/ui/RoiEditSession.h": {
       "role": "index",
-      "sha256": "18786758b0ff56e9b44f2478b367cbeaa185764c3b05aa5108f4c8be197d0053",
-      "size": 3369,
-      "normalized_sha256": "18786758b0ff56e9b44f2478b367cbeaa185764c3b05aa5108f4c8be197d0053"
+      "sha256": "2b7063cc067c065c4f41020432dce8472608d3adb43a1ddbb40dc3f21893eed7",
+      "size": 3165,
+      "normalized_sha256": "2b7063cc067c065c4f41020432dce8472608d3adb43a1ddbb40dc3f21893eed7"
     },
     "src/ui/include/ui/Size.h": {
       "role": "index",
@@ -3268,9 +3138,9 @@
     },
     "src/ui/qml/NodeDelegate.qml": {
       "role": "index",
-      "sha256": "fe791269e222b9cfbbc1879f7852eb0462f069a1156655989998c186543a0f3f",
-      "size": 7193,
-      "normalized_sha256": "fe791269e222b9cfbbc1879f7852eb0462f069a1156655989998c186543a0f3f"
+      "sha256": "ce9db120148438fcaf566db82e189c7cc99b7a2bef0ca2780de9672e140af9f5",
+      "size": 6871,
+      "normalized_sha256": "ce9db120148438fcaf566db82e189c7cc99b7a2bef0ca2780de9672e140af9f5"
     },
     "src/ui/qml/OutputPanel.qml": {
       "role": "index",
@@ -3676,9 +3546,9 @@
     },
     "tests/example_pipelines.cpp": {
       "role": "observe",
-      "sha256": "bb42dce085cde66d0a26a5088838b091eb5d4d23fd05c5d7d89e3e9da424d3a5",
-      "size": 48614,
-      "normalized_sha256": "bb42dce085cde66d0a26a5088838b091eb5d4d23fd05c5d7d89e3e9da424d3a5"
+      "sha256": "63b4e515b46ac53e97d56122c301ab7fee95010547013e71e8d79565d8f2183c",
+      "size": 48942,
+      "normalized_sha256": "63b4e515b46ac53e97d56122c301ab7fee95010547013e71e8d79565d8f2183c"
     },
     "tests/example_project_contract.cpp": {
       "role": "observe",
@@ -3784,9 +3654,9 @@
     },
     "tests/node_display_debounce_contract.cpp": {
       "role": "observe",
-      "sha256": "1b23f5076fa7c504af91f7be21a230fe15dfc6533558cd6bd1040ff2dd0901bc",
-      "size": 9447,
-      "normalized_sha256": "1b23f5076fa7c504af91f7be21a230fe15dfc6533558cd6bd1040ff2dd0901bc"
+      "sha256": "d9d8df505f7fbe25785c4c635ecc27974cf6e407d9468d4704b726eed2c8f8b2",
+      "size": 11966,
+      "normalized_sha256": "d9d8df505f7fbe25785c4c635ecc27974cf6e407d9468d4704b726eed2c8f8b2"
     },
     "tests/node_list_model_test.cpp": {
       "role": "observe",
@@ -3832,9 +3702,9 @@
     },
     "tests/presentation_visibility_contract.cpp": {
       "role": "observe",
-      "sha256": "f95e0d7947e8da360779d3dbdcc743150a62da5739c1caedc0c64d517188a652",
-      "size": 7741,
-      "normalized_sha256": "f95e0d7947e8da360779d3dbdcc743150a62da5739c1caedc0c64d517188a652"
+      "sha256": "59565ddb4f91dc77089e9d99ccad9d88d188f93e7dff08445471ebb8dc188eea",
+      "size": 7611,
+      "normalized_sha256": "59565ddb4f91dc77089e9d99ccad9d88d188f93e7dff08445471ebb8dc188eea"
     },
     "tests/project_archive_contract.cpp": {
       "role": "observe",
@@ -3934,9 +3804,9 @@
     },
     "tests/runtime_contract.cpp": {
       "role": "observe",
-      "sha256": "97dcc76dc7e39ddb44d91637d0a9323516744b51ce545775410177787096d41d",
-      "size": 75201,
-      "normalized_sha256": "97dcc76dc7e39ddb44d91637d0a9323516744b51ce545775410177787096d41d"
+      "sha256": "786fb91ba7456b91b5e932ad423066345268bf2377cd30932f0e891af4720edf",
+      "size": 77064,
+      "normalized_sha256": "786fb91ba7456b91b5e932ad423066345268bf2377cd30932f0e891af4720edf"
     },
     "tests/runtime_diagnostics_contract.cpp": {
       "role": "observe",
@@ -4126,9 +3996,9 @@
     },
     "tests/viewport_contract.cpp": {
       "role": "observe",
-      "sha256": "2ff58884b675b640e254b2cb8994cbef6d9350f494789d44e6af0a3a07ce318e",
-      "size": 21094,
-      "normalized_sha256": "2ff58884b675b640e254b2cb8994cbef6d9350f494789d44e6af0a3a07ce318e"
+      "sha256": "6af27e20359618e79078db89f0d2c286cb43305306a033ccb19b135d002309b1",
+      "size": 21243,
+      "normalized_sha256": "6af27e20359618e79078db89f0d2c286cb43305306a033ccb19b135d002309b1"
     },
     "tests/viewport_lifetime_contract.cpp": {
       "role": "observe",
@@ -4186,9 +4056,9 @@
     },
     "tests/workbench_contract.cpp": {
       "role": "observe",
-      "sha256": "31282b9829e72095f30b90f20558959aa258ec6542caddc692aa1d494f640387",
-      "size": 64540,
-      "normalized_sha256": "31282b9829e72095f30b90f20558959aa258ec6542caddc692aa1d494f640387"
+      "sha256": "3c8f49bca9853d6b11b7e1621e1067acb234fde7a2f90e201854d1601356f8aa",
+      "size": 63792,
+      "normalized_sha256": "3c8f49bca9853d6b11b7e1621e1067acb234fde7a2f90e201854d1601356f8aa"
     },
     "tests/workbench_exit_contract.cpp": {
       "role": "observe",
@@ -4258,9 +4128,9 @@
     },
     "tests/workbench_roi.cpp": {
       "role": "observe",
-      "sha256": "aac409b410a5f216c8e6209574433a6d4c62819e5947d0d328c00f243b4b65cd",
-      "size": 46419,
-      "normalized_sha256": "aac409b410a5f216c8e6209574433a6d4c62819e5947d0d328c00f243b4b65cd"
+      "sha256": "2788bf051754c3b587bfeb2364aaa61e02b7b0a0c1cda1fd7a8f45ba2819d579",
+      "size": 47318,
+      "normalized_sha256": "2788bf051754c3b587bfeb2364aaa61e02b7b0a0c1cda1fd7a8f45ba2819d579"
     },
     "tests/workbench_roi_persistence_contract.cpp": {
       "role": "observe",
@@ -4276,9 +4146,9 @@
     },
     "tests/workbench_status_contract.cpp": {
       "role": "observe",
-      "sha256": "7c132f1d1629d5e1670578b1836297565e8307cc97b025e1c827a2464028736c",
-      "size": 16402,
-      "normalized_sha256": "7c132f1d1629d5e1670578b1836297565e8307cc97b025e1c827a2464028736c"
+      "sha256": "d4fa614a10c598022e1048f8489e00f6f9f6359a9fcba1c5a8881cc88dccaf3c",
+      "size": 18510,
+      "normalized_sha256": "d4fa614a10c598022e1048f8489e00f6f9f6359a9fcba1c5a8881cc88dccaf3c"
     },
     "tests/workbench_tooltree_contract.cpp": {
       "role": "observe",
@@ -4300,9 +4170,9 @@
     },
     "tests/workbench_unavailable_tool_contract.cpp": {
       "role": "observe",
-      "sha256": "800ea844c4a9fc2e7aa9dbff3a11938841ec3afae65c1475898dcd8880a19dd7",
-      "size": 10055,
-      "normalized_sha256": "800ea844c4a9fc2e7aa9dbff3a11938841ec3afae65c1475898dcd8880a19dd7"
+      "sha256": "b5ee8986f59df159a333436fbedccb2138cd4f3b25b787eb785478928e0362b0",
+      "size": 10946,
+      "normalized_sha256": "b5ee8986f59df159a333436fbedccb2138cd4f3b25b787eb785478928e0362b0"
     },
     "tools/README.md": {
       "role": "index",
