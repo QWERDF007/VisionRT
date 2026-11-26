@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-20T13:34:27Z",
-  "updated_at": "2026-11-26T06:22:39Z",
+  "updated_at": "2026-11-26T09:35:06Z",
   "files": {
     ".clang-format": {
       "role": "index",
@@ -59,15 +59,15 @@
     },
     "WORKLOG.md": {
       "role": "index",
-      "sha256": "3ae53a7d8fc2710e479f552698a9798a4f1bb30110f3d6824f157892a877af1e",
-      "size": 574301,
-      "normalized_sha256": "3ae53a7d8fc2710e479f552698a9798a4f1bb30110f3d6824f157892a877af1e"
+      "sha256": "11d5b04cd7aca45e6ab4d56c771014c8970b264c8457957cc51eb2afaae1b2ec",
+      "size": 576614,
+      "normalized_sha256": "11d5b04cd7aca45e6ab4d56c771014c8970b264c8457957cc51eb2afaae1b2ec"
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "df204cf4ff32e6f79c333b12a4633d02bd772b97d08be2db43cdb2a76ef043b3",
-      "size": 89513,
-      "normalized_sha256": "df204cf4ff32e6f79c333b12a4633d02bd772b97d08be2db43cdb2a76ef043b3"
+      "sha256": "b6f609251ee8a5d7b5d2539e4f6372d60dc4065f7d299074672d830ef41bbf01",
+      "size": 89837,
+      "normalized_sha256": "b6f609251ee8a5d7b5d2539e4f6372d60dc4065f7d299074672d830ef41bbf01"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -2794,9 +2794,9 @@
     },
     "src/ui/Color.cpp": {
       "role": "index",
-      "sha256": "1ea44bd4d05ef3d299c982b96cf22c120ee442aa9e561d8ec6339e4037085181",
+      "sha256": "99c23ab16de088ae55d1c86348a7e13454b915605e8c60d5462598697aae0698",
       "size": 1103,
-      "normalized_sha256": "1ea44bd4d05ef3d299c982b96cf22c120ee442aa9e561d8ec6339e4037085181"
+      "normalized_sha256": "99c23ab16de088ae55d1c86348a7e13454b915605e8c60d5462598697aae0698"
     },
     "src/ui/DashedBorderItem.cpp": {
       "role": "index",
@@ -2902,9 +2902,9 @@
     },
     "src/ui/RoiOverlay.cpp": {
       "role": "index",
-      "sha256": "59e1c34cbf6b9c011a3bf881dab33d46167cc15559039ec808e36d27882c1cfb",
-      "size": 14026,
-      "normalized_sha256": "59e1c34cbf6b9c011a3bf881dab33d46167cc15559039ec808e36d27882c1cfb"
+      "sha256": "5d4cea1016e00e96a427c0317f4a31f917f4dcbed75873dad8152ffc60aad37a",
+      "size": 14779,
+      "normalized_sha256": "5d4cea1016e00e96a427c0317f4a31f917f4dcbed75873dad8152ffc60aad37a"
     },
     "src/ui/RoiOverlay.h": {
       "role": "index",
@@ -2914,9 +2914,9 @@
     },
     "src/ui/Size.cpp": {
       "role": "index",
-      "sha256": "50d1fa9ed1880d4fcc54dd8d88b3917d44cb211f64476e304434620a7fa04e14",
-      "size": 1234,
-      "normalized_sha256": "50d1fa9ed1880d4fcc54dd8d88b3917d44cb211f64476e304434620a7fa04e14"
+      "sha256": "2e0c87ea6104f371d886c59e8c983819d57b0b97188de0fc0db3df6f9d22e3aa",
+      "size": 1394,
+      "normalized_sha256": "2e0c87ea6104f371d886c59e8c983819d57b0b97188de0fc0db3df6f9d22e3aa"
     },
     "src/ui/ThumbnailImageProvider.cpp": {
       "role": "index",
@@ -3094,9 +3094,9 @@
     },
     "src/ui/include/ui/Size.h": {
       "role": "index",
-      "sha256": "13410eb711f5686344898c4b1a320a2444ef7f6a7b09816b9d6b5cde44c90105",
-      "size": 1991,
-      "normalized_sha256": "13410eb711f5686344898c4b1a320a2444ef7f6a7b09816b9d6b5cde44c90105"
+      "sha256": "c1f2a5ee83d1d84e78699fcbd2790803e3baed5320c17191057b65d338f77b18",
+      "size": 2288,
+      "normalized_sha256": "c1f2a5ee83d1d84e78699fcbd2790803e3baed5320c17191057b65d338f77b18"
     },
     "src/ui/include/ui/ThumbnailImageProvider.h": {
       "role": "index",
@@ -3694,9 +3694,9 @@
     },
     "tests/geometry_overlay_contract.cpp": {
       "role": "observe",
-      "sha256": "5768c833590abccff0e67516d908d3d57eda3d329089692a13122ce37d5a5f51",
-      "size": 2907,
-      "normalized_sha256": "5768c833590abccff0e67516d908d3d57eda3d329089692a13122ce37d5a5f51"
+      "sha256": "d10cf66a40dc5425a33074184caf25d4fa2d6b35872bcebff87bdb09ac07576c",
+      "size": 3961,
+      "normalized_sha256": "d10cf66a40dc5425a33074184caf25d4fa2d6b35872bcebff87bdb09ac07576c"
     },
     "tests/gpu_tools_contract.cpp": {
       "role": "observe",
@@ -3922,9 +3922,9 @@
     },
     "tests/roi_interaction_contract.cpp": {
       "role": "observe",
-      "sha256": "ca41c8fe7788138e353aac07483727642ce44c5008c47b70025317c666523598",
-      "size": 8295,
-      "normalized_sha256": "ca41c8fe7788138e353aac07483727642ce44c5008c47b70025317c666523598"
+      "sha256": "4981e643ecdbefc930f8b648514e547bdf0c9da6b729658479886dc67647c933",
+      "size": 8555,
+      "normalized_sha256": "4981e643ecdbefc930f8b648514e547bdf0c9da6b729658479886dc67647c933"
     },
     "tests/roi_view_benchmark.cpp": {
       "role": "observe",
@@ -4126,9 +4126,9 @@
     },
     "tests/viewport_contract.cpp": {
       "role": "observe",
-      "sha256": "5c58bc7ccad60cacfe8b94666a8703194dd1e1240a6e7f09bc5bf3c3e4ce6d57",
-      "size": 20944,
-      "normalized_sha256": "5c58bc7ccad60cacfe8b94666a8703194dd1e1240a6e7f09bc5bf3c3e4ce6d57"
+      "sha256": "2ff58884b675b640e254b2cb8994cbef6d9350f494789d44e6af0a3a07ce318e",
+      "size": 21094,
+      "normalized_sha256": "2ff58884b675b640e254b2cb8994cbef6d9350f494789d44e6af0a3a07ce318e"
     },
     "tests/viewport_lifetime_contract.cpp": {
       "role": "observe",
