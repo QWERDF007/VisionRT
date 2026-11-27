@@ -194,9 +194,8 @@ int main()
     assert(restoredSet.get().images.at(4).colorOrder == ColorOrder::BGR);
     assert(std::get<std::int64_t>(restoredSet.get().records.at(8).fields.at(0)) == 9007199254740993LL);
     assert(!restoredSet.get().records.at(9).imageId);
-    const auto description = ValueJson::encode(images, {Type::Image}, ValueJson::Purpose::Display).toObject();
-    assert(description.value("type") == "Image" && description.value("count").toInteger() == 1);
-    assert(description.value("images").toArray()[0].toObject().value("rows").toInteger() == 2);
-    rejects([&] { ValueJson::decode(description, {Type::Image}); });
+    const PortValue emptyImages = DataRef<Image>(Image{});
+    assert(ValueJson::encode(emptyImages, {Type::Image}, ValueJson::Purpose::Display).toArray().isEmpty());
+    rejects([&] { (void)ValueJson::encode(images, {Type::Image}, ValueJson::Purpose::Display); });
     std::cout << "28 native nested array types, ROI precision, int64 lexemes and explicit display descriptions\n";
 }

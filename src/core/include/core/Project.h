@@ -6,11 +6,13 @@
 
 #include <QJsonObject>
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace visionrt {
@@ -36,7 +38,14 @@ struct GridPoint
     bool operator==(const GridPoint &) const = default;
 };
 
-using TypeMap = std::map<PortId, TypeSpec>;
+using TypeMap    = std::map<PortId, TypeSpec>;
+using BindingMap = std::map<PortId, InputBinding>;
+
+inline constexpr std::array<PortStage, 3> kParameterStages{
+    PortStage::Init,
+    PortStage::Train,
+    PortStage::Inputs,
+};
 
 // Node-owned dynamic port configuration. portId values are stable node-local
 // identifiers allocated from nextPortId; symbols are the formula identifiers and
@@ -77,6 +86,27 @@ struct TypeSnapshot
     TypeMap inputs;
     TypeMap outputs;
     TypeMap trainParams;
+
+    const TypeMap &stageTypes(PortStage stage) const
+    {
+        switch (stage)
+        {
+        case PortStage::Init:
+            return initParams;
+        case PortStage::Train:
+            return trainParams;
+        case PortStage::Inputs:
+            return inputs;
+        case PortStage::Outputs:
+            return outputs;
+        }
+        throw ContractError("未知端口阶段");
+    }
+
+    TypeMap &stageTypes(PortStage stage)
+    {
+        return const_cast<TypeMap &>(std::as_const(*this).stageTypes(stage));
+    }
 };
 
 struct NodeDefinition
@@ -89,9 +119,9 @@ struct NodeDefinition
     std::string                                      toolVersionSnapshot;
     std::string                                      alias;
     GridPoint                                        position;
-    Values                                           initParams;
-    Values                                           trainParams;
-    std::map<PortId, InputBinding>                   inputs;
+    BindingMap                                       initParams;
+    BindingMap                                       trainParams;
+    BindingMap                                       inputs;
     TypeSnapshot                                     signatures;
     std::map<PortId, PortTypeReference>              outputTypeSources;
     std::map<PortId, std::string>                    outputTypeErrors;
@@ -102,6 +132,27 @@ struct NodeDefinition
     std::uint64_t                                    initializationRevision = 0;
     QJsonObject                                      unresolved;
     VISIONRT_CORE_API std::string                                      title() const;
+
+    const BindingMap &stageBindings(PortStage stage) const
+    {
+        switch (stage)
+        {
+        case PortStage::Init:
+            return initParams;
+        case PortStage::Train:
+            return trainParams;
+        case PortStage::Inputs:
+            return inputs;
+        case PortStage::Outputs:
+            break;
+        }
+        throw ContractError("端口阶段不支持输入绑定");
+    }
+
+    BindingMap &stageBindings(PortStage stage)
+    {
+        return const_cast<BindingMap &>(std::as_const(*this).stageBindings(stage));
+    }
 };
 
 struct FlowDefinition

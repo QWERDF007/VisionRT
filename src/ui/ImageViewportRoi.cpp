@@ -534,14 +534,9 @@ void ImageViewport::mouseReleaseEvent(QMouseEvent *event)
     }
     if (gesture_ == Gesture::Pan && event->button() == panButton_)
     {
-        const bool contextMenu
-            = panButton_ == Qt::RightButton
-           && (event->position() - anchor_).manhattanLength() <= QGuiApplication::styleHints()->startDragDistance();
         gesture_   = Gesture::None;
         panButton_ = Qt::NoButton;
         event->accept();
-        if (contextMenu)
-            emit contextMenuRequested(event->position());
         return;
     }
     if (event->button() == Qt::LeftButton && canEdit()

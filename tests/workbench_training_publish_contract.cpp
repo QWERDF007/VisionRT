@@ -46,6 +46,7 @@ try
     app.resolveUnsaved(UnsavedDecision::Discard);
     settle();
     const auto saved = installation.directory() + "/working/project.vrtapp";
+    std::filesystem::create_directories(std::filesystem::path(saved.toStdWString()).parent_path());
     require(app.save(saved), "example could not be saved as a working project");
     settle();
     const auto installRoot = std::filesystem::path(installation.directory().toStdWString());
@@ -75,7 +76,7 @@ try
             "training did not publish complete measured segment endpoints");
     require(equalValues(node(app, 2).inputs.at(6).literal, runRegion)
                 && equalValues(node(app, 2).inputs.at(2).literal, runContrast), "training changed detection parameters");
-    const auto defaultPath = std::filesystem::path(QString::fromStdString(std::get<std::string>(node(app, 2).trainParams.at(1))).toStdWString());
+    const auto defaultPath = std::filesystem::path(QString::fromStdString(std::get<std::string>(node(app, 2).trainParams.at(1).literal)).toStdWString());
     require(defaultPath.is_relative() && *defaultPath.begin() == "assets" && defaultPath.extension() == ".zip"
                 && std::filesystem::is_regular_file(installRoot / defaultPath),
             "default training did not save an installation-relative .zip archive");
@@ -95,14 +96,14 @@ try
     require(!app.trainingDirty() && std::filesystem::is_regular_file(installRoot / "models/chosen-color.zip"),
             "color training did not save the requested installation-relative .zip archive");
     require(isMissing(outputs->capture(PortId{4})->value), "color training retained old detection labels");
-    const auto previousModel = node(app, 3).trainParams.at(3);
+    const auto previousModel = node(app, 3).trainParams.at(3).literal;
     QFile blocked(QString::fromStdWString((installRoot / "blocked").wstring()));
     require(blocked.open(QIODevice::WriteOnly) && blocked.write("file") == 4, "save failure fixture failed");
     blocked.close();
     require(app.setTrainingParameter(3, "blocked/model.zip"), "failure destination could not be selected");
     app.applyTraining();
     settle();
-    require(equalValues(node(app, 3).trainParams.at(3), previousModel),
+    require(equalValues(node(app, 3).trainParams.at(3).literal, previousModel),
             "a real save failure replaced the running model reference");
     require(app.trainingDirty() && std::get<std::int64_t>(outputs->capture(PortId{0})->value) != 0
                 && isMissing(outputs->capture(PortId{9})->value), "model save failure was not reported through the shared outputs");
@@ -113,6 +114,9 @@ try
     settle();
     require(std::get<std::int64_t>(outputs->capture(PortId{0})->value) == 0
                 && !isMissing(outputs->capture(PortId{4})->value), "previous color model did not remain usable");
+    const auto beforeLabels = nestedOf<NestedVector<std::string, 2>>(std::get<Array>(outputs->capture(PortId{4})->value));
+    require(std::ranges::find(beforeLabels.front(), std::string("purple")) != beforeLabels.front().end(),
+            "previous color model did not report the original purple class");
     app.setTrainingMode(true);
     const auto records = app.trainingRecords();
     require(records.size() == 5, "the cable model has five training records");
@@ -121,14 +125,19 @@ try
             "the trained class could not be renamed");
     app.applyTraining();
     settle();
-    require(!app.trainingDirty() && equalValues(node(app, 3).trainParams.at(3), previousModel),
+    require(!app.trainingDirty() && equalValues(node(app, 3).trainParams.at(3).literal, previousModel),
             "retraining changed the current model file path");
     app.setTrainingMode(false);
     app.runNode();
     settle();
     const auto labels = nestedOf<NestedVector<std::string, 2>>(std::get<Array>(outputs->capture(PortId{4})->value));
-    require(labels.front().front() == "updated-purple" && labels.front().back() == "updated-purple",
+    require(labels.front().size() == beforeLabels.front().size()
+                && std::ranges::find(labels.front(), std::string("purple")) == labels.front().end()
+                && std::ranges::find(labels.front(), std::string("updated-purple")) != labels.front().end(),
             "execution reused the model loaded before retraining");
+    for (std::size_t i = 0; i < beforeLabels.front().size(); ++i)
+        if (beforeLabels.front()[i] == "purple")
+            require(labels.front()[i] == "updated-purple", "renamed class did not replace every purple prediction");
     require(app.save(), "trained project could not be saved");
     app.requestOpen(saved);
     app.resolveUnsaved(UnsavedDecision::Discard);

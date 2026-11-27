@@ -99,14 +99,17 @@ void resolveOutputTypes(ProjectDefinition &project)
         auto parameter = [&](PortId id)
         {
             const auto value = node.initParams.find(id);
-            const auto *text  = value == node.initParams.end() ? nullptr : std::get_if<std::string>(&value->second);
+            if (value == node.initParams.end() || value->second.mode != BindingMode::Literal)
+                return std::string{};
+            const auto *text = std::get_if<std::string>(&value->second.literal);
             return text ? *text : std::string{};
         };
-        const auto flowId     = parameter(reference->second.flowParameter.id);
-        const auto nodeSeq    = parameter(reference->second.nodeParameter.id);
-        const auto portValue  = node.initParams.find(reference->second.portParameter.id);
-        const auto *portCell  = portValue == node.initParams.end() ? nullptr
-                                                                  : std::get_if<std::int64_t>(&portValue->second);
+        const auto flowId       = parameter(reference->second.flowParameter.id);
+        const auto nodeSeq      = parameter(reference->second.nodeParameter.id);
+        const auto portValue    = node.initParams.find(reference->second.portParameter.id);
+        const auto *portCell    = portValue == node.initParams.end() || portValue->second.mode != BindingMode::Literal
+                                      ? nullptr
+                                      : std::get_if<std::int64_t>(&portValue->second.literal);
         const PortId sourcePort = portCell && *portCell > 0 ? static_cast<PortId>(*portCell) : 0;
         const bool   sourcePortOk = sourcePort != 0;
         std::optional<TypeSpec> type;
@@ -316,35 +319,48 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
     for (const auto &port : definition.initParams)
     {
         const auto found = node.initParams.find(port.id);
-        parameters.emplace(port.id,
-                           copyProjectLiteral(found == node.initParams.end() ? port.defaultValue : found->second));
+        parameters.emplace(
+            port.id, copyProjectLiteral(found == node.initParams.end() ? port.defaultValue : found->second.literal));
     }
     return parameters;
 }
 
-std::map<std::string, std::filesystem::path> nodeModelReferences(
-    const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &resourceRoot)
+std::map<std::string, std::filesystem::path> resolveModelReferences(
+    const Values &trainValues, const ToolDefinition &definition, const std::filesystem::path &resourceRoot)
 {
     std::map<std::string, std::filesystem::path> result;
-    if (!definition.training) return result;
+    if (!definition.training)
+        return result;
     for (const auto &artifact : definition.training->artifacts)
     {
-        const auto parameter = node.trainParams.find(artifact.target.id);
-        if (parameter == node.trainParams.end()) continue;
+        const auto parameter = trainValues.find(artifact.target.id);
+        if (parameter == trainValues.end())
+            continue;
         const auto *text = std::get_if<std::string>(&parameter->second);
-        if (!text || text->empty()) continue;
+        if (!text || text->empty())
+            continue;
         const auto file = pathFromUtf8(*text);
         result.emplace(artifact.id, (file.is_absolute() ? file : resourceRoot / file).lexically_normal());
     }
     return result;
 }
 
+std::map<std::string, std::filesystem::path> nodeModelReferences(
+    const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &resourceRoot)
+{
+    Values trainValues;
+    for (const auto &[id, binding] : node.trainParams)
+        if (binding.mode == BindingMode::Literal)
+            trainValues.emplace(id, binding.literal);
+    return resolveModelReferences(trainValues, definition, resourceRoot);
+}
+
 Values hydrateNodeTrainingSets(const NodeDefinition &node, const ToolDefinition &definition,
                                const std::filesystem::path &resourceRoot, std::string *error)
 {
     Values hydrated;
-    for (const auto &[id, value] : node.trainParams)
-        hydrated.emplace(id, copyProjectLiteral(value));
+    for (const auto &[id, binding] : node.trainParams)
+        hydrated.emplace(id, copyProjectLiteral(binding.literal));
     if (!definition.training || definition.training->datasets.empty())
         return hydrated;
 

@@ -279,7 +279,7 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         node.toolId           = definition.nameEn;
         node.toolNameSnapshot = definition.nameZh;
         node.signatures.initParams.emplace(0, TypeSpec{Type::Int});
-        node.initParams.emplace(0, code);
+        node.initParams.emplace(0, InputBinding{BindingMode::Literal, code, {}});
         for (const auto &output : definition.outputs) node.signatures.outputs.emplace(output.id, output.type);
         ProjectDefinition project;
         project.flows.front().nodes = {node};
@@ -377,7 +377,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     assert(instanceCount() == 1 && initializeCount() == initializations + 1);
 
     const auto publication                                     = snap->publication;
-    project.flows.front().nodes.front().initParams[0] = std::int64_t{2};
+    project.flows.front().nodes.front().initParams[0].literal = std::int64_t{2};
     assert(engine.requestSynchronize(project, registry));
     prepared = finish(engine);
     assert(snapshot(prepared, 1)->publication == publication);

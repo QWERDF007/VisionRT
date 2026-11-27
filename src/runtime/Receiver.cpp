@@ -14,13 +14,17 @@ constexpr std::string_view kReceiverBinding = "visionrt.receiver";
 const std::string *stringParameter(const NodeDefinition &node, PortId id)
 {
     const auto found = node.initParams.find(id);
-    return found == node.initParams.end() ? nullptr : std::get_if<std::string>(&found->second);
+    if (found == node.initParams.end() || found->second.mode != BindingMode::Literal)
+        return nullptr;
+    return std::get_if<std::string>(&found->second.literal);
 }
 
 const std::int64_t *numberParameter(const NodeDefinition &node, PortId id)
 {
     const auto found = node.initParams.find(id);
-    return found == node.initParams.end() ? nullptr : std::get_if<std::int64_t>(&found->second);
+    if (found == node.initParams.end() || found->second.mode != BindingMode::Literal)
+        return nullptr;
+    return std::get_if<std::int64_t>(&found->second.literal);
 }
 
 std::string receiverLabel(const FlowDefinition &flow, const NodeDefinition &node)

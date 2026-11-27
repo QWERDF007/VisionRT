@@ -306,7 +306,7 @@ class ExampleProjectsContract(unittest.TestCase):
             project = sample / "识别线缆颜色.vrtapp"
             with zipfile.ZipFile(project, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("program.json", json.dumps({
-                    "format_version": 9, "project": {"name": "识别线缆颜色"},
+                    "format_version": 10, "project": {"name": "识别线缆颜色"},
                     "flows": [{"image": "C:/outside/image.png"}],
                 }))
             assets = sample / "assets"

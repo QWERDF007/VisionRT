@@ -56,7 +56,7 @@ int main(int argc, char **argv)
                     // is absent, and an absent value is not a rejected option.
                     for (const auto &parameter : definition->initParams)
                         if (const auto found = node.initParams.find(parameter.id); found != node.initParams.end())
-                            check(parameter, found->second);
+                            check(parameter, found->second.literal);
                     for (const auto &input : definition->inputs)
                         if (const auto found = node.inputs.find(input.id); found != node.inputs.end())
                             check(input, found->second.literal);

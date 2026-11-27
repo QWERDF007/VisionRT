@@ -17,9 +17,10 @@ VISIONRT_CORE_API bool                        hasDependencyCycle(const FlowDefin
 
 struct InputPort
 {
-    NodeId node = 0;
-    PortId port = 0;
-    bool        operator==(const InputPort &) const = default;
+    NodeId    node  = 0;
+    PortId    port  = 0;
+    PortStage stage = PortStage::Inputs;
+    bool      operator==(const InputPort &) const = default;
 };
 
 struct PortRelation
@@ -51,17 +52,19 @@ using PositionLookup = std::function<std::optional<GridPoint>(NodeId)>;
 
 VISIONRT_CORE_API BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, PortId sourcePort,
                             NodeId targetNodeId, PortId targetInputPort,
-                            const PositionLookup &positions = {});
+                            const PositionLookup &positions = {},
+                            PortStage targetStage = PortStage::Inputs);
 
 // A guard is a Bool control dependency with the same row/ownership rules as data
 // edges. It never carries images, arrays or ROI values.
 
 struct CandidateInput
 {
-    NodeId node{};
-    PortId port = 0;
-    bool        connected = false;
-    bool        occupied  = false;
+    NodeId    node{};
+    PortId    port      = 0;
+    bool      connected = false;
+    bool      occupied  = false;
+    PortStage stage     = PortStage::Inputs;
 };
 
 VISIONRT_CORE_API const std::optional<SourcePort> &effectiveSource(const InputBinding &binding);
@@ -138,19 +141,22 @@ public:
     bool                     setAlias(std::string_view flowId, NodeId node, std::string alias);
 
     bool bindFreeInput(std::string_view flowId, const SourcePort &source, const InputPort &target);
-    bool setBinding(std::string_view flowId, NodeId node, PortId input, InputBinding binding);
-    bool setMode(std::string_view flowId, NodeId node, PortId input, BindingMode mode);
-    bool setSource(std::string_view flowId, NodeId node, PortId input, std::optional<SourcePort> source);
-    bool unbind(std::string_view flowId, NodeId node, PortId input);
-    bool setLiteral(std::string_view flowId, NodeId node, PortId input, PortValue value);
+    bool setBinding(std::string_view flowId, NodeId node, PortId input, InputBinding binding,
+                    PortStage stage = PortStage::Inputs);
+    bool setMode(std::string_view flowId, NodeId node, PortId input, BindingMode mode,
+                 PortStage stage = PortStage::Inputs);
+    bool setSource(std::string_view flowId, NodeId node, PortId input, std::optional<SourcePort> source,
+                   PortStage stage = PortStage::Inputs);
+    bool unbind(std::string_view flowId, NodeId node, PortId input, PortStage stage = PortStage::Inputs);
+    bool setLiteral(std::string_view flowId, NodeId node, PortId input, PortValue value,
+                    PortStage stage = PortStage::Inputs);
     // One transaction for a proposal that touches several values (ROI plus recommended parameters,
     // or an initialization parameter and the input it initializes). Every target is validated before
-    // anything is written, inputs currently fed from upstream are refused instead of being silently
+    // anything is written, parameters currently fed from upstream are refused instead of being silently
     // disconnected, and the whole proposal raises exactly one node execution revision. The optional
     // preparation saves associated files after validation and before committing the configuration.
     bool setLiteralWrites(std::string_view flowId, NodeId node, std::span<const LiteralWrite> writes,
                           std::function<void()> prepare = {});
-    bool setInitParam(std::string_view flowId, NodeId node, PortId parameter, PortValue value);
     // Raises the node's execution revision without touching its configuration. Used when an
     // external asset the node reads (trained data) changed and the tool must initialize again.
     bool reloadNode(std::string_view flowId, NodeId node);
@@ -164,7 +170,8 @@ public:
     bool setSelectType(std::string_view flowId, NodeId node, TypeSpec type, const ToolDefinition &tool);
 
     std::size_t             referenceCount(std::string_view flowId, const SourcePort &source) const;
-    std::vector<SourcePort> compatibleSources(std::string_view flowId, NodeId node, PortId input) const;
+    std::vector<SourcePort> compatibleSources(std::string_view flowId, NodeId node, PortId input,
+                                              PortStage stage = PortStage::Inputs) const;
     std::vector<InputPort>  compatibleInputs(std::string_view flowId, const SourcePort &source) const;
 
 private:

@@ -268,10 +268,10 @@ void runPackageReplacement(PythonRuntime &python)
         n3.position         = {100, 250};
         // Receiver init ports keep the declaration order 0..3; the source port travels as a number.
         n3.initParams = {
-            {ReceiveInitPorts::SourceFlow, std::string("sender_flow")},
-            {ReceiveInitPorts::SourceNode, std::string(std::to_string(n2.id))},
-            {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-            {        ReceiveInitPorts::Timeout, std::int64_t{1000}}
+            {ReceiveInitPorts::SourceFlow, {BindingMode::Literal, std::string("sender_flow"), {}}},
+            {ReceiveInitPorts::SourceNode, {BindingMode::Literal, std::string(std::to_string(n2.id)), {}}},
+            {ReceiveInitPorts::SourcePort, {BindingMode::Literal, std::int64_t{2}, {}}},
+            {ReceiveInitPorts::Timeout,    {BindingMode::Literal, std::int64_t{1000}, {}}}
         };
         n3.signatures.initParams[ReceiveInitPorts::SourceFlow] = {Type::String};
         n3.signatures.initParams[ReceiveInitPorts::SourceNode] = {Type::String};

@@ -118,6 +118,8 @@ void validatePorts(const std::vector<PortDefinition> &ports, PortStage stage)
             continue;
         }
         validateTypeSpec(port.type);
+        if (stage == PortStage::Train && port.type.type == Type::Image)
+            throw ContractError("训练阶段不支持图像类型参数：" + port.nameZh);
 
         if (output)
         {
@@ -385,6 +387,8 @@ bool sameReference(const PortRef &reference, PortStage stage, PortId id)
 std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId id, TypeSpec newType)
 {
     validateTypeSpec(newType);
+    if (stage == PortStage::Train && newType.type == Type::Image)
+        throw ContractError("训练阶段不支持图像类型参数：" + portLabel(id));
     if (isReservedPort(stage, id))
         throw ContractError("宿主公共端口不能改类型：" + portLabel(id));
 

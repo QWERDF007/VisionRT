@@ -7,7 +7,6 @@ import VisionRT.Ui 1.0
 Rectangle {
     id: root
     required property QtObject controller
-    signal trainingMenuRequested
 
     function fitContain() {
         viewport.fitContain();
@@ -36,10 +35,6 @@ Rectangle {
             root.controller.assistClick(point.x, point.y, append);
         }
         onAssistCanceled: root.controller.assistCancel()
-        onContextMenuRequested: {
-            if (root.controller.canAddTrainingImage)
-                root.trainingMenuRequested();
-        }
     }
     QuiText {
         id: probeAnchor

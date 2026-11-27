@@ -49,7 +49,7 @@ try
 
     // 1. Roundtrip Chinese filename & UTF-8 program.json payload.
     const auto chinesePath = root / std::filesystem::path(u8"中文工程容器_测试.vrtapp");
-    const QByteArray payload = R"json({"format_version":9,"project":{"name":"中文工程"}})json";
+    const QByteArray payload = R"json({"format_version":10,"project":{"name":"中文工程"}})json";
     ProjectArchive::writeProgramJson(chinesePath, payload);
     require(std::filesystem::is_regular_file(chinesePath), "archive file not created");
     require(ProjectArchive::readProgramJson(chinesePath) == payload, "program.json roundtrip mismatch");

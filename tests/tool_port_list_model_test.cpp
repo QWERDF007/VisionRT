@@ -162,7 +162,7 @@ int main(int argc, char **argv)
     relModel.setDraft(&rel, PortStage::Inputs, true);
     assert(relModel.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));                  // id 1
     assert(relModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::Rectangle)}})));                    // id 2
-    assert(relModel.addPort("对位数据", ValueJson::encodeType(kAlignmentType).toVariantMap()));    // id 3
+    assert(relModel.addPort("对位数据", ValueJson::encodeTypeToken(kAlignmentType).toVariantMap()));    // id 3
     assert(relModel.addPort("根目录", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                   // id 4
     assert(relModel.addPort("模式", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                     // id 5
 
@@ -270,6 +270,16 @@ int main(int argc, char **argv)
     assert(classInitModel.addPort("初始化参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(classDef.initParams.size() == 1);
     assert(classDef.initParams[0].id == 0);
+
+    // 12. Train stage rejects Type::Image parameters in ToolPortListModel.
+    ToolPortListModel trainModel;
+    trainModel.setDraft(&classDef, PortStage::Train, true);
+    assert(!trainModel.addPort("非法训练图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
+    assert(classDef.trainParams.empty());
+    assert(trainModel.addPort("训练阈值", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "1"));
+    assert(classDef.trainParams.size() == 1);
+    assert(!trainModel.changeType(0, (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
+    assert(classDef.trainParams[0].type == TypeSpec{Type::Int});
 
     std::cout << "[PASS] tool_port_list_model_test" << std::endl;
     return 0;

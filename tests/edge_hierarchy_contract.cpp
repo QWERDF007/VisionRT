@@ -1,6 +1,10 @@
+#include "core/ProjectArchive.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "runtime/RuntimeEngine.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <cassert>
 #include <chrono>
@@ -174,25 +178,28 @@ int main()
         ProjectStorage storage(registry);
         storage.save(projectToSave, jsonPath);
 
-        // Modify node 2 position in the saved file to (5, 0), making it on the SAME row as node 1
-        std::ifstream in(jsonPath);
-        std::string jsonContent((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        in.close();
-        // Replace node 2's position Y=2 with Y=0
-        auto posIdx = jsonContent.find("2\r\n                    ]");
-        if (posIdx != std::string::npos)
+        // Modify node 2 position in the saved archive to (5, 0), making it on the SAME row as node 1
+        auto doc    = QJsonDocument::fromJson(ProjectArchive::readProgramJson(jsonPath));
+        auto root   = doc.object();
+        auto flows  = root.value("flows").toArray();
+        auto flow0  = flows[0].toObject();
+        auto layout = flow0.value("layout").toArray();
+        bool layoutMoved = false;
+        for (qsizetype i = 0; i < layout.size(); ++i)
         {
-            jsonContent.replace(posIdx, 1, "0");
+            auto entry = layout[i].toObject();
+            if (entry.value("node").toString() == QString::number(n2))
+            {
+                entry["row"] = 0;
+                layout[i]    = entry;
+                layoutMoved  = true;
+            }
         }
-        else
-        {
-            posIdx = jsonContent.find("2\n                    ]");
-            assert(posIdx != std::string::npos);
-            jsonContent.replace(posIdx, 1, "0");
-        }
-        std::ofstream out(jsonPath);
-        out << jsonContent;
-        out.close();
+        assert(layoutMoved);
+        flow0["layout"] = layout;
+        flows[0]        = flow0;
+        root["flows"]   = flows;
+        ProjectArchive::writeProgramJson(jsonPath, QJsonDocument(root).toJson(QJsonDocument::Indented));
 
         const auto loadResult = storage.load(jsonPath);
 

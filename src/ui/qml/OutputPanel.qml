@@ -323,7 +323,9 @@ Rectangle {
                                 text: modelData.label || ""
                             }
                             WorkbenchActionButton {
-                                objectName: "disconnectRelationButton_" + cell.options.portId + "_" + modelData.node + "_" + modelData.port
+                                objectName: (modelData.stage === PortStage.Inputs || modelData.stage === undefined)
+                                    ? ("disconnectRelationButton_" + cell.options.portId + "_" + modelData.node + "_" + modelData.port)
+                                    : ("disconnectRelationButton_" + cell.options.portId + "_" + modelData.node + "_" + modelData.stage + "_" + modelData.port)
                                 Layout.preferredWidth: VisionRTSize.SmallIconButtonSize
                                 Layout.preferredHeight: VisionRTSize.SmallIconButtonSize
                                 Layout.alignment: Qt.AlignVCenter
@@ -338,7 +340,7 @@ Rectangle {
                                 onClicked: {
                                     let ctx = app.portDeclarationContext(cell.options.portId, true);
                                     if (app.portContextCurrent(ctx))
-                                        app.unbindOutputFrom(ctx, modelData.node, modelData.port);
+                                        app.unbindOutputFrom(ctx, modelData.node, modelData.port, modelData.stage !== undefined ? modelData.stage : PortStage.Inputs);
                                 }
                             }
                         }
@@ -453,7 +455,7 @@ Rectangle {
                         required property var modelData
                         text: (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")"
                         enabled: app.workspaceEnabled
-                        onTriggered: app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port)
+                        onTriggered: app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port, modelData.stage !== undefined ? modelData.stage : PortStage.Inputs)
                     }
                     onObjectAdded: function (index, object) {
                         toolSubMenu.insertItem(index, object);

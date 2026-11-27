@@ -77,7 +77,7 @@ struct FakeHost final : PresentationHost
         return nullptr;
     }
 
-    QString inputPortName(const NodeDefinition &, PortId) const override
+    QString inputPortName(const NodeDefinition &, PortStage, PortId) const override
     {
         return {};
     }

@@ -94,22 +94,35 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
 InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry, const std::filesystem::path &base)
     : toolId(node.toolId)
     , availability(registry.availability(node.toolId).state)
+    , resourceRoot(base)
     , initializationRevision(node.initializationRevision)
     , outputs(node.signatures.outputs)
 {
     if (const auto *definition = registry.find(toolId))
     {
-        version = definition->version;
-        kind    = definition->kind;
+        version    = definition->version;
+        kind       = definition->kind;
         parameters = nodeParameters(node, *definition);
-        models = nodeModelReferences(node, *definition, base);
+        models     = nodeModelReferences(node, *definition, base);
+        for (const auto &[port, binding] : node.initParams)
+            initBindings.emplace(port, BindingSignature{binding.mode, binding.source});
+        if (definition->training)
+        {
+            for (const auto &artifact : definition->training->artifacts)
+            {
+                if (const auto found = node.trainParams.find(artifact.target.id); found != node.trainParams.end())
+                    trainBindings.emplace(artifact.target.id,
+                                          BindingSignature{found->second.mode, found->second.source});
+            }
+        }
     }
 }
 
 bool InstanceConfiguration::operator==(const InstanceConfiguration &other) const
 {
     return toolId == other.toolId && version == other.version && kind == other.kind
-        && availability == other.availability && outputs == other.outputs
+        && availability == other.availability && resourceRoot == other.resourceRoot && outputs == other.outputs
+        && initBindings == other.initBindings && trainBindings == other.trainBindings
         && models == other.models && initializationRevision == other.initializationRevision
         && sameParameters(parameters, other.parameters);
 }
@@ -141,6 +154,8 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
 std::shared_ptr<const NodeDiagnostic> NodeRuntime::release() noexcept
 {
     initialized = false;
+    initializedParams.clear();
+    initializedModels.clear();
     if (!instance)
         return {};
     ToolStatus status;
@@ -321,33 +336,33 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
 
     try
     {
-        Values           inputs;
-        std::set<PortId> upstreamInputs;
+        auto resolveStageBindings
+            = [&](PortStage stage, const std::vector<PortDefinition> &ports, const BindingMap &bindings,
+                  std::set<PortId> &upstreamPorts) -> Values
         {
-            windowStart = Clock::now();
-            ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
-            for (const auto &port : definition->inputs)
+            Values resolved;
+            for (const auto &port : ports)
             {
                 // Every node owns its default: a shared array default would let one node's edit
                 // change another node's value.
                 PortValue  value   = portDefault(port);
-                const auto binding = config.inputs.find(port.id);
-                if (binding != config.inputs.end())
+                const auto binding = bindings.find(port.id);
+                if (binding != bindings.end())
                 {
-                    const auto &input = binding->second;
-                    if (input.mode == BindingMode::Literal)
-                        value = input.literal;
-                    else if (!input.source)
+                    const auto &entry = binding->second;
+                    if (entry.mode == BindingMode::Literal)
+                        value = entry.literal;
+                    else if (!entry.source)
                     {
                         value = Missing{};
-                        upstreamInputs.insert(port.id);
+                        upstreamPorts.insert(port.id);
                     }
                     else
                     {
-                        upstreamInputs.insert(port.id);
-                        const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
-                        snapshot->inputUses.push_back(
-                            {port.id, input.source->node, input.source->port, upstream ? upstream->publication : 0});
+                        upstreamPorts.insert(port.id);
+                        const auto upstream = frozen.runtimes.at(entry.source->node)->slot.latest();
+                        snapshot->inputUses.push_back({port.id, entry.source->node, entry.source->port,
+                                                       upstream ? upstream->publication : 0, stage});
                         if (frozen.mode != RunMode::Node
                             && (!upstream || upstream->generation != context->generation
                                 || upstream->session != context->session || upstream->round != context->round))
@@ -358,7 +373,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                             value = Missing{};
                         else
                         {
-                            const auto found = upstream->outputs.find(input.source->port);
+                            const auto found = upstream->outputs.find(entry.source->port);
                             if (found == upstream->outputs.end())
                             {
                                 if (!frozen.registry.find(upstream->toolId))
@@ -373,9 +388,30 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         }
                     }
                 }
-                inputs.emplace(port.id, std::move(value));
+                resolved.emplace(port.id, std::move(value));
             }
+            return resolved;
+        };
+
+        Values           inputs;
+        std::set<PortId> upstreamInputs;
+        Values           initValues;
+        std::set<PortId> upstreamInit;
+        Values           trainValues;
+        std::set<PortId> upstreamTrain;
+        {
+            windowStart = Clock::now();
+            ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
+            inputs = resolveStageBindings(PortStage::Inputs, definition->inputs, config.inputs, upstreamInputs);
             inputs = normalizeInputs(definition->inputs, std::move(inputs), nullptr, &upstreamInputs);
+            if (definition->derivesPorts())
+                initValues = configuration->parameters;
+            else
+                initValues = resolveStageBindings(PortStage::Init, definition->initParams, config.initParams,
+                                                  upstreamInit);
+            if (!definition->trainParams.empty())
+                trainValues = resolveStageBindings(PortStage::Train, definition->trainParams, config.trainParams,
+                                                   upstreamTrain);
             prepareTimer.stop();
             windowEnd = Clock::now();
         }
@@ -403,48 +439,78 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         }
         phase = NodePhase::Initialize;
         reader->bind(context);
-        const auto &parameters = configuration->parameters;
-        if (instance && !initialized)
+        if (instance)
         {
-            const auto normalizedParams = normalizeInputs(definition->initParams, parameters);
-            ToolStatus status;
-            auto origin = DiagnosticOrigin::System;
+            const auto normalizedParams = normalizeInputs(definition->initParams, initValues, nullptr, &upstreamInit);
+            const auto resolvedModels   = resolveModelReferences(trainValues, *definition, configuration->resourceRoot);
+            const bool needsInitialize  = !initialized || !sameParameters(initializedParams, normalizedParams)
+                                       || initializedModels != resolvedModels;
+            if (needsInitialize)
             {
-                ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
-                try
+                if (initialized)
                 {
-                    status = instance->initialize(ToolConfiguration{normalizedParams, configuration->models});
-                    origin = lifecycleOrigin(*instance, configuration->kind);
+                    release();
+                    ToolStatus createStatus;
+                    instance = createInstance(config, frozen.registry, reader, createStatus);
+                    if (!createStatus)
+                    {
+                        preparation.store(std::make_shared<const NodeDiagnostic>(
+                                              NodeDiagnostic{id, config.toolId, NodePhase::Create,
+                                                             std::move(createStatus)}),
+                                          std::memory_order_release);
+                        report(*preparation.load());
+                    }
+                    else
+                        preparation.store({}, std::memory_order_release);
                 }
-                catch (const RegistryError &error)
+                if (instance)
                 {
-                    status = error.status;
+                    ToolStatus status;
+                    auto       origin = DiagnosticOrigin::System;
+                    {
+                        ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
+                        try
+                        {
+                            status = instance->initialize(ToolConfiguration{normalizedParams, resolvedModels});
+                            origin = lifecycleOrigin(*instance, configuration->kind);
+                        }
+                        catch (const RegistryError &error)
+                        {
+                            status = error.status;
+                        }
+                        catch (const ContractError &error)
+                        {
+                            status = {hostCode(ErrorCode::InvalidArgument), error.what()};
+                        }
+                        catch (const std::exception &error)
+                        {
+                            status = {hostCode(ErrorCode::Internal), exceptionSummary(NodePhase::Initialize),
+                                      error.what()};
+                        }
+                        catch (...)
+                        {
+                            status = {hostCode(ErrorCode::Internal), "未知的初始化异常"};
+                        }
+                        initTimer.stop();
+                        windowEnd = Clock::now();
+                    }
+                    if (!status)
+                    {
+                        release();
+                        preparation.store(std::make_shared<const NodeDiagnostic>(
+                                              NodeDiagnostic{id, config.toolId, NodePhase::Initialize,
+                                                             std::move(status), origin}),
+                                          std::memory_order_release);
+                        report(*preparation.load());
+                    }
+                    else
+                    {
+                        initialized       = true;
+                        initializedParams = normalizedParams;
+                        initializedModels = resolvedModels;
+                    }
                 }
-                catch (const ContractError &error)
-                {
-                    status = {hostCode(ErrorCode::InvalidArgument), error.what()};
-                }
-                catch (const std::exception &error)
-                {
-                    status = {hostCode(ErrorCode::Internal), exceptionSummary(NodePhase::Initialize), error.what()};
-                }
-                catch (...)
-                {
-                    status = {hostCode(ErrorCode::Internal), "未知的初始化异常"};
-                }
-                initTimer.stop();
-                windowEnd = Clock::now();
             }
-            if (!status)
-            {
-                release();
-                preparation.store(std::make_shared<const NodeDiagnostic>(
-                                      NodeDiagnostic{id, config.toolId, NodePhase::Initialize, std::move(status), origin}),
-                                  std::memory_order_release);
-                report(*preparation.load());
-            }
-            else
-                initialized = true;
         }
         snapshot->timing.initMs += deferredCreateMs;
         phase = NodePhase::Execute;

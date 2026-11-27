@@ -233,7 +233,7 @@ try
     ProjectEditor invalid;
     invalid.addNode(invalid.project().flows.front().id, *registry.find(business.nameEn), {0, 0});
     auto invalidProject = invalid.project();
-    invalidProject.flows.front().nodes.front().initParams[3] = std::string("wrong type");
+    invalidProject.flows.front().nodes.front().initParams[3].literal = std::string("wrong type");
     require(engine.start(invalidProject, registry, RunMode::Once).code == 0, "initialization rejection run refused");
     const auto invalidResult = settle();
     require(invalidResult.diagnostics.size() == 1

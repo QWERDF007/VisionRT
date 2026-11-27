@@ -61,7 +61,7 @@ bool AppController::Impl::ensureTrainingSession()
     }
     else
         for (const auto &artifact : spec->artifacts)
-            training->synchronizeParameter(artifact.target.id, node->trainParams.at(artifact.target.id));
+            training->synchronizeParameter(artifact.target.id, node->trainParams.at(artifact.target.id).literal);
     return true;
 }
 
@@ -78,14 +78,22 @@ bool AppController::Impl::requestTraining(const ToolDefinition &tool, const Trai
 
     try
     {
-        auto                                           inputs = training->parameters();
+        auto inputs = training->parameters();
+        for (const auto &[id, binding] : node->trainParams)
+        {
+            if (binding.mode == BindingMode::Upstream)
+                inputs[id] = presentation.resolvedValue(*node, {PortStage::Train, id});
+        }
         std::map<std::string, PendingTrainingArtifact> plannedArtifacts;
         for (const auto &artifact : spec.artifacts)
         {
             const auto found = inputs.find(artifact.target.id);
             if (found == inputs.end())
                 throw ContractError("训练参数缺少模型路径端口：" + portLabel(artifact.target.id));
-            const auto configuredText = std::get<std::string>(found->second);
+            const auto *configuredTextPtr = std::get_if<std::string>(&found->second);
+            if (!configuredTextPtr)
+                throw ContractError("训练模型路径参数未提供有效字符串：" + portLabel(artifact.target.id));
+            const auto &configuredText = *configuredTextPtr;
             const auto configured     = pathFromUtf8(configuredText);
             const auto absolutePath   = configured.empty()
                                           ? training::newTrainingArchivePath(applicationDirectory,
@@ -183,7 +191,11 @@ bool AppController::Impl::publishTraining(const TrainingSpec &spec,
     {
         std::vector<LiteralWrite> writes;
         for (const auto &[id, value] : training->parameters())
-            writes.push_back({PortStage::Train, id, value});
+        {
+            const auto found = node->trainParams.find(id);
+            if (found == node->trainParams.end() || found->second.mode == BindingMode::Literal)
+                writes.push_back({PortStage::Train, id, value});
+        }
         for (const auto &artifact : spec.artifacts)
         {
             const auto found = artifacts.find(artifact.id);
@@ -192,7 +204,9 @@ bool AppController::Impl::publishTraining(const TrainingSpec &spec,
             if (!std::filesystem::is_regular_file(found->second.absolutePath))
                 throw ContractError("训练工具未生成模型资源包："
                                     + workbench::pathText(found->second.absolutePath).toStdString());
-            std::ranges::find(writes, found->second.targetPort, &LiteralWrite::port)->value = found->second.storedPath;
+            if (const auto targetWrite = std::ranges::find(writes, found->second.targetPort, &LiteralWrite::port);
+                targetWrite != writes.end())
+                targetWrite->value = found->second.storedPath;
             result.outputs.insert_or_assign(found->second.sourcePort, found->second.storedPath);
         }
         // Pass a non-empty prepare callback when training artifacts were written so ProjectEditor
@@ -628,9 +642,9 @@ bool AppController::addTrainingImage()
     ColorOrder order = port->colorOrder;
     auto source = QStringLiteral("%1:%2:%3:%4:%5").arg(node->id).arg(node->executionRevision)
                       .arg(static_cast<int>(ref.stage)).arg(ref.id).arg(index);
-    if (ref.stage == PortStage::Inputs)
+    if (ref.stage == PortStage::Inputs || ref.stage == PortStage::Init)
     {
-        const auto &binding = node->inputs.at(ref.id);
+        const auto &binding = node->stageBindings(ref.stage).at(ref.id);
         if (effectiveSource(binding))
         {
             const auto snapshot = impl_->presentation.sharedSnapshot(binding.source->node);
@@ -732,7 +746,16 @@ bool AppController::setTrainingParameter(int id, const QVariant &value)
 bool AppController::Impl::applyTrainingValue(PortId id, PortValue value, const QString &record)
 {
     bool changed = false;
-    if (record.isEmpty()) changed = training->setParameter(id, std::move(value));
+    if (record.isEmpty())
+    {
+        if (const auto *node = currentNode())
+        {
+            const auto found = node->trainParams.find(id);
+            if (found != node->trainParams.end() && found->second.mode == BindingMode::Upstream)
+                return false;
+        }
+        changed = training->setParameter(id, std::move(value));
+    }
     else
     {
         const auto &records = training->records();

@@ -233,7 +233,6 @@ signals:
     void assistLeave();
     void assistClicked(const QPointF &imagePoint, bool append);
     void assistCanceled();
-    void contextMenuRequested(const QPointF &position);
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
     void roiDraftChanged(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
     void roiDraftCanceled();

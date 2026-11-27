@@ -30,6 +30,82 @@
 - ...
 -->
 
+### 2026-11-27 — 统一三阶段参数绑定模型、图像参数上层输入限制与训练/输出交互清理
+
+**目标**
+- 统一 `initParams`、`trainParams`、`inputs` 三阶段为 `BindingMap`（支持手动/上游切换、流程连线、输出面板关系与 Taskflow DAG 拓扑排序及运行期动态重初始化与热路径复用）；限制图像参数仅支持上层输入并禁用切换按钮；禁止 `PortStage::Train` 声明 `Type::Image` 参数；移除图像 JSON 摘要并禁用输出面板图像行“复制”；移除视口右键“加入训练”菜单（仅保留缩略图列表入口）；移除训练集参数行“编辑训练集/添加记录”按钮；迁移工程格式至 `format_version: 10`。
+
+**当前状态**
+- 已完成 Core 与存储：[Project.h](file:///F:/Projects/VisionRT/src/core/include/core/Project.h)、[ProjectValues.cpp](file:///F:/Projects/VisionRT/src/core/ProjectValues.cpp)、[ToolDefinition.cpp](file:///F:/Projects/VisionRT/src/core/ToolDefinition.cpp)、[NodeContracts.h](file:///F:/Projects/VisionRT/src/core/include/core/NodeContracts.h)、[NodeContracts.cpp](file:///F:/Projects/VisionRT/src/core/NodeContracts.cpp)、[ProjectEditor.h](file:///F:/Projects/VisionRT/src/core/include/core/ProjectEditor.h)、[ProjectEditor.cpp](file:///F:/Projects/VisionRT/src/core/ProjectEditor.cpp)、[ProjectStorage.cpp](file:///F:/Projects/VisionRT/src/core/ProjectStorage.cpp)（升级 `format_version=10` 并在 `connections[].to` 记录 `stage`）、[ValueJson.cpp](file:///F:/Projects/VisionRT/src/core/ValueJson.cpp)（清理 `Purpose::Display` 图像 JSON 摘要）；同步迁移 5 个综合示例及 4 个测试夹具 `.vrtapp`。
+- 已完成 Runtime：[Snapshot.h](file:///F:/Projects/VisionRT/src/runtime/include/runtime/Snapshot.h)、[Receiver.cpp](file:///F:/Projects/VisionRT/src/runtime/Receiver.cpp)、[RuntimeInternal.h](file:///F:/Projects/VisionRT/src/runtime/RuntimeInternal.h)、[NodeRuntime.cpp](file:///F:/Projects/VisionRT/src/runtime/NodeRuntime.cpp)、[RuntimeEngine.cpp](file:///F:/Projects/VisionRT/src/runtime/RuntimeEngine.cpp) 统一三阶段上游解析、DAG 依赖边、单节点上游有效性检查及按 `(normalizedParams, resolvedModels)` 缓存实现动态重初始化与实例复用。
+- 已完成 UI 与 QML：[OutputModel.h](file:///F:/Projects/VisionRT/src/ui/include/ui/OutputModel.h)、[OutputModel.cpp](file:///F:/Projects/VisionRT/src/ui/OutputModel.cpp)（图像输出 `fullText` 为空且 `estimatedTextBytes` 为 0）、[ResultPresentation.h](file:///F:/Projects/VisionRT/src/ui/ResultPresentation.h)、[ResultPresentation.cpp](file:///F:/Projects/VisionRT/src/ui/ResultPresentation.cpp)、[AppController.h](file:///F:/Projects/VisionRT/src/ui/include/ui/AppController.h) 及相关控制器实现（移除 `loadParameterImage`，跨阶段打通上下文、候选、绑定/解绑、ROI 与训练覆盖）、[ToolPortListModel.cpp](file:///F:/Projects/VisionRT/src/ui/ToolPortListModel.cpp)、[ImageViewport.h](file:///F:/Projects/VisionRT/src/ui/include/ui/ImageViewport.h)、[ImageViewportRoi.cpp](file:///F:/Projects/VisionRT/src/ui/ImageViewportRoi.cpp)、[ParameterEditor.qml](file:///F:/Projects/VisionRT/src/ui/qml/ParameterEditor.qml)、[OutputPanel.qml](file:///F:/Projects/VisionRT/src/ui/qml/OutputPanel.qml)、[ResultsImageView.qml](file:///F:/Projects/VisionRT/src/ui/qml/ResultsImageView.qml)、[ResultsPanel.qml](file:///F:/Projects/VisionRT/src/ui/qml/ResultsPanel.qml)。
+- 已完成契约测试适配与新增覆盖：更新 28 个相关测试文件并补充三阶段绑定/存储往返、上游初始化动态重初始化与复用、图像禁用复制与禁切手动、训练禁图像、视口禁右键菜单及输出面板跨阶段绑定解绑断言。
+
+**验证证据**
+- `tools\build.cmd cmake --build build --config Release --target VisionRT visionrt_examples tests-backend tests-bridge tests-ui tests-package` → 全部编译链接通过（退出码 0）。
+- 定向 CTest 覆盖（28 项，含 `definition_json_contract`、`value_json_contract`、`project_editor_contract`、`project_storage_contract`、`project_value_contract`、`project_archive_contract`、`edge_hierarchy_contract`、`runtime_contract`、`runtime_diagnostics_contract`、`output_value_contract`、`tool_port_list_model_test`、`presentation_visibility_contract`、`workbench_core_contract`、`workbench_roi_contract`、`workbench_output_contract`、`workbench_parameters_contract`、`workbench_popups_contract`、`workbench_output-reuse_contract`、`workbench_parameter_stages_contract`、`workbench_training_contract`、`workbench_training_publish_contract`、`workbench_startup_contract`、`ui_receiver_identity_contract`、`ui_value_contract`、`example_metadata_contract`、`example_pipelines_contract`、`calibration_example_contract`、`merlic_examples_contract`、`package_app_contract`）→ 全部通过（0 失败）。
+- 实机运行 `build\bin\VisionRT.exe --project <example.vrtapp> --run-once` 验证全部 5 个迁移后的综合示例 → 5/5 退出码 0；目检 `build/evidence/calibration-training-workbench.png` 与 `build/evidence/workbench_parameters_normal.png` 确认训练页与参数页 UI 正常；修改文件 U+00B7 检查为 0。
+
+**下一步**
+- 完成收尾 `aoci_maintain` 索引对齐；等待用户验收或提交指示。
+
+### 2026-11-26 — 对齐 MERLIC 规范优化视口箭头、坐标系与 ROI 几何样式
+
+**目标**
+- 参考 `MERLIC_Creator_界面样式与几何图形规范分析.md` 放大并加粗视口内方向箭头、标定坐标系与原点十字，去掉坐标系 `X`/`Y` 字母，并同步对齐 ROI 描边与句柄至 MERLIC 规格。
+
+**当前状态**
+- 已完成：[Size.h](file:///F:/Projects/VisionRT/src/ui/include/ui/Size.h)、[Size.cpp](file:///F:/Projects/VisionRT/src/ui/Size.cpp) 更新 ROI 描边为 `2.5 px`、角柄 `10×10 px`（描边 `2 px`）、中心柄 `18×18 px`、旋转弧柄 `20×20 px`，新增 `ROIArrowStrokeWidth(2.0)`、`CoordinateAxisStrokeWidth(2.5)`、`CoordinateArrowHeadSize(14)`、`CoordinateOriginSize(22)` 并将 `ROIArrowHeadSize` 调至 `12`。
+- 已完成：[Color.cpp](file:///F:/Projects/VisionRT/src/ui/Color.cpp) 调整 `ROIGuide(#6FB7F9)`、`CoordinateAxisX(#FF0000)`、`CoordinateAxisY(#45B045)`；[RoiOverlay.cpp](file:///F:/Projects/VisionRT/src/ui/RoiOverlay.cpp) 使用单一 `QPainterPath`（`RoundCap`/`RoundJoin`）重绘饱满箭簇并按短线段比例夹紧防穿头、实现矩形窄边箭头自适应、去掉坐标系 `X`/`Y` 标签并将标签圆角调至 `4 px`。
+- 已完成：[geometry_overlay_contract.cpp](file:///F:/Projects/VisionRT/tests/geometry_overlay_contract.cpp) 补充方向箭簇与坐标系箭簇两翼像素断言；[viewport_contract.cpp](file:///F:/Projects/VisionRT/tests/viewport_contract.cpp) 与 [roi_interaction_contract.cpp](file:///F:/Projects/VisionRT/tests/roi_interaction_contract.cpp) 改为从 `VisionRTSize` 派生句柄测试坐标。
+
+**验证证据**
+- `ctest --test-dir build -C Release -R "^(geometry_overlay_contract|viewport_contract|roi_interaction_contract|workbench_roi_persistence_contract)$" --output-on-failure --timeout 60` → 4/4 通过（12.33s）。
+- 实机运行 `VisionRT.exe` 抓取 `识别线缆颜色.vrtapp`（节点 2 直边对齐）与 `变距尺子标定测量.vrtapp`（节点 2 平面标定）截图（均退出码 0），目检 `build/evidence/merlic-style-cable-dir.png`、`merlic-style-ruler-coord.png`、`roi-style-measurements.png`、`geometry-overlays.png` 均与 MERLIC 样式一致。
+
+**下一步**
+- 完成收尾 `aoci_maintain` 索引对齐；等待用户验收或提交指示。
+
+### 2026-11-26 — 界面交互与数据渲染分阶段优化（MERLIC 交互模型对齐）
+
+**目标**
+- 保持既有 UI 视觉风格基本不变的前提下，分阶段完成流程节点运行态颜色防抖与单层虚线边框、增量 ViewModel 与异步缩略图提供者、视口渲染与交互防抖、以及 Request-Echo 双向回滚校验与浮点聚焦精度切换。
+
+**当前状态**
+- 阶段 1 已完成：`NodeListModel` 增加 `DisplayStateRole` 与 150ms 运行绿态最小驻留防抖（失败、取消及缺失插件零延迟切出）；新增 `DashedBorderItem`（`QSGGeometryNode` + Software 渲染器 `QSGSimpleRectNode` 回退），`NodeDelegate.qml` 通过单层互斥边框与按需 `Loader` 渲染节点虚线边框。
+- 阶段 2 已完成：新增 `ParameterListModel`、`TrainingRecordModel`、`ThumbnailStore`、`ThumbnailImageProvider`（`visionrt_training` / `visionrt_results`），`OutputModel::setResult` 端口拓扑未变时走增量 `dataChanged`，`ResultPresentation` 启用按需缩略图转换与批次签名去重，`ParameterPage.qml`、`ResultsThumbnails.qml`、`ResultsTrainingRecords.qml`、`OutputPanel.qml` 迁移至模型驱动与 `Image` 异步缩略图；同步修复 `AppController_p.h` 排空完成后漏调 `refreshAssist()` 导致智能点选卡在禁用态的缺陷。
+- 阶段 3 已完成：`ImageViewport` 启用缩放自适应纹理过滤（`< 1.0` Linear / `>= 1.0` Nearest）、Alt 像素探测脏检与悬停句柄脏检、矩形旋转 `Ctrl` 15 度吸附、方向键自动连发 120ms 防抖合批与松键刷新，以及 ROI 拖动 33ms 参数行合批刷新。
+- 阶段 4 已完成：新增 `FloatParameterEditor.qml`，升级 `IntegerParameterEditor.qml`、`ParameterEditor.qml`、`TrainingValueEditor.qml`、`ResultsTrainingRecords.qml`，全面实施键入层 `RegularExpressionValidator` + 提交层强校验 + `skipRequest` 防循环 + 拒绝即回滚后端真值，以及浮点聚焦展开高精度 `editText` + 10ms 全选与失焦无编辑零提交恢复 `displayText`；同步更新 `tests/workbench_parameters.cpp` 与 `tests/workbench_parameter_states.cpp` 契约并新增精度切换与校验用例。
+- 阶段 5 已完成：已更新 `docs/README.md` 索引并构建运行真实 `VisionRT.exe` 完成运行态与训练态截图目检；即将执行收尾 AOCI 索引维护。
+
+**验证证据**
+- 阶段 1：`ctest --test-dir build -C Release -R "^(node_list_model_test|node_display_debounce_contract|workbench_status_contract|workbench_flows_contract)$" --output-on-failure --timeout 30` → 4/4 通过（4.38s）。
+- 阶段 2：`ctest --test-dir build -C Release -R "^(output_value_contract|ui_notifications_contract|parameter_model_contract|training_image_provider_contract|presentation_visibility_contract|ui_result_isolation_contract|workbench_training_contract)$" --output-on-failure --timeout 60` → 7/7 通过（含 `workbench_training_contract` 3.86s 与 `ui_result_isolation_contract` 1.71s 复测通过）。
+- 阶段 3：`ctest --test-dir build -C Release -R "^(roi_interaction_contract|viewport_contract|viewport_pixel_contract|viewport_lifetime_contract|workbench_roi_persistence_contract|workbench_assist_contract)$" --output-on-failure --timeout 60` → 6/6 通过（16.77s）。
+- 阶段 4：`ctest --test-dir build -C Release -R "^(workbench_parameters_contract|ui_value_contract|workbench_popups_contract|workbench_parameter_stages_contract)$" --output-on-failure --timeout 90` → 4/4 通过。
+- 实机验证：编译 `VisionRT.exe` 后运行 `识别线缆颜色.vrtapp`（`--run-once` 与 `--select-node 2 --demo-training`），均退出码 0；已目检 `build/evidence/opt-cable-run.png`、`build/evidence/opt-cable-training.png`、`build/evidence/workbench_parameters_numeric_focus.png`，单层虚线边框、异步缩略图、线性缩放画质、训练 ROI 与浮点聚焦全选均正常；全量新增/修改文件检查 U+00B7 为 0。
+
+**下一步**
+- 完成 `aoci_maintain` 认知索引对齐；等待用户验收或提交指示。
+
+### 2026-11-25 — AOCI 索引对齐
+
+**目标**
+- 根据当前源码与测试证据维护现有完整 AOCI 索引，消除过期条目和待复核观察对象。
+
+**当前状态**
+- 已复核工作台控制器、输出模型、结果展示、训练会话、输出关系和公共参数页；13 个受影响条目已通过 AOCI 原子更新，索引保留 277 条。
+- 已确认 5 个变化的测试观察对象；`docs/README.md` 已补充输出关系与连接上下文的实现和验证入口。本轮未修改业务实现。
+- AOCI 正式索引、绑定与治理状态以托管资产及最新终态证明为准。
+
+**验证证据**
+- 维护前 `aoci verify --json`：12 个过期条目、5 个待复核观察对象，索引结构有效；文档更新后完整作者化批次包含 13 个对象。
+- `aoci_update_entry`：13/13 应用成功、`remaining=0`；`terminal_proof` 返回 `aligned=true`、`check_passed=true`、`guide_complete=true`，观察证据事务确认 5/5。
+- `docs/README.md` 本地链接检查通过；本轮索引与文档字符检查未发现 U+00B7。未重复运行产品功能测试，既有运行证据见下方相关日志。
+
+**下一步**
+- 后续开发从任务相关源码与测试继续；若受管理文件再次变化，按 AOCI 当前维护批次同步认知。
+
 ### 2026-11-25 — 训练视图 ROI 修复、输出关系面板重做与部署
 
 **目标**
@@ -49,6 +125,86 @@
 
 **下一步**
 - 所有开发与部署验证已完成，等待用户验收或指示后续提交。
+
+### 2026-11-25 — 迁移 MERLIC 示例工程（畸变标尺校正测量、弯曲引脚检测）并补全线缆图像
+
+**目标**
+- 将 `F:\merlic工程\示例工程` 中的全部 4 个 MERLIC 示例在 VisionRT 中对齐并补齐：保留现有 `变距尺子标定测量`，补齐 `识别线缆颜色` 全部 11 张线缆图并放宽运行搜索带覆盖全姿态，新增 `畸变标尺校正测量`（`calibrate_for_ruler_distorted`）与 `弯曲引脚检测`（`check_bent_leads`）两个 `.vrtapp` 综合示例及配套原生工具、训练资源包、打包校验与契约测试。
+
+**当前状态**
+- `VisionTools` 配套工具与打包同步：在 `vst_metrology` 新增 `RectifyImage`（图像校正）并优化 `CalibrationPlate`/`CalibrationFit` 支持强畸变标定板；在 `vst_recognition` 新增纯 CPU + OpenCV 共享模板匹配内核 `TemplateMatcher`（梯度方向点积形状匹配 + 旋转遮罩 NCC + 亚像素精化）与 `DetermineAlignmentWithMatching`（通过匹配确定对齐）、`CheckPresenceWithMatching`（通过匹配检查存在状态，双训练数据集），打包 34 个工具至 `dist/VisionTools-0.1.0.zip` 并部署到 `build/bin/tools-package`（`visionrt_validate_tool --package --load` 通过）。
+- 图像与综合示例：
+  - `识别线缆颜色`：补拷 `cable_01.png`..`cable_10.png` 至 `examples/images/识别线缆颜色/`（共 11 张），将 `AlignStraightBorders` 运行搜索带高度放宽至 220 px（保留原训练中心与角度），11 帧全量对齐与颜色识别通过。
+  - `畸变标尺校正测量`：拷贝 `calibration_plate_distorted.png` 与 `ruler_distorted.png` 至 `examples/images/畸变标尺校正测量/`，复用 `assets/calplate_80mm.cpd`，通过真实 `CalibrateCamera::train()` 生成 `assets/calibration-model.zip`（RMS `0.111 px`），创建 5 节点 6 连线 `畸变标尺校正测量.vrtapp` 与 `README.md`。
+  - `弯曲引脚检测`：拷贝 `bent_leads_01.png`..`bent_leads_09.png` 至 `examples/images/弯曲引脚检测/`，通过真实训练生成 `assets/alignment-model.zip` 与双数据集 `assets/presence-model.zip`，创建 4 节点 4 连线 `弯曲引脚检测.vrtapp` 与 `README.md`。
+- 打包、契约测试与文档索引：扩展 `tools/package_app.py` 的 `REQUIRED_EXAMPLE_PROJECTS` 与 `tests/test_package_app.py` 至 5 个综合示例；新增 `tests/merlic_examples_contract.cpp`（注册于 `tests/CMakeLists.txt`），更新 `tests/example_pipelines.cpp`（遍历全部 11 张线缆图并保留参考图 `cable_11.png` 单位姿态断言），同步 `examples/README.md` 与 `docs/README.md`。尚未提交或推送。
+
+**验证证据**
+- VisionTools：`ctest --test-dir F:/Projects/VisionTools/build -C Release -R "^(test_package_profile|test_package_payload|test_calibration_contract|test_rectify_image_contract|test_matching_tools_contract|test_recognition_contract)$"` -> 6/6 通过；`visionrt_validate_tool.exe --package F:/Projects/VisionRT/build/bin/tools-package --load` -> Valid tools package。
+- VisionRT 示例与打包契约：`ctest --test-dir F:/Projects/VisionRT/build -C Release -R "^(example_metadata_contract|calibration_example_contract|merlic_examples_contract|example_pipelines_contract)$"` -> 4/4 通过；`python -m unittest test_package_app.ExampleProjectsContract` -> 3/3 OK；`package_app.verify_examples(Path('F:/Projects/VisionRT/build/bin'))` -> `[]`。
+- 真实程序端到端：`VisionRT.exe --project <示例.vrtapp> --run-once --screenshot ...` 依次运行全部 5 个综合示例均以退出码 0 完成并成功生成界面截图，目视确认校正图像、坐标系叠加及 25 位点引脚检测结果正常。
+
+**下一步**
+- 完成本仓 AOCI 增量认知维护收尾后交由用户验收；待用户指令决定是否提交推送。
+
+### 2026-11-25 — 工程迁移至 .vrtapp ZIP 容器、训练资源包与缺失插件流程阻断
+
+**目标**
+- 参考 MERLIC `.mvapp` 与 `merlic_program.xml`，将工程持久化升级为 `.vrtapp` ZIP 容器（`format_version: 9`），清理冗余及历史遗留字段；训练模型与训练原图打包为独立 `.zip` 训练资源包；所有相对路径统一相对软件安装目录解析；为缺失插件节点提供醒目样式并阻断整条流程执行。
+
+**当前状态**
+- `3rdparty/VisionRTContracts`（同步至 `VisionTools/3rdparty/VisionRTContracts`）：接入 `3rdparty/miniz`（v3.1.2）静态子模块并封装 `ZipArchive` 与 `TrainingArchive`（含 `manifest.json`、二进制模型及无损 PNG/TIFF 原图）；`MODULE_ABI_MAJOR` 升级至 16，移除 `ModelArtifact`、`ToolResult::artifacts` 与 `DeclarationValue` 的 Base64 像素编码；允许持久化空像素的 `TrainingSet` 并新增 `validateTrainingSetPixels`；在 `DeclarationNames.def` 中补充 `BindingMode` 线名。
+- `VisionTools`：改造 `CalibrateCameraTool`、`AlignStraightBordersTool`、`TrainStraightBorders`、`RecognizeColorTool`、`TrainColorModel` 直接通过 `TrainingArchive` 读写 `.zip` 训练资源包；移除 Python SDK `artifacts` 字段；重新编译 4 个 ABI-16 工具 DLL 并同步到 `VisionRT/build/bin/tools-package/bin`。
+- `VisionRT`（`core`/`runtime`/`python_bridge`/`ui`/`qml`）：新增 `ProjectArchive`（单条目 `program.json` 原子 ZIP 写入与父目录存在性校验）；`ProjectStorage` 升级至 `format_version: 9`，强制 `.vrtapp` 扩展名，节点与布局和连线正交分层，移除 `retired_init_params`、`type_snapshot`、`value_type`、`execution_guard`，并在加载期保留干净工程的 `dirty` 状态；`NodeContracts` 新增 `hydrateNodeTrainingSets` 从 `.zip` 回填训练图；`RuntimeEngine` 统一以安装目录作为资源根并在流程存在缺失插件节点时阻断整条流程及单节点执行；`TrainingAssets` 删除 `saveModels`/`copyModels`；`NodeDelegate.qml` 与 `Color` 新增缺失插件虚线琥珀色告警样式并禁止双击执行。
+- 示例、夹具、打包与文档：三个综合示例迁移至 `.vrtapp` 及 `assets/*.zip`（`多分支视觉检测` 17.4KB 降至 1.1KB、`变距尺子标定测量` 5.0MB 降至 1.5KB、`识别线缆颜色` 40.1MB 降至 1.4KB），四个测试夹具迁移至 `.vrtapp`，同步 `tools/package_app.py` 及 `docs/README.md`、`examples` 说明文档。尚未提交或推送。
+
+**验证证据**
+- SDK 组：`ctest --test-dir build -L sdk`（11/11 通过，含 `test_archive_contract`）及 `tools/build.cmd ctest --test-dir build -R test_isolated_installation`（1/1 通过），共 12/12 通过。
+- VisionTools：`ctest --test-dir F:/Projects/VisionTools/build -R "test_calibration_contract|test_recognition_contract|test_search_direction_contract"`（3/3 通过）及 `test_python_tools`（1/1 通过）。
+- VisionRT 契约测试：`project_archive_contract`、`project_storage_contract`、`project_value_contract`、`value_json_contract`、`example_metadata_contract`、`example_pipelines_contract`、`runtime_contract`（含缺失插件整条流程阻断用例）、`python_loading_contract`、`calibration_example_contract`、`color_training_contract`、`training_session_contract`、`example_project_contract`、`workbench_training_contract`、`workbench_training_publish_contract`、`ui_value_contract`、`ui_receiver_identity_contract`、`ui_result_isolation_contract`、`workbench_assist_contract`、`workbench_lifecycle_contract` 及全部 8 个 `workbench_*_contract` 套件全部通过。
+- 打包与互操作：`test_package_app.ExampleProjectsContract`（3/3 OK）、`package_app.verify_examples(Path('build/bin'))` 返回 `[]`，`build/bin/examples` 无残留 `.json`/`.bin`，Python `zipfile` 校验全部 `.vrtapp` 与训练 `.zip` 通过。
+- 真实程序端到端：`build/bin/VisionRT.exe --project <示例.vrtapp> --run-once` 运行全部三个综合示例均以 0 退出。
+
+**下一步**
+- 无待续接业务开发；完成 AOCI 认知收尾后可供用户验收与决定是否跨三仓提交。
+
+### 2026-11-25 — 简化模型文件并移除示例编号
+
+**目标**
+- 工程资源直接存放 assets，删除 training、节点编号、修订编号和清单；三个综合示例子目录去除数字前缀。
+
+**当前状态**
+- 已删除训练清单、trainingAsset 配置和修订目录机制，工程训练参数直接引用模型文件；写入与另存复用 QSaveFile，重新训练更新当前文件。两个 SDK 检出同步移除清单版本常量，未改变模块 ABI。
+- 三个工程目录为 examples/综合示例/多分支视觉检测、识别线缆颜色、变距尺子标定测量，资源和随包引用已同步；原图继续集中 examples/images。默认 build/bin 程序及示例已更新，未提交。
+- 同一路径的模型更新由内存 initializationRevision 驱动实例重新初始化；普通输入修改不触发它，不持久化该编号或创建文件历史。另存更新模型路径时保留未应用草稿。
+
+**验证证据**
+- flat-assets-red.log 复现模型仍嵌套在旧目录，example-names-red.log 复现子目录前缀；example-names-green.log 三项结构测试通过。
+- same-model-path-red.log 复现真实颜色类别改名、重新训练到同一路径后仍复用旧模型。修复后 flat-assets-final-build.log 与 flat-assets-probe-build.log 构建成功；flat-assets-final-tests.log 的 14 项全部通过，覆盖实例生命周期、原路径重训、训练草稿、模型另存与重开、三个示例和真实工作台。flat-assets-package-tests.log 的 16 项通过。
+- 首次 CDB 探针在 90 秒内未结束；使用 _NO_DEBUG_HEAP=1 后 flat-assets-probe-noheap/summary.json 验证 4 次模型保存调用、32 次视口销毁、像素读取负对照及空闲和运行期零通知。探针已固定使用该环境配置。
+- package_app.verify_examples(Path('build/bin')) 返回空列表；随包目录无数字前缀，assets 仅直接包含资源文件，工程无 training_asset 字段。文档链接、两份 SDK 变更文件逐字节比较及 git diff --check 通过。
+- 默认程序从无编号路径打开并运行标定测量工程，以 0 退出；已检查 build/evidence/flat-assets-calibration.png，图像、参考线、坐标系及运行结果正常。
+
+**下一步**
+- 无待续接业务开发；完成认知收尾后可直接使用 build/bin/VisionRT.exe 验收。尚未提交或推送。
+
+### 2026-11-25 — 精简综合示例并统一工程资源目录
+
+**目标**
+- 仅保留原综合示例的三个工程，分类目录改为“综合示例”；工程资源根目录统一为 assets。
+
+**当前状态**
+- examples 现仅含多分支视觉检测、识别线缆颜色和变距尺子标定测量三个工程，原图统一 examples/images；删除另外九个产品示例及其无用图片。回归测试依赖的四个流程移至 tests/fixtures/projects，共用两张测试图片，不随产品分发。
+- 训练保存和另存统一通过 projectBase 写入 assets/training/<节点ID>/<版本>，不再依据工程名创建目录；模型引用和示例资产同步迁移，标定板描述移入 assets。默认 build/bin 程序和示例已更新，文档及打包引用已同步。未提交。
+
+**验证证据**
+- examples-cleanup-red.log 复现旧目录及多余工程；examples-cleanup-green.log 的三个结构测试通过。assets-root-red.log 复现另存仍生成工程名资产目录。
+- examples-assets-build.log：默认程序及相关验证目标构建成功。examples-assets-tests.log：11 项定向测试全部通过，涵盖真实示例、标定训练测量、训练发布、保存重开及夹具消费者；examples-assets-package-tests.log：16 项结构与安装检查通过。
+- package_app.verify_examples(Path('build/bin')) 返回空列表；实际发行树仅有三个工程且训练资产存在，示例文档链接检查及 git diff --check 通过。
+- 默认 build/bin/VisionRT.exe 从新路径打开并运行标定测量工程，以 0 退出；已检查 build/evidence/examples-assets-calibration.png，图像、参考线、坐标轴和运行结果正常。
+
+**下一步**
+- 无待续接业务开发；可直接使用 build/bin/VisionRT.exe 验收。尚未提交或推送。
 
 ### 2026-11-25 — 提交参数、具体形状与标定示例
 

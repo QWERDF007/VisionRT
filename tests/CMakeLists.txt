@@ -326,6 +326,8 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
     visionrt_contract(workbench_training_contract visionrt_ui)
     visionrt_contract(workbench_parameter_stages_contract visionrt_ui)
     target_link_libraries(workbench_parameter_stages_contract PRIVATE Qt6::Test)
+    target_compile_definitions(workbench_parameter_stages_contract PRIVATE
+        VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
     target_link_libraries(workbench_training_contract PRIVATE visionrt_plugins Qt6::Test)
     target_compile_definitions(workbench_training_contract PRIVATE
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"

@@ -79,7 +79,6 @@ Rectangle {
             controller: app
             Layout.fillWidth: true
             Layout.fillHeight: true
-            onTrainingMenuRequested: trainingMenu.popup()
         }
     }
 }

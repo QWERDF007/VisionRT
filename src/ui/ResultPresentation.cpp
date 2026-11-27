@@ -393,6 +393,7 @@ void ResultPresentation::updateResults()
             struct Entry
             {
                 const NodeDefinition *target = nullptr;
+                PortStage             stage  = PortStage::Inputs;
                 PortId                port   = 0;
             };
             std::map<PortId, std::vector<Entry>> grouped;
@@ -402,7 +403,7 @@ void ResultPresentation::updateResults()
                     continue;
                 const auto found = std::ranges::find(current->nodes, relation.target.node, &NodeDefinition::id);
                 if (found != current->nodes.end())
-                    grouped[relation.source.port].push_back({&*found, relation.target.port});
+                    grouped[relation.source.port].push_back({&*found, relation.target.stage, relation.target.port});
             }
             for (auto &[sourcePort, entries] : grouped)
             {
@@ -415,6 +416,8 @@ void ResultPresentation::updateResults()
                                   return a.target->position.x < b.target->position.x;
                               if (a.target->id != b.target->id)
                                   return a.target->id < b.target->id;
+                              if (a.stage != b.stage)
+                                  return static_cast<int>(a.stage) < static_cast<int>(b.stage);
                               return a.port < b.port;
                           });
                 auto &list = relations[sourcePort];
@@ -422,7 +425,8 @@ void ResultPresentation::updateResults()
                 for (const auto &entry : entries)
                     list.push_back({QString::number(entry.target->id), entry.port,
                                     text(entry.target->title()) + QLatin1Char('-')
-                                        + host_.inputPortName(*entry.target, entry.port)});
+                                        + host_.inputPortName(*entry.target, entry.stage, entry.port),
+                                    entry.stage});
             }
         }
         // An output name may only look actionable when a legal and still free downstream input
@@ -459,10 +463,13 @@ void ResultPresentation::applyOverlays()
         viewport_->endRoiEdit();
 }
 
-const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, PortId input) const
+const PortValue *ResultPresentation::resolvedBinding(const NodeDefinition &node, PortRef ref) const
 {
-    const auto found = node.inputs.find(input);
-    if (found == node.inputs.end())
+    if (ref.stage == PortStage::Outputs)
+        return nullptr;
+    const auto &bindings = node.stageBindings(ref.stage);
+    const auto  found    = bindings.find(ref.id);
+    if (found == bindings.end())
         return nullptr;
     if (found->second.mode == BindingMode::Literal)
         return &found->second.literal;
@@ -475,23 +482,23 @@ const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, P
     return output == (*snapshot)->outputs.end() ? nullptr : &output->second;
 }
 
+const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, PortId input) const
+{
+    return resolvedBinding(node, {PortStage::Inputs, input});
+}
+
 PortValue ResultPresentation::resolvedValue(const NodeDefinition &node, PortRef ref) const
 {
-    if (ref.stage == PortStage::Inputs)
-    {
-        const auto *value = resolvedInput(node, ref.id);
-        return value ? *value : PortValue{Missing{}};
-    }
     if (ref.stage == PortStage::Outputs)
     {
         const auto result = displaySnapshot(node);
         if (result)
-            if (const auto found = result->outputs.find(ref.id); found != result->outputs.end()) return found->second;
+            if (const auto found = result->outputs.find(ref.id); found != result->outputs.end())
+                return found->second;
         return Missing{};
     }
-    const auto &values = ref.stage == PortStage::Init ? node.initParams : node.trainParams;
-    const auto found = values.find(ref.id);
-    return found == values.end() ? PortValue{Missing{}} : found->second;
+    const auto *value = resolvedBinding(node, ref);
+    return value ? *value : PortValue{Missing{}};
 }
 
 const PortDefinition *ResultPresentation::roiDeclaration() const

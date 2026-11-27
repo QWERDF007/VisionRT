@@ -100,7 +100,7 @@ try
     std::filesystem::create_directories(installedProject.parent_path());
     ProjectArchive::writeProgramJson(
         installedProject,
-        R"({"format_version":9,"project":{"name":"演示","notes":"","app_version":"0.2.0","contracts_version":"0.1.0","next_node_seq":"1","next_flow_seq":"2"},)"
+        R"({"format_version":10,"project":{"name":"演示","notes":"","app_version":"0.2.0","contracts_version":"0.1.0","next_node_seq":"1","next_flow_seq":"2"},)"
         R"("flows":[{"id":"flow_1","name":"演示","run_selected":true,"nodes":[],"layout":[],"connections":[]}]})");
     const auto before = read(installedProject);
 

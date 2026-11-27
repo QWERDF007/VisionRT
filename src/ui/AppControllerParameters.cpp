@@ -3,8 +3,6 @@
 #include "core/ValueJson.h"
 
 #include <core/ToolValueValidation.h>
-#include <QFile>
-#include <opencv2/imgcodecs.hpp>
 
 #include <cmath>
 #include <limits>
@@ -41,8 +39,8 @@ bool AppController::Impl::applyParameter(PortId id, bool initialization, PortVal
     }
     else if (signature->second.type == Type::Float && !isMissing(value) && !std::isfinite(std::get<double>(value)))
         throw ContractError("数值参数必须为有限值");
-    const bool changed = initialization ? editor.setInitParam(flow.toStdString(), node->id, id, std::move(value))
-                                        : editor.setLiteral(flow.toStdString(), node->id, id, std::move(value));
+    const bool changed = editor.setLiteral(flow.toStdString(), node->id, id, std::move(value),
+                                           initialization ? PortStage::Init : PortStage::Inputs);
     return changed;
 }
 
@@ -84,30 +82,6 @@ bool AppController::setParameterPath(int port, bool initialization, const QUrl &
         });
 }
 
-bool AppController::loadParameterImage(int parameter, int stage, const QUrl &url, const QString &record)
-{
-    return impl_->command([&]
-    {
-        const auto owner = static_cast<PortStage>(stage);
-        if (owner != PortStage::Init && owner != PortStage::Train && owner != PortStage::Inputs) return false;
-        if (!url.isLocalFile()) throw ContractError("请选择本地图像文件");
-        if (owner == PortStage::Train && !impl_->ensureTrainingSession()) return false;
-        QFile file(url.toLocalFile());
-        if (!file.open(QIODevice::ReadOnly)) throw ContractError("无法读取图像文件");
-        const auto bytes = file.readAll();
-        const cv::Mat buffer(1, static_cast<int>(bytes.size()), CV_8U, const_cast<char *>(bytes.constData()));
-        auto pixels = cv::imdecode(buffer, cv::IMREAD_UNCHANGED);
-        if (pixels.empty()) throw ContractError("图像文件无法解码");
-        impl_->finishRoi();
-        PortValue value = DataRef<Image>(Image{std::move(pixels)});
-        const auto id = static_cast<PortId>(parameter);
-        if (owner == PortStage::Train) return impl_->applyTrainingValue(id, std::move(value), record);
-        if (owner == PortStage::Inputs)
-            return impl_->editor.setBinding(impl_->flow.toStdString(), impl_->currentNode()->id, id, {BindingMode::Literal, std::move(value), {}});
-        return impl_->applyParameter(id, true, std::move(value));
-    });
-}
-
 bool AppController::stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage, const QString &record)
 {
     if (direction != 1 && direction != -1)
@@ -118,11 +92,14 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
             const auto *node = impl_->currentNode();
             if (!node)
                 throw ContractError("未选择节点");
-            const bool training = stage == static_cast<int>(PortStage::Train);
-            if (training && !impl_->ensureTrainingSession()) return false;
-            const auto &signatures = training ? node->signatures.trainParams : initialization ? node->signatures.initParams : node->signatures.inputs;
-            const auto  id         = static_cast<PortId>(port);
-            const auto  signature  = signatures.find(id);
+            const auto targetStage = stage >= 0 ? static_cast<PortStage>(stage)
+                                                : (initialization ? PortStage::Init : PortStage::Inputs);
+            const bool training    = targetStage == PortStage::Train;
+            if (training && !impl_->ensureTrainingSession())
+                return false;
+            const auto &signatures  = node->signatures.stageTypes(targetStage);
+            const auto  id          = static_cast<PortId>(port);
+            const auto  signature   = signatures.find(id);
             const auto *declaration = training
                 ? workbench::port(record.isEmpty() ? impl_->training->toolParameters() : impl_->training->recordParameters(), id)
                 : impl_->parameter(id, initialization);
@@ -130,7 +107,7 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
                 : signature == signatures.end() ? nullptr : &signature->second;
             if (!type || type->type != Type::Int)
                 throw ContractError("参数不是整数：" + impl_->parameterLabel(id, initialization));
-            if (!training && !initialization && node->inputs.at(id).mode != BindingMode::Literal)
+            if (!(training && !record.isEmpty()) && node->stageBindings(targetStage).at(id).mode != BindingMode::Literal)
                 throw ContractError("上游绑定的整数参数不能步进：" + impl_->parameterLabel(id, initialization));
             const auto value = ValueJson::parse(literal, *type);
             if (isMissing(value))

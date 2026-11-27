@@ -85,6 +85,7 @@ QVariantList relationVariants(const std::vector<OutputRelation> &relations)
         result.push_back(QVariantMap{
             { "node",                    relation.node},
             { "port", static_cast<uint>(relation.port)},
+            {"stage",  static_cast<int>(relation.stage)},
             {"label",                   relation.label}
         });
     return result;
@@ -95,7 +96,7 @@ bool equalRelations(const std::vector<OutputRelation> &a, const std::vector<Outp
     if (a.size() != b.size())
         return false;
     for (std::size_t i = 0; i < a.size(); ++i)
-        if (a[i].node != b[i].node || a[i].port != b[i].port || a[i].label != b[i].label)
+        if (a[i].node != b[i].node || a[i].port != b[i].port || a[i].stage != b[i].stage || a[i].label != b[i].label)
             return false;
     return true;
 }
@@ -300,6 +301,8 @@ std::optional<OutputModel::Captured> OutputModel::capture(PortId port) const
 
 QString OutputModel::fullText(const Captured &captured)
 {
+    if (std::holds_alternative<DataRef<Image>>(captured.value))
+        return {};
     return ValueJson::text(captured.value, captured.type, ValueJson::Purpose::Display);
 }
 
@@ -322,6 +325,8 @@ std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
                 return estimatedStringBytes(value);
             else if constexpr (isShapeValue<Element>)
                 return estimatedNestedBytes(value.get());
+            else if constexpr (std::is_same_v<Element, DataRef<Image>>)
+                return 0;
             else
                 return 128;
         },

@@ -146,58 +146,50 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
     {
         const bool initialization = stage == PortStage::Init;
         const bool trainingParameter = stage == PortStage::Train;
-        PortValue   literal = Missing{};
-        BindingMode mode    = BindingMode::Literal;
-        QString     source;
-        if (trainingParameter)
+        PortValue                 literal = Missing{};
+        BindingMode               mode    = BindingMode::Literal;
+        std::optional<SourcePort> activeSource;
+        QString                   source;
+        if (trainingParameter && recordScoped)
         {
-            if (!recordScoped)
-            {
-                const auto found = training->parameter(id);
-                if (found) literal = *found;
-            }
-            else if (training && training->selected() >= 0)
-            {
-                if (const auto value = training->value(training->selected(), id)) literal = *value;
-            }
+            if (training && training->selected() >= 0)
+                if (const auto value = training->value(training->selected(), id))
+                    literal = *value;
         }
-        else if (initialization)
+        else
         {
-            const auto found = node->initParams.find(id);
-            if (found != node->initParams.end())
-                literal = found->second;
-        }
-        else if (const auto found = node->inputs.find(id); found != node->inputs.end())
-        {
-            literal = found->second.literal;
-            mode    = found->second.mode;
-            // Switching to manual input cancels the relation immediately; the stored source no
-            // longer describes this row because it is not the effective binding.
-            if (found->second.mode == BindingMode::Upstream && found->second.source)
+            const auto &bindings = node->stageBindings(stage);
+            if (const auto found = bindings.find(id); found != bindings.end())
             {
-                const auto *parent    = findNode(found->second.source->node);
-                const auto *parentDef = parent ? registry.find(parent->toolId) : nullptr;
-                // The display name is copied while its contract is alive: a derived contract is a
-                // temporary, so a bare PortDefinition pointer would dangle past this scope.
-                QString     portName = q(portLabel(found->second.source->port));
-                if (parent && parentDef)
+                literal = found->second.literal;
+                mode    = found->second.mode;
+                if (found->second.mode == BindingMode::Upstream && found->second.source)
                 {
-                    if (const auto *declared = workbench::port(parentDef->outputs, found->second.source->port))
-                        portName = q(declared->nameZh);
-                    else
-                        try
-                        {
-                            const auto parentContract = nodeContract(*parent, *parentDef);
-                            if (const auto *derived
-                                = workbench::port(parentContract.outputs, found->second.source->port))
-                                portName = q(derived->nameZh);
-                        }
-                        catch (const ContractError &)
-                        {
-                        }
+                    activeSource          = found->second.source;
+                    const auto *parent    = findNode(activeSource->node);
+                    const auto *parentDef = parent ? registry.find(parent->toolId) : nullptr;
+                    QString     portName  = q(portLabel(activeSource->port));
+                    if (parent && parentDef)
+                    {
+                        if (const auto *declared = workbench::port(parentDef->outputs, activeSource->port))
+                            portName = q(declared->nameZh);
+                        else
+                            try
+                            {
+                                const auto parentContract = nodeContract(*parent, *parentDef);
+                                if (const auto *derived = workbench::port(parentContract.outputs, activeSource->port))
+                                    portName = q(derived->nameZh);
+                            }
+                            catch (const ContractError &)
+                            {
+                            }
+                    }
+                    source = (parent ? q(parent->title()) : QString::number(activeSource->node)) + "-" + portName;
                 }
-                source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
+            if (trainingParameter && training)
+                if (const auto draftValue = training->parameter(id))
+                    literal = *draftValue;
         }
         if (!recordScoped && roiSession.active() && roiSession.parameterStage() == stage
             && roiSession.original().mode == BindingMode::Literal && roiSession.node() == node->id
@@ -208,11 +200,11 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
         try
         {
             formattedText = displayValueText(literal, type);
-            text = type.type == Type::Image || type.type == Type::TrainingSet ? formattedText : valueText(literal, type);
+            text          = type.type == Type::TrainingSet ? formattedText : valueText(literal, type);
         }
         catch (const std::exception &error)
         {
-            text = q(error.what());
+            text          = q(error.what());
             formattedText = text;
         }
         QVariantList options;
@@ -243,9 +235,10 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
                     const auto &reference = *output.typeFrom;
                     auto        selected  = [&](PortId parameter) -> QString
                     {
-                        const auto  found = node->initParams.find(parameter);
-                        const auto *value
-                            = found == node->initParams.end() ? nullptr : std::get_if<std::string>(&found->second);
+                        const auto found = node->initParams.find(parameter);
+                        if (found == node->initParams.end() || found->second.mode != BindingMode::Literal)
+                            return {};
+                        const auto *value = std::get_if<std::string>(&found->second.literal);
                         return value ? q(*value) : QString{};
                     };
                     for (const auto &sourceFlow : editor.project().flows)
@@ -269,10 +262,8 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
                         }
                     }
                 }
-        const auto *string     = std::get_if<std::string>(&literal);
-        const auto  inputFound = node->inputs.find(id);
-        const bool  hasSource  = !trainingParameter && inputFound != node->inputs.end() && inputFound->second.mode == BindingMode::Upstream
-                            && inputFound->second.source.has_value();
+        const auto *string    = std::get_if<std::string>(&literal);
+        const bool  hasSource = activeSource.has_value();
         EditorKind editorKind = declaration ? declaration->editor : EditorKind::Default;
 
         const auto *regions = shapeRegions(literal);
@@ -342,8 +333,8 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
             {"roiCount", roiCount},
             {"hasRois", hasRois},
             {"source", source},
-            {"sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
-            {"sourcePort", hasSource ? static_cast<uint>(inputFound->second.source->port) : 0u},
+            {"sourceNode", hasSource ? QString::number(activeSource->node) : QString{}},
+            {"sourcePort", hasSource ? static_cast<uint>(activeSource->port) : 0u},
             {"title", q(node->title())},
             {"editor", static_cast<int>(editorKind)},
             {"tab", static_cast<int>(trainingParameter ? ParameterTab::Training : initialization ? ParameterTab::Initialization : declaration ? declaration->tab : ParameterTab::BasicInput)},
@@ -359,7 +350,7 @@ std::vector<ParameterListModel::Row> AppController::Impl::buildParameterRows() c
             {"canDecrement", false},
             {"inputMode", static_cast<int>(mode)}
         };
-        if (type.type == Type::Int && (initialization || mode == BindingMode::Literal))
+        if (type.type == Type::Int && (recordScoped || mode == BindingMode::Literal))
         {
             if (const auto *value = std::get_if<std::int64_t>(&literal))
             {

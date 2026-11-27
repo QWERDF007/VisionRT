@@ -74,7 +74,8 @@ bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 {
     return a.nameEn == b.nameEn && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
         && a.entry == b.entry && a.source == b.source && samePorts(a.inputs, b.inputs)
-        && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
+        && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams)
+        && samePorts(a.trainParams, b.trainParams);
 }
 
 double milliseconds(Clock::duration duration)
@@ -118,27 +119,30 @@ std::vector<DependencyEdge> runtimeDependencyEdges(const FlowDefinition &flow, c
     {
         if (!registry.find(target.toolId))
             continue;
-        for (const auto &[input, binding] : target.inputs)
+        for (const auto stage : kParameterStages)
         {
-            if (!effectiveSource(binding))
-                continue;
-            const auto &source     = *binding.source;
-            const auto  sourceNode = nodes.find(source.node);
-            if (sourceNode != nodes.end() && !registry.find(sourceNode->second->toolId))
+            for (const auto &[input, binding] : target.stageBindings(stage))
             {
-                if (source.node == target.id)
-                    throw ContractError("不能连接自身节点");
-                if (sourceNode->second->position.y >= target.position.y)
-                    throw ContractError("只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）");
+                if (!effectiveSource(binding))
+                    continue;
+                const auto &source     = *binding.source;
+                const auto  sourceNode = nodes.find(source.node);
+                if (sourceNode != nodes.end() && !registry.find(sourceNode->second->toolId))
+                {
+                    if (source.node == target.id)
+                        throw ContractError("不能连接自身节点");
+                    if (sourceNode->second->position.y >= target.position.y)
+                        throw ContractError("只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）");
+                    edges.push_back({source.node, target.id});
+                    continue;
+                }
+                const auto check = validateBinding(flow, source.node, source.port, target.id, input, {}, stage);
+                if (!check)
+                    throw ContractError(check.message + "：节点 " + std::to_string(source.node) + "."
+                                        + portLabel(source.port) + " -> 节点 " + std::to_string(target.id) + "."
+                                        + portLabel(input));
                 edges.push_back({source.node, target.id});
-                continue;
             }
-            const auto check = validateBinding(flow, source.node, source.port, target.id, input);
-            if (!check)
-                throw ContractError(check.message + "：节点 " + std::to_string(source.node) + "."
-                                    + portLabel(source.port) + " -> 节点 " + std::to_string(target.id) + "."
-                                    + portLabel(input));
-            edges.push_back({source.node, target.id});
         }
     }
     std::sort(edges.begin(), edges.end());
@@ -216,27 +220,30 @@ std::optional<std::string> upstreamValidityError(
         {
             return "上游节点 " + node.title() + " 的输出值不符合当前声明：" + error.what();
         }
-        std::map<PortId, const PortDefinition *, std::less<>> inputs;
-        for (const auto &port : contract.inputs) inputs.emplace(port.id, &port);
+        std::map<std::pair<PortStage, PortId>, const PortDefinition *> stagePorts;
+        for (const auto &port : contract.initParams) stagePorts.emplace(std::pair{PortStage::Init, port.id}, &port);
+        for (const auto &port : contract.trainParams) stagePorts.emplace(std::pair{PortStage::Train, port.id}, &port);
+        for (const auto &port : contract.inputs) stagePorts.emplace(std::pair{PortStage::Inputs, port.id}, &port);
         for (const auto &use : snapshot->inputUses)
         {
-            const auto binding = node.inputs.find(use.inputPort);
-            if (binding == node.inputs.end() || binding->second.mode != BindingMode::Upstream
+            const auto &bindings = node.stageBindings(use.stage);
+            const auto  binding  = bindings.find(use.inputPort);
+            if (binding == bindings.end() || binding->second.mode != BindingMode::Upstream
                 || !binding->second.source || binding->second.source->node != use.sourceNode
                 || binding->second.source->port != use.sourcePort)
                 return "上游节点 " + node.title() + " 的输入关系已变化，请先重新运行该节点";
             const auto sourceIt = frozen.nodes.find(use.sourceNode);
             if (sourceIt == frozen.nodes.end())
                 return "上游节点 " + node.title() + " 引用的源节点不存在";
-            const auto sourceRuntime = runtimes.find(use.sourceNode);
+            const auto sourceRuntime  = runtimes.find(use.sourceNode);
             const auto sourceSnapshot = sourceRuntime == runtimes.end() ? ResultSlot::Snapshot{}
-                                                                       : sourceRuntime->second->slot.latest();
+                                                                        : sourceRuntime->second->slot.latest();
             if (!sourceSnapshot || sourceSnapshot->publication != use.sourcePublication)
                 return "上游节点 " + sourceIt->second->title() + " 已重新运行，请先重新运行节点 " + node.title();
-            const auto input      = inputs.find(use.inputPort);
-            const auto output = sourceSnapshot->outputs.find(use.sourcePort);
+            const auto input      = stagePorts.find(std::pair{use.stage, use.inputPort});
+            const auto output     = sourceSnapshot->outputs.find(use.sourcePort);
             const auto outputType = sourceSnapshot->outputTypes.find(use.sourcePort);
-            if (input == inputs.end() || output == sourceSnapshot->outputs.end()
+            if (input == stagePorts.end() || output == sourceSnapshot->outputs.end()
                 || outputType == sourceSnapshot->outputTypes.end())
                 return "上游节点 " + sourceIt->second->title() + " 的输出不可用，请先重新运行该节点";
             if (!compatible(outputType->second, input->second->type))
@@ -262,12 +269,15 @@ std::optional<std::string> upstreamValidityError(
     const auto targetIt = frozen.nodes.find(target);
     if (targetIt == frozen.nodes.end())
         return std::string("目标节点不存在");
-    for (const auto &[input, binding] : targetIt->second->inputs)
+    for (const auto stage : kParameterStages)
     {
-        if (binding.mode != BindingMode::Upstream || !binding.source)
-            continue;
-        if (auto error = check(binding.source->node))
-            return error;
+        for (const auto &[input, binding] : targetIt->second->stageBindings(stage))
+        {
+            if (binding.mode != BindingMode::Upstream || !binding.source)
+                continue;
+            if (auto error = check(binding.source->node))
+                return error;
+        }
     }
     return std::nullopt;
 }
@@ -473,13 +483,17 @@ struct RuntimeEngine::Impl
                         continue;
                     if (frozen->registry.availability(node.toolId).state != ToolAvailability::Available)
                         break;
-                    for (const auto &[input, binding] : node.inputs)
+                    for (const auto stage : kParameterStages)
                     {
-                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        for (const auto &[input, binding] : node.stageBindings(stage))
                         {
-                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
-                            if (!check)
-                                throw ContractError("单节点执行失败：" + check.message);
+                            if (binding.mode == BindingMode::Upstream && binding.source)
+                            {
+                                const auto check = validateBinding(flow, binding.source->node, binding.source->port,
+                                                                   node.id, input, {}, stage);
+                                if (!check)
+                                    throw ContractError("单节点执行失败：" + check.message);
+                            }
                         }
                     }
                 }
@@ -875,13 +889,17 @@ ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegis
                     {
                         if (node.id != *target)
                             continue;
-                        for (const auto &[input, binding] : node.inputs)
+                        for (const auto stage : kParameterStages)
                         {
-                            if (binding.mode == BindingMode::Upstream && binding.source)
+                            for (const auto &[input, binding] : node.stageBindings(stage))
                             {
-                                const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
-                                if (!check)
-                                    return {ErrorCode::InvalidArgument, check.message};
+                                if (binding.mode == BindingMode::Upstream && binding.source)
+                                {
+                                    const auto check = validateBinding(flow, binding.source->node, binding.source->port,
+                                                                       node.id, input, {}, stage);
+                                    if (!check)
+                                        return {ErrorCode::InvalidArgument, check.message};
+                                }
                             }
                         }
                     }

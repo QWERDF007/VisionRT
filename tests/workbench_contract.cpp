@@ -529,7 +529,7 @@ void nodeDiagnosticsContract()
     ProjectArchive::writeProgramJson(
         std::filesystem::path(initialPath.toStdWString()),
         R"json({
-  "format_version": 9,
+  "format_version": 10,
   "project": {
     "name": "诊断工程",
     "notes": "",

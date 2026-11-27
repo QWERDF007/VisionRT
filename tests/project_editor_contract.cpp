@@ -182,7 +182,7 @@ void inactiveDraftsOnlyDirty()
     assert(std::get<std::int64_t>(node(editor, b).inputs.at(1).literal) == 99);
     editor.setMode("flow_1", b, 1, BindingMode::Literal);
     assert(node(editor, b).executionRevision == 3);
-    editor.setInitParam("flow_1", b, 0, std::int64_t{42});
+    editor.setLiteral("flow_1", b, 0, std::int64_t{42}, PortStage::Init);
     assert(node(editor, b).executionRevision == 4);
     editor.markSaved();
     rejects([&] { editor.setLiteral("flow_1", b, 1, true); });
@@ -230,7 +230,7 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
                            SourcePort{b, 2}
     });
     editor.setAlias("flow_1", a, "复制备注");
-    editor.setInitParam("flow_1", a, 0, std::int64_t{24});
+    editor.setLiteral("flow_1", a, 0, std::int64_t{24}, PortStage::Init);
     const auto snapshot = editor.copySelection("flow_1", std::array{a, b});
     editor.setAlias("flow_1", a, "已修改");
     editor.setLiteral("flow_1", a, 1, std::int64_t{99});
@@ -244,7 +244,7 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
     assert(!node(editor, newB).inputs.at(2).source);
     assert((node(editor, downstream).inputs.at(1).source == SourcePort{b, 2}));
     assert(node(editor, newA).alias == "复制备注");
-    assert(std::get<std::int64_t>(node(editor, newA).initParams.at(0)) == 24);
+    assert(std::get<std::int64_t>(node(editor, newA).initParams.at(0).literal) == 24);
     assert(std::get<std::int64_t>(node(editor, newA).inputs.at(1).literal) == 71);
     assert(node(editor, newA).position.x == node(editor, newB).position.x);
     assert(node(editor, newB).position.y - node(editor, newA).position.y == 1);
@@ -257,9 +257,9 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
     assert(copied.runSelected);
     assert(copied.nodes.size() == editor.project().flows.front().nodes.size());
     assert((copied.nodes[1].inputs.at(1).source == SourcePort{copied.nodes[0].id, 2}));
-    assert(std::get<std::int64_t>(copied.nodes[1].initParams.at(0)) == 24);
-    assert(std::get<std::string>(copied.nodes[1].initParams.at(1)) == "flow_1");
-    assert(std::get<std::string>(copied.nodes[1].initParams.at(2)) == "0");
+    assert(std::get<std::int64_t>(copied.nodes[1].initParams.at(0).literal) == 24);
+    assert(std::get<std::string>(copied.nodes[1].initParams.at(1).literal) == "flow_1");
+    assert(std::get<std::string>(copied.nodes[1].initParams.at(2).literal) == "0");
 }
 
 void movementAndDeletionAreAtomic()
@@ -333,7 +333,7 @@ void flowsAndBusyGuard()
     rejects([&] { (void)editor.pasteSelection(third, CopiedSelection{}, {0, 0}); });
     rejects([&] { editor.setAlias("flow_1", a, "busy"); });
     rejects([&] { editor.setLiteral("flow_1", a, 1, std::int64_t{4}); });
-    rejects([&] { editor.setInitParam("flow_1", a, 0, std::int64_t{4}); });
+    rejects([&] { editor.setLiteral("flow_1", a, 0, std::int64_t{4}, PortStage::Init); });
     rejects([&] { editor.setMode("flow_1", a, 1, BindingMode::Upstream); });
     rejects([&] { editor.unbind("flow_1", a, 1); });
     rejects([&] { editor.replaceProject({}); });
@@ -373,10 +373,10 @@ void exhaustedCountersAndCoordinateOverflowRejectWithoutChanges()
     exhausted.flows.front().nodes.front().executionRevision = std::numeric_limits<std::uint64_t>::max();
     editor.replaceProject(exhausted);
     rejects([&] { editor.setLiteral("flow_1", a, 1, std::int64_t{123}); });
-    rejects([&] { editor.setInitParam("flow_1", a, 0, std::int64_t{123}); });
+    rejects([&] { editor.setLiteral("flow_1", a, 0, std::int64_t{123}, PortStage::Init); });
     assert(!editor.project().dirty);
     assert(std::get<std::int64_t>(node(editor, a).inputs.at(1).literal) == 10);
-    assert(std::get<std::int64_t>(node(editor, a).initParams.at(0)) == 1);
+    assert(std::get<std::int64_t>(node(editor, a).initParams.at(0).literal) == 1);
     exhausted.flows.front().nodes.front().executionRevision = 0;
     exhausted.flows.front().structureRevision               = std::numeric_limits<std::uint64_t>::max();
     editor.replaceProject(exhausted);
@@ -552,9 +552,9 @@ void receiverOutputFollowsItsSource()
     const auto arraySender = editor.addNode(sourceFlow, arrays, {1, 0});
     const auto receive = editor.addNode("flow_1", receiver, {});
     assert(!node(editor, receive).signatures.outputs.contains(2));
-    editor.setInitParam("flow_1", receive, 0, std::string(sourceFlow));
-    editor.setInitParam("flow_1", receive, 1, std::string(std::to_string(sender)));
-    editor.setInitParam("flow_1", receive, 2, std::int64_t{2});
+    editor.setLiteral("flow_1", receive, 0, std::string(sourceFlow), PortStage::Init);
+    editor.setLiteral("flow_1", receive, 1, std::string(std::to_string(sender)), PortStage::Init);
+    editor.setLiteral("flow_1", receive, 2, std::int64_t{2}, PortStage::Init);
     assert(node(editor, receive).signatures.outputs.at(2) == TypeSpec{Type::Int});
     const auto sink = editor.addNode("flow_1", integerTool(), {0, 10});
     editor.setSource("flow_1", sink, 1, SourcePort{receive, 2});
@@ -569,11 +569,11 @@ void receiverOutputFollowsItsSource()
          {std::string("0") + std::to_string(sender), "+" + std::to_string(sender), " " + std::to_string(sender),
           std::to_string(sender) + " ", std::string("18446744073709551616")})
     {
-        editor.setInitParam("flow_1", receive, 1, value);
+        editor.setLiteral("flow_1", receive, 1, value, PortStage::Init);
         assert(!node(editor, receive).signatures.outputs.contains(2));
         assert(node(editor, receive).outputTypeErrors.at(2).find("源节点序号") != std::string::npos);
     }
-    editor.setInitParam("flow_1", receive, 1, std::string(std::to_string(arraySender)));
+    editor.setLiteral("flow_1", receive, 1, std::string(std::to_string(arraySender)), PortStage::Init);
     assert(node(editor, receive).signatures.outputs.at(2) == arrays.outputs.front().type);
     assert(node(editor, receive).executionRevision > revision);
     rejects([&] { dependencyEdges(editor.project().flows.front()); });
@@ -592,9 +592,9 @@ void receiverOutputFollowsItsSource()
     assert(editor.unbind("flow_1", otherSink, 1));
     assert(portRelations(editor.project().flows.front()).errors.empty());
     assert(dependencyEdges(editor.project().flows.front()).size() == 1);
-    editor.setInitParam("flow_1", receive, 2, std::int64_t{9});
+    editor.setLiteral("flow_1", receive, 2, std::int64_t{9}, PortStage::Init);
     assert(!node(editor, receive).signatures.outputs.contains(2));
-    editor.setInitParam("flow_1", receive, 2, std::int64_t{2});
+    editor.setLiteral("flow_1", receive, 2, std::int64_t{2}, PortStage::Init);
     assert(node(editor, receive).signatures.outputs.at(2) == arrays.outputs.front().type);
     editor.renameFlow(sourceFlow, "renamed");
     assert(node(editor, receive).signatures.outputs.at(2) == arrays.outputs.front().type);
@@ -605,9 +605,9 @@ void receiverOutputFollowsItsSource()
     assert(!node(editor, copied.at(receive)).signatures.outputs.contains(2));
     const auto chainFlow = editor.addFlow("chain");
     const auto chain = editor.addNode(chainFlow, receiver, {});
-    editor.setInitParam(chainFlow, chain, 0, std::string("flow_1"));
-    editor.setInitParam(chainFlow, chain, 1, std::string(std::to_string(receive)));
-    editor.setInitParam(chainFlow, chain, 2, std::int64_t{2});
+    editor.setLiteral(chainFlow, chain, 0, std::string("flow_1"), PortStage::Init);
+    editor.setLiteral(chainFlow, chain, 1, std::string(std::to_string(receive)), PortStage::Init);
+    editor.setLiteral(chainFlow, chain, 2, std::int64_t{2}, PortStage::Init);
     assert(node(editor, chain).signatures.outputs.at(2) == arrays.outputs.front().type);
     auto exhausted = editor.project();
     for (auto &flow : exhausted.flows)
@@ -620,10 +620,77 @@ void receiverOutputFollowsItsSource()
     editor.removeNodes(sourceFlow, std::array{arraySender});
     assert(!node(editor, receive).signatures.outputs.contains(2));
     assert(!node(editor, chain).signatures.outputs.contains(2));
-    editor.setInitParam("flow_1", receive, 0, std::string(chainFlow));
-    editor.setInitParam("flow_1", receive, 1, std::string(std::to_string(chain)));
+    editor.setLiteral("flow_1", receive, 0, std::string(chainFlow), PortStage::Init);
+    editor.setLiteral("flow_1", receive, 1, std::string(std::to_string(chain)), PortStage::Init);
     assert(!node(editor, receive).signatures.outputs.contains(2));
     assert(!node(editor, chain).signatures.outputs.contains(2));
+}
+
+void stageBindingsAndImageUpstreamOnlyContract()
+{
+    ToolDefinition tool;
+    tool.nameEn  = "test.stage_bindings";
+    tool.nameZh  = "三阶段绑定";
+    tool.version = "1";
+    tool.kind    = ToolKind::Cpp;
+    tool.initParams = {
+        {0, "初始化数值", {Type::Int}, std::int64_t{5}},
+        {1, "初始化图像", {Type::Image}, DataRef<Image>(Image{})}
+    };
+    tool.trainParams = {
+        {0, "训练路径", {Type::String}, std::string("model.zip")}
+    };
+    tool.inputs = {
+        {1, "输入数值", {Type::Int}, std::int64_t{1}},
+        {2, "输入图像", {Type::Image}, DataRef<Image>(Image{})}
+    };
+    tool.outputs = {
+        {2, "输出数值", {Type::Int}},
+        {3, "输出图像", {Type::Image}},
+        {4, "输出路径", {Type::String}}
+    };
+
+    ProjectEditor editor;
+    const auto    src = editor.addNode("flow_1", tool, {0, 0});
+    const auto    dst = editor.addNode("flow_1", tool, {0, 1});
+
+    // Image ports in both Init and Inputs must default to Upstream and refuse Literal.
+    assert(node(editor, dst).initParams.at(1).mode == BindingMode::Upstream);
+    assert(node(editor, dst).inputs.at(2).mode == BindingMode::Upstream);
+    rejects([&] { editor.setMode("flow_1", dst, 1, BindingMode::Literal, PortStage::Init); });
+    rejects([&] { editor.setMode("flow_1", dst, 2, BindingMode::Literal, PortStage::Inputs); });
+
+    // Non-image Init and Train ports default to Literal and can bind upstream.
+    assert(node(editor, dst).initParams.at(0).mode == BindingMode::Literal);
+    assert(node(editor, dst).trainParams.at(0).mode == BindingMode::Literal);
+    assert(editor.bindFreeInput("flow_1", {src, 2}, {dst, 0, PortStage::Init}));
+    assert(editor.bindFreeInput("flow_1", {src, 4}, {dst, 0, PortStage::Train}));
+    assert(editor.bindFreeInput("flow_1", {src, 3}, {dst, 1, PortStage::Init}));
+
+    const auto relations = portRelations(editor.project().flows.front());
+    assert(relations.errors.empty() && relations.active.size() == 3);
+    assert(dependencyEdges(editor.project().flows.front()).size() == 1);
+
+    // Upstream-bound Init/Train ports refuse direct setLiteralWrites.
+    const std::array<LiteralWrite, 1> initWrite{{{PortStage::Init, 0, std::int64_t{9}}}};
+    const std::array<LiteralWrite, 1> trainWrite{{{PortStage::Train, 0, std::string("other.zip")}}};
+    rejects([&] { editor.setLiteralWrites("flow_1", dst, initWrite); });
+    rejects([&] { editor.setLiteralWrites("flow_1", dst, trainWrite); });
+
+    // Hierarchy check protects Init/Train upstream wires on moveNodes.
+    rejects([&] { editor.moveNodes("flow_1", std::array{dst}, {0, -2}); });
+
+    // Copy & paste remaps internal Init/Train upstream sources.
+    const auto copied = editor.copySelection("flow_1", std::array{src, dst});
+    const auto mapped = editor.pasteSelection("flow_1", copied, {2, 0});
+    assert((node(editor, mapped.at(dst)).initParams.at(0).source == SourcePort{mapped.at(src), 2}));
+    assert((node(editor, mapped.at(dst)).trainParams.at(0).source == SourcePort{mapped.at(src), 4}));
+
+    // Removing source clears Init/Train upstream sources.
+    editor.removeNodes("flow_1", std::array{src});
+    assert(!node(editor, dst).initParams.at(0).source);
+    assert(!node(editor, dst).trainParams.at(0).source);
+    assert(node(editor, dst).initParams.at(1).mode == BindingMode::Upstream && !node(editor, dst).initParams.at(1).source);
 }
 
 int main()
@@ -642,6 +709,7 @@ int main()
         exhaustedCountersAndCoordinateOverflowRejectWithoutChanges();
         compatibilityAndRelationshipMenusUseEffectiveInputs();
         bindingEffectiveSourceDraftsAndOccupiedContract();
+        stageBindingsAndImageUpstreamOnlyContract();
     }
     catch (const std::exception &error)
     {

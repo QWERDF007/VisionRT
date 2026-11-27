@@ -50,6 +50,8 @@ VISIONRT_CORE_API void setOutputDeclarations(NodeDefinition &node, const ToolDef
 VISIONRT_CORE_API void resolveOutputTypes(ProjectDefinition &project);
 VISIONRT_CORE_API TypeMap resolvedOutputTypes(const ToolDefinition &contract);
 
+VISIONRT_CORE_API std::map<std::string, std::filesystem::path> resolveModelReferences(
+    const Values &trainValues, const ToolDefinition &definition, const std::filesystem::path &resourceRoot);
 VISIONRT_CORE_API std::map<std::string, std::filesystem::path> nodeModelReferences(
     const NodeDefinition &node, const ToolDefinition &definition, const std::filesystem::path &resourceRoot);
 

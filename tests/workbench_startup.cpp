@@ -163,7 +163,7 @@ void startupProjectContract()
             require(directory.isValid(), "project diagnostic directory is unavailable");
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrtapp"));
             visionrt::ProjectArchive::writeProgramJson(std::filesystem::path(badPath.toStdWString()), R"json({
-  "format_version": 9,
+  "format_version": 10,
   "project": {},
   "flows": {}
 })json");

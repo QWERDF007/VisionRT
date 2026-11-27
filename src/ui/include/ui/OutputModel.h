@@ -11,9 +11,10 @@
 namespace visionrt {
 struct OutputRelation
 {
-    QString node;
-    PortId  port = 0;
-    QString label;
+    QString   node;
+    PortId    port = 0;
+    QString   label;
+    PortStage stage = PortStage::Inputs;
 };
 
 class VISIONRT_UI_API OutputModel final : public QAbstractTableModel

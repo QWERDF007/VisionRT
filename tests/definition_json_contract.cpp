@@ -15,19 +15,39 @@ try
     ToolDefinition generic;
     generic.nameEn = "test.generic_training";
     generic.nameZh = "通用训练参数";
-    generic.trainParams = {{0, "图像", {Type::Image}}, {1, "方向", {Type::Direction}},
+    generic.trainParams = {{1, "方向", {Type::Direction}},
                            {2, "第一组区域", {Type::Rectangle}}, {3, "第二组区域", {Type::Circle}},
                            {4, "训练集", {Type::TrainingSet}}};
     generic.initParams = {{0, "初始化图像", {Type::Image}}, {1, "初始化方向", {Type::Direction}}};
-    generic.initParams.front().defaultValue = DataRef<Image>(Image{cv::Mat(2, 3, CV_16UC1, cv::Scalar(1000))});
-    generic.trainParams.front().colorOrder = ColorOrder::RGB;
+    generic.initParams.front().colorOrder = ColorOrder::RGB;
     writeToolDefinitionFile(file, generic);
     const auto genericRestored = parseToolDefinitionFile(file);
     assert(genericRestored.trainParams.size() == generic.trainParams.size());
     assert(genericRestored.initParams.front().tab == ParameterTab::Initialization);
-    assert(std::get<DataRef<Image>>(genericRestored.initParams.front().defaultValue).get().front().at<std::uint16_t>(1, 2) == 1000);
+    assert(genericRestored.initParams.front().colorOrder == ColorOrder::RGB);
     assert(genericRestored.trainParams.front().tab == ParameterTab::Training);
-    assert(genericRestored.trainParams.front().colorOrder == ColorOrder::RGB);
+
+    // Train stage must reject Image parameters in both train_params and dataset fields.
+    {
+        ToolDefinition invalidTrain = generic;
+        invalidTrain.trainParams.push_back({9, "非法训练图像", {Type::Image}});
+        bool rejected = false;
+        try { validateToolDefinition(invalidTrain); }
+        catch (const ContractError &) { rejected = true; }
+        assert(rejected);
+    }
+    {
+        ToolDefinition invalidField;
+        invalidField.nameEn = "test.invalid_train_field";
+        invalidField.nameZh = "非法训练字段";
+        invalidField.trainParams = {{0, "样本", {Type::TrainingSet}}};
+        invalidField.training = TrainingSpec{};
+        invalidField.training->datasets.push_back({0, std::nullopt, 0, {{0, "图像字段", {Type::Image}}}});
+        bool rejected = false;
+        try { validateToolDefinition(invalidField); }
+        catch (const ContractError &) { rejected = true; }
+        assert(rejected);
+    }
     assert(nextFreePortId(ToolDefinition{}, PortStage::Train) == 0);
     assert(toolTabs().front().id == ParameterTab::BasicInput);
     assert(toolTabs()[1].id == ParameterTab::Initialization

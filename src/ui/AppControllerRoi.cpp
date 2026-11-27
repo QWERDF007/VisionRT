@@ -30,8 +30,7 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const EncodedRe
         const auto stage = roiSession.parameterStage();
         const bool changed = stage == PortStage::Train
             ? applyTrainingValue(target.inputPortId, roiSession.draft())
-            : stage == PortStage::Init ? applyParameter(target.inputPortId, true, roiSession.draft())
-            : editor.setBinding(flow.toStdString(), node->id, target.inputPortId, roiSession.original());
+            : editor.setBinding(flow.toStdString(), node->id, target.inputPortId, roiSession.original(), stage);
         if (roiSession.singleRectangle())
             viewport->setDrawShape(value ? 0 : 2);
         if (changed)
@@ -72,14 +71,24 @@ bool AppController::Impl::beginParameterRoi(PortId port, PortStage stage, bool c
         const auto *declaration = tool ? workbench::port(stage == PortStage::Init ? tool->initParams : stage == PortStage::Train ? tool->trainParams : tool->inputs, port) : nullptr;
         if (!node || !declaration || !isShapeType(declaration->type.type))
             throw ContractError("参数不是 ROI：" + portLabel(port));
-        const auto resolve = [&](PortRef ref) { return ref.stage == PortStage::Train && training
-            ? training->parameter(ref.id).value_or(PortValue{Missing{}}) : presentation.resolvedValue(*node, ref); };
+        const auto resolve = [&](PortRef ref)
+        {
+            if (ref.stage == PortStage::Train && training)
+            {
+                const auto it = node->trainParams.find(ref.id);
+                if (it == node->trainParams.end() || it->second.mode == BindingMode::Literal)
+                    return training->parameter(ref.id).value_or(PortValue{Missing{}});
+            }
+            return presentation.resolvedValue(*node, ref);
+        };
         const auto imageValue = declaration->image ? resolve(*declaration->image) : PortValue{Missing{}};
         auto roiValue = resolve({stage, port});
         if (isMissing(roiValue))
             roiValue = defaultValue(declaration->type);
         validateValue(declaration->type, roiValue);
-        const auto binding = stage == PortStage::Inputs ? node->inputs.at(port) : InputBinding{BindingMode::Literal, roiValue, {}};
+        auto binding = node->stageBindings(stage).at(port);
+        if (stage == PortStage::Train && binding.mode == BindingMode::Literal)
+            binding.literal = roiValue;
         if (binding.mode == BindingMode::Upstream && !copyUpstream)
             throw ContractError("上游 ROI 输入只读，请先显式复制当前值再编辑：" + portLabel(port));
         finishRoi();

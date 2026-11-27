@@ -60,10 +60,10 @@ void defaultsBelongToEachNode()
     require(numberAt(tool.inputs.front().defaultValue, 0) == 2, "node edit changed declaration default");
     require(numberAt(node(editor, second).inputs.at(1).literal, 0) == 2,
             "node defaults share Array storage");
-    editor.setInitParam("flow_1", first, 0, Rectangle::fromNested({{{91, 2, 3, 4, 0}}}));
+    editor.setLiteral("flow_1", first, 0, Rectangle::fromNested({{{91, 2, 3, 4, 0}}}), PortStage::Init);
     require(std::get<visionrt::Rectangle>(tool.initParams.front().defaultValue).get()[0][0][1] == 1.,
             "node edit changed ROI default");
-    require(std::get<visionrt::Rectangle>(node(editor, second).initParams.at(0)).get()[0][0][1] == 1.,
+    require(std::get<visionrt::Rectangle>(node(editor, second).initParams.at(0).literal).get()[0][0][1] == 1.,
             "node defaults share ROI storage");
 }
 
@@ -89,8 +89,8 @@ void copiedConfigurationIsIndependent()
     numberAt(flow.nodes.front().inputs.at(1).literal, 0) = 68;
     require(numberAt(node(editor, source).inputs.at(1).literal, 0) == 83,
             "flow copy shares source configuration storage");
-    editor.setInitParam(flowId, flow.nodes.front().id, 0, Rectangle::fromNested({{{95, 2, 3, 4, 0}}}));
-    require(std::get<visionrt::Rectangle>(node(editor, source).initParams.at(0)).get()[0][0][1] == 1.,
+    editor.setLiteral(flowId, flow.nodes.front().id, 0, Rectangle::fromNested({{{95, 2, 3, 4, 0}}}), PortStage::Init);
+    require(std::get<visionrt::Rectangle>(node(editor, source).initParams.at(0).literal).get()[0][0][1] == 1.,
             "flow copy shares source ROI configuration storage");
 }
 
@@ -104,9 +104,9 @@ void submittedDraftsDoNotRemainLive()
     require(numberAt(node(editor, id).inputs.at(1).literal, 0) == 31,
             "later draft edit changed committed literal");
     PortValue regions = Rectangle::fromNested({{{2, 4, 7, 8, 0}}});
-    require(editor.setInitParam("flow_1", id, 0, regions), "changed ROI draft not submitted");
+    require(editor.setLiteral("flow_1", id, 0, regions, PortStage::Init), "changed ROI draft not submitted");
     regions = Rectangle::fromNested({{{97, 2, 3, 4, 0}}});
-    require(std::get<visionrt::Rectangle>(node(editor, id).initParams.at(0)).get()[0][0][1] == 2.,
+    require(std::get<visionrt::Rectangle>(node(editor, id).initParams.at(0).literal).get()[0][0][1] == 2.,
             "later ROI draft edit changed committed initialization");
     editor.markSaved();
     const auto revision = node(editor, id).executionRevision;
@@ -150,8 +150,8 @@ void reconciledDefaultsAreIndependent()
             "reconciliation changed registry defaults");
     require(numberAt(nodes[1].inputs.at(1).literal, 0) == 2, "reconciled nodes share Array defaults");
     ProjectEditor restoredEditor(restored.project);
-    restoredEditor.setInitParam("flow_1", nodes[0].id, 0, Rectangle::fromNested({{{79, 2, 3, 4, 0}}}));
-    require(std::get<visionrt::Rectangle>(nodes[1].initParams.at(0)).get()[0][0][1] == 1.,
+    restoredEditor.setLiteral("flow_1", nodes[0].id, 0, Rectangle::fromNested({{{79, 2, 3, 4, 0}}}), PortStage::Init);
+    require(std::get<visionrt::Rectangle>(nodes[1].initParams.at(0).literal).get()[0][0][1] == 1.,
             "reconciled nodes share ROI defaults");
 }
 
@@ -248,7 +248,7 @@ void allValuesSurviveRealProjectFiles()
     storage.save(project, std::filesystem::path(filename.toStdWString()));
     require(!project.dirty, "successful project commit did not install saved identity");
     const auto root = QJsonDocument::fromJson(ProjectArchive::readProgramJson(project.path)).object();
-    require(root["format_version"].toInt() == 9, "saved project does not use the current project format");
+    require(root["format_version"].toInt() == 10, "saved project does not use the current project format");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
     const auto literals = saved["params"].toObject()["inputs"].toArray();
     const auto entry    = [&](PortId port) -> QJsonObject

@@ -329,7 +329,7 @@ struct AppController::Impl : PresentationHost
     const FlowDefinition         *currentFlow() const override;
     const ToolDefinition         *effectiveTool() const override;
     const PortDefinition         *parameter(PortId id, bool initialization) const override;
-    QString                       inputPortName(const NodeDefinition &node, PortId port) const override;
+    QString                       inputPortName(const NodeDefinition &node, PortStage stage, PortId port) const override;
     std::string                   parameterLabel(PortId id, bool initialization) const;
     const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                      const NodeDefinition &node) const override;

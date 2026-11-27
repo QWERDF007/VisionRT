@@ -36,6 +36,7 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
                 // The list is read by people, so it carries the one port breadcrumb the rest of the
                 // window uses instead of a bare number.
                 ports.push_back(QVariantMap{{"output", workbench::q(portLabel(relation.source.port))},
+                                             {"stage", static_cast<int>(relation.target.stage)},
                                              {"input", workbench::q(portLabel(relation.target.port))}});
             if (!wire.error.empty())
             {

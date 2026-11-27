@@ -893,7 +893,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     n2.toolId           = "test.plugin.counter";
     n2.toolNameSnapshot = "Plugin Counter";
     n2.position         = {300, 100};
-    n2.initParams.emplace(0, std::int64_t{10});
+    n2.initParams.emplace(0, InputBinding{BindingMode::Literal, std::int64_t{10}, {}});
     n2.signatures.initParams[0] = {Type::Int};
     n2.signatures.outputs[2]    = {Type::Int};
     flow.nodes.push_back(n2);

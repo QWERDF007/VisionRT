@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 import quickui
 import VisionRT.Ui 1.0
 
@@ -45,7 +44,6 @@ ColumnLayout {
     }
     onParameterKeyChanged: {
         pathPicker.close();
-        imagePicker.close();
     }
 
     RowLayout {
@@ -104,7 +102,7 @@ ColumnLayout {
                         id: editorLoader
                         anchors.fill: parent
                         enabled: root.editable
-                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor : root.isMeta ? metaEditor : root.upstream ? upstreamEditor : root.parameter.datasetEditor ? datasetEditor : root.parameter.type === PortType.Image ? imageEditor : (root.parameter.options || []).length > 0 ? choiceEditor : (root.parameter.type === PortType.Bool && (root.parameter.editor === EditorKind.Switch || root.parameter.editor === EditorKind.Recursive)) ? toggleSwitchComponent : root.parameter.type === PortType.Bool ? boolEditor : root.parameter.type === PortType.Int ? integerEditor : root.parameter.type === PortType.Float ? floatEditor : (root.parameter.isShape && root.parameter.editor === EditorKind.Rect) ? rectEditor : root.parameter.isShape ? regionsEditor : root.parameter.type === PortType.Array || root.parameter.type === PortType.Direction || root.parameter.type === PortType.CoordinateFrame2D || root.parameter.type === PortType.TrainingSet ? arrayEditor : textEditor
+                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor : root.isMeta ? metaEditor : root.upstream ? upstreamEditor : root.parameter.datasetEditor ? datasetEditor : (root.parameter.options || []).length > 0 ? choiceEditor : (root.parameter.type === PortType.Bool && (root.parameter.editor === EditorKind.Switch || root.parameter.editor === EditorKind.Recursive)) ? toggleSwitchComponent : root.parameter.type === PortType.Bool ? boolEditor : root.parameter.type === PortType.Int ? integerEditor : root.parameter.type === PortType.Float ? floatEditor : (root.parameter.isShape && root.parameter.editor === EditorKind.Rect) ? rectEditor : root.parameter.isShape ? regionsEditor : root.parameter.type === PortType.Array || root.parameter.type === PortType.Direction || root.parameter.type === PortType.CoordinateFrame2D || root.parameter.type === PortType.TrainingSet ? arrayEditor : textEditor
                     }
                 }
 
@@ -119,14 +117,14 @@ ColumnLayout {
                 ParameterActionButton {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: root.parameter.stage === PortStage.Inputs && (!root.isMeta || root.conditionRow)
+                    visible: (!root.isMeta && !root.parameter.recordScoped) || root.conditionRow
                     Layout.fillHeight: true
                     padding: 0
                     verticalPadding: 0
                     horizontalPadding: 0
                     focusPolicy: Qt.NoFocus
-                    enabled: root.editable
-                    opacity: root.editable ? 1.0 : 0.3
+                    enabled: root.editable && root.parameter.type !== PortType.Image
+                    opacity: enabled ? 1.0 : 0.3
                     normalColor: "transparent"
                     hoverColor: QuiColor.ItemHover
                     pressedColor: Qt.darker(QuiColor.ItemHover, 1.05)
@@ -137,7 +135,7 @@ ColumnLayout {
                         if (root.conditionRow) {
                             app.setConditionMode(root.nodeId, !root.upstream);
                         } else {
-                            app.setParameterMode(root.parameter.id, !root.upstream);
+                            app.setParameterMode(root.parameter.id, !root.upstream, root.parameter.stage);
                         }
                     }
 
@@ -148,6 +146,9 @@ ColumnLayout {
                     QuiToolTip {
                         visible: toggleAction.hovered
                         text: {
+                            if (root.parameter.type === PortType.Image) {
+                                return "图像参数仅支持上层输入";
+                            }
                             if (root.conditionRow) {
                                 return root.upstream ? "切换为条件公式" : "使用上层布尔值";
                             }
@@ -168,13 +169,6 @@ ColumnLayout {
                         root.parameter.stage === PortStage.Train ? app.setTrainingParameterPath(root.parameter.id, path) : app.setParameterPath(root.parameter.id, root.parameter.init, path);
                 }
             }
-            FileDialog {
-                id: imagePicker
-                title: "选择图像"
-                fileMode: FileDialog.OpenFile
-                nameFilters: ["图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)", "所有文件 (*)"]
-                onAccepted: app.loadParameterImage(root.parameter.id, root.parameter.stage, selectedFile, root.parameter.recordId || "")
-            }
         }
     }
 
@@ -186,7 +180,7 @@ ColumnLayout {
     }
 
     function buildBindingGroups() {
-        let candidates = app.bindingCandidates(app.portContext(root.bindingPort));
+        let candidates = app.bindingCandidates(app.portContext(root.bindingPort, false, root.parameter.stage));
         let groups = [];
         if (root.parameter.source) {
             groups.push({
@@ -233,7 +227,7 @@ ColumnLayout {
             displayText: root.parameter.source || ""
             optionGroups: root.buildBindingGroups()
             onAboutToOpen: {
-                bindingContext = app.portContext(root.bindingPort);
+                bindingContext = app.portContext(root.bindingPort, false, root.parameter.stage);
                 optionGroups = root.buildBindingGroups();
             }
             commitValue: function (val) {
@@ -510,31 +504,11 @@ ColumnLayout {
     }
 
     Component {
-        id: imageEditor
-        ParameterTextField {
-            flat: true
-            readOnly: true
-            text: root.displayText
-            actionIcon: QuiFontIcon.FolderOpen
-            actionText: "选择图像"
-            onActionRequested: imagePicker.open()
-        }
-    }
-    Component {
         id: datasetEditor
         ParameterTextField {
             flat: true
             readOnly: true
             text: root.displayText
-            actionIcon: QuiFontIcon.Edit
-            actionText: "编辑训练集"
-            secondaryActionIcon: QuiFontIcon.Add
-            secondaryActionText: "添加记录"
-            onSecondaryActionRequested: app.addTrainingRecord(root.parameter.id)
-            onActionRequested: {
-                app.selectTrainingDataset(root.parameter.id);
-                app.trainingMode = true;
-            }
         }
     }
     Component {

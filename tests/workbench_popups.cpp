@@ -1,3 +1,4 @@
+#include "core/NodeContracts.h"
 #include "core/ValueJson.h"
 #include "ui/AppController.h"
 #include "WorkbenchFixtures.h"
@@ -205,15 +206,30 @@ void popupSessionsContract()
             "real image execution did not publish a new result");
     auto *imageData = waitForCell(panel, 2, 2);
     require(imageData != nullptr, "image data cell is missing after publication");
-    const auto fullText = visionrt::OutputModel::fullText(*model->capture(2));
-    QGuiApplication::clipboard()->clear();
-    QSignalSpy textReady(&app, &visionrt::AppController::outputTextReady);
+    require(visionrt::OutputModel::fullText(*model->capture(2)).isEmpty(),
+            "image output must not expose copyable full text");
     rightClick(window, imageData);
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
             "image data menu did not open");
     copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
+    require(copyAction != nullptr && !copyAction->property("enabled").toBool(),
+            "copy of an image output must be disabled");
+    QMetaObject::invokeMethod(menu, "close", Qt::DirectConnection);
+    require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
+            "image data menu did not close");
+
+    auto *pathsData = waitForCell(panel, 3, 2);
+    require(pathsData != nullptr, "paths data cell is missing after publication");
+    const auto fullText = visionrt::OutputModel::fullText(*model->capture(3));
+    require(!fullText.isEmpty(), "published displayable output produced empty copy text");
+    QGuiApplication::clipboard()->clear();
+    QSignalSpy textReady(&app, &visionrt::AppController::outputTextReady);
+    rightClick(window, pathsData);
+    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
+            "paths data menu did not open");
+    copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
     require(copyAction != nullptr && copyAction->property("enabled").toBool(),
-            "copy of a published value is disabled");
+            "copy of a published displayable value is disabled");
     leftClick(window, copyAction);
     require(QTest::qWaitFor([&] { return textReady.count() == 1; }, 5000),
             "copy never completed its bounded background readback");
@@ -283,6 +299,38 @@ void popupSessionsContract()
     require(dataToggle != nullptr, "data mode toggle is missing");
     leftClick(window, dataToggle);
     require(waitForCell(panel, 2, 2) != nullptr, "switching back to data mode failed");
+
+    // Cross-stage binding from OutputPanel to a downstream Init parameter supports relation listing and disconnect.
+    app.addNode(QStringLiteral("ReceiveFlowResult"), 10, 8);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "receiver node synchronization did not finish");
+    const auto receiverTarget = app.selectedNode();
+    app.selectNode(QStringLiteral("1"));
+    const auto statusCtx = app.portContext(0, true);
+    require(app.bindOutputTo(statusCtx, receiverTarget, visionrt::ReceiveInitPorts::Timeout,
+                             static_cast<int>(visionrt::PortStage::Init)),
+            "output panel could not bind to a downstream Init parameter");
+    require(hasWire(app, QStringLiteral("1"), receiverTarget), "init stage binding did not create a wire");
+    leftClick(window, visibleText(panel, QStringLiteral("关系")));
+    QPointer<QQuickItem> initDisconnectBtn;
+    require(QTest::qWaitFor([&] {
+        auto *cell = outputCell(panel, 0, 3);
+        initDisconnectBtn = cell
+            ? childByObjectName(cell, QStringLiteral("disconnectRelationButton_0_%1_%2_%3")
+                                          .arg(receiverTarget)
+                                          .arg(static_cast<int>(visionrt::PortStage::Init))
+                                          .arg(visionrt::ReceiveInitPorts::Timeout))
+            : nullptr;
+        return !initDisconnectBtn.isNull() && initDisconnectBtn->isVisible();
+    }, 3000),
+            "init-stage relation row is missing its stage-qualified disconnect button");
+    leftClick(window, initDisconnectBtn.data());
+    require(QTest::qWaitFor([&] { return !hasWire(app, QStringLiteral("1"), receiverTarget); }, 1000),
+            "clicking the init-stage relation close button did not disconnect the wire");
+    leftClick(window, visibleText(panel, QStringLiteral("数据")));
+    require(waitForCell(panel, 2, 2) != nullptr, "switching back to data mode after init unbind failed");
+    app.deleteNodes(QVariantList{receiverTarget});
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "receiver node cleanup did not finish");
+    app.selectNode(QStringLiteral("1"));
 
     // An output context stays bound to its node even when the same port id exists elsewhere.
     const auto oldOutput = app.portContext(2, true);
@@ -583,7 +631,7 @@ void outputCellReuseContract()
             {"type", "int"}
         });
     const QJsonObject definition{
-        {"schema_version",                                                               2                          },
+        {"schema_version",                                                               4                          },
         {       "name_en",                                                                            "test.outputs"},
         {       "name_zh",                                                                            "Many outputs"},
         {       "version",                                                                                   "1.0.0"},

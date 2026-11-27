@@ -306,7 +306,7 @@ try
     {
         const auto saved = QJsonDocument::fromJson(
             ProjectArchive::readProgramJson(std::filesystem::path(projectPath.toStdWString())));
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 9,
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 10,
                 "idle save after the run produced an incomplete project");
     }
     app.addNode("test.ui.editor", 100, 100);

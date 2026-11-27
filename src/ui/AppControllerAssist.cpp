@@ -223,15 +223,18 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             }
             alignment = *slice;
         }
-        const auto writable = [&](PortId id)
+        const auto writable = [&](PortStage stage, PortId id)
         {
-            const auto it = node.inputs.find(id);
-            return it != node.inputs.end() && it->second.mode != BindingMode::Upstream;
+            if (stage == PortStage::Outputs)
+                return false;
+            const auto &bindings = node.stageBindings(stage);
+            const auto  it       = bindings.find(id);
+            return it != bindings.end() && it->second.mode != BindingMode::Upstream;
         };
         if (learn
-            && (!writable(locator.regionTarget)
-                || std::ranges::any_of(locator.parameters, [&](const auto &w)
-                                       { return w.target.stage == PortStage::Inputs && !writable(w.target.id); })))
+            && (!writable(PortStage::Inputs, locator.regionTarget)
+                || std::ranges::any_of(locator.parameters,
+                                       [&](const auto &w) { return !writable(w.target.stage, w.target.id); })))
         {
             if (reason)
                 *reason = QStringLiteral("点选目标由上游提供");
@@ -318,8 +321,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         }
         if (outcome.append && hasPrior)
         {
-            const auto *current    = mapping.target.stage == PortStage::Init ? &node.initParams.at(mapping.target.id)
-                                                                             : &node.inputs.at(mapping.target.id).literal;
+            const auto *current    = &node.stageBindings(mapping.target.stage).at(mapping.target.id).literal;
             bool        compatible = equalValues(*current, value);
             if (mapping.limit != SuggestedLimit::Exact)
             {

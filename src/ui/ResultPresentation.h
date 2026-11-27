@@ -34,7 +34,7 @@ public:
     virtual const FlowDefinition         *currentFlow() const                   = 0;
     virtual const ToolDefinition         *effectiveTool() const                 = 0;
     virtual const PortDefinition         *parameter(PortId id, bool init) const = 0;
-    virtual QString                       inputPortName(const NodeDefinition &node, PortId port) const = 0;
+    virtual QString                       inputPortName(const NodeDefinition &node, PortStage stage, PortId port) const = 0;
     // Same candidate/validate rule the binding menu uses, cached by the controller. The returned map
     // is the cache itself, not a copy.
     virtual const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
@@ -108,7 +108,8 @@ public:
     std::shared_ptr<const NodeDiagnostic> lifecycleShared(NodeId node) const;
     const NodeDiagnostic                 *instance(NodeId node) const;
     ResultSlot::Snapshot                  displaySnapshot(const NodeDefinition &node) const;
-    // The bound value of an input, read through this module's snapshots. One lookup, no second copy.
+    // The bound value of a parameter port, read through this module's snapshots. One lookup, no second copy.
+    const PortValue                      *resolvedBinding(const NodeDefinition &node, PortRef reference) const;
     const PortValue                      *resolvedInput(const NodeDefinition &node, PortId input) const;
     PortValue resolvedValue(const NodeDefinition &node, PortRef reference) const;
 

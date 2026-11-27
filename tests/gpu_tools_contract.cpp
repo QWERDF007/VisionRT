@@ -122,7 +122,7 @@ int main(int argc, char **argv)
         auto &nodes = loaded.project.flows[0].nodes;
         auto &reader = nodes[0];
         auto &detector = nodes[1];
-        if (std::get<std::string>(detector.initParams.at(1)) != "build_wts")
+        if (std::get<std::string>(detector.initParams.at(1).literal) != "build_wts")
             throw std::runtime_error("GPU example must build its native WTS model before loading the saved engine");
         QTemporaryDir temporary;
         if (!temporary.isValid())
@@ -130,8 +130,8 @@ int main(int argc, char **argv)
         loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrtapp";
         reader.inputs.at(1).literal             = std::string(image.generic_string());
         reader.inputs.at(5).literal            = std::int64_t{1}; // single-image detection reference
-        detector.initParams.at(2)         = std::string(weights.generic_string());
-        detector.initParams.at(3) = std::string(enginePath.generic_string());
+        detector.initParams.at(2).literal         = std::string(weights.generic_string());
+        detector.initParams.at(3).literal = std::string(enginePath.generic_string());
         if (outputError)
         {
             const auto parentFile = fixtures / "engine-output-parent-file";
@@ -142,9 +142,9 @@ int main(int argc, char **argv)
                     throw std::runtime_error("Cannot create the engine output failure fixture");
             }
             const auto output = parentFile / "output.engine";
-            detector.initParams.at(3) = output.generic_string();
+            detector.initParams.at(3).literal = output.generic_string();
             auto tool = registry.create(detector.toolId);
-            const auto status = tool->initialize(detector.initParams);
+            const auto status = tool->initialize(nodeParameters(detector, *registry.find(detector.toolId)));
             tool->release();
             auto message = status.message;
             std::replace(message.begin(), message.end(), '\\', '/');
@@ -173,20 +173,20 @@ int main(int argc, char **argv)
                 continue;
             if (pass < 0)
             {
-                detector.initParams.at(1) = std::string("engine");
-                detector.initParams.at(2) = std::string{};
+                detector.initParams.at(1).literal = std::string("engine");
+                detector.initParams.at(2).literal = std::string{};
             }
             else if (pass == 0)
             {
-                detector.initParams.at(1) = std::string("build_wts");
-                detector.initParams.at(2) = std::string(weights.generic_string());
+                detector.initParams.at(1).literal = std::string("build_wts");
+                detector.initParams.at(2).literal = std::string(weights.generic_string());
             }
             if (pass == 1)
             {
                 if (!std::filesystem::is_regular_file(enginePath) || std::filesystem::file_size(enginePath) == 0)
                     throw std::runtime_error("Native model build did not save an engine");
-                detector.initParams.at(1)  = std::string("engine");
-                detector.initParams.at(2) = std::string(enginePath.generic_string());
+                detector.initParams.at(1).literal = std::string("engine");
+                detector.initParams.at(2).literal = std::string(enginePath.generic_string());
             }
             const auto phase = pass < 0 ? "missing-model-path" : pass == 0 ? "build_wts" : "engine";
             std::cout << "[YOLO] " << phase << std::endl;

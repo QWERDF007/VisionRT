@@ -138,7 +138,6 @@ public:
     QVariantList        parameterTabs() const;
     Q_INVOKABLE bool startTrainingRoi(int parameter, int shape);
     Q_INVOKABLE bool startParameterRoi(int parameter, int stage, int shape, bool recordScoped = false);
-    Q_INVOKABLE bool loadParameterImage(int parameter, int stage, const QUrl &url, const QString &record = {});
     Q_INVOKABLE bool selectTrainingDataset(int parameter);
     Q_INVOKABLE bool addTrainingRecord(int parameter);
     Q_INVOKABLE bool setTrainingParameterPath(int parameter, const QUrl &url);
@@ -232,17 +231,21 @@ public:
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
     Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal, int stage = -1, const QString &record = {});
-    Q_INVOKABLE bool         setParameterMode(int port, bool upstream);
-    Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false) const;
+    Q_INVOKABLE bool         setParameterMode(int port, bool upstream, int stage = static_cast<int>(PortStage::Inputs));
+    Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false,
+                                                    int stage = static_cast<int>(PortStage::Inputs)) const;
     Q_INVOKABLE QVariantMap  portResultContext(PortId port) const;
-    Q_INVOKABLE QVariantMap  portContext(PortId port, bool output = false) const;
+    Q_INVOKABLE QVariantMap  portContext(PortId port, bool output = false,
+                                         int stage = static_cast<int>(PortStage::Inputs)) const;
     Q_INVOKABLE bool         portContextCurrent(const QVariantMap &context) const;
     Q_INVOKABLE QVariantList bindingCandidates(const QVariantMap &context) const;
     Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, int output);
     Q_INVOKABLE bool         unbindInput(const QVariantMap &context);
     Q_INVOKABLE QVariantList cascadeOutputCandidates(const QVariantMap &context) const;
-    Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, int input);
-    Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, int input);
+    Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, int input,
+                                          int stage = static_cast<int>(PortStage::Inputs));
+    Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, int input,
+                                              int stage = static_cast<int>(PortStage::Inputs));
     Q_INVOKABLE void         runOnce();
     Q_INVOKABLE void         toggleLoop();
     Q_INVOKABLE void         runNode();

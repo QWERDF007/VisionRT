@@ -87,19 +87,29 @@ private:
     std::weak_ptr<const RoundContext> context_;
 };
 
+struct BindingSignature
+{
+    BindingMode               mode = BindingMode::Literal;
+    std::optional<SourcePort> source;
+    bool                      operator==(const BindingSignature &) const = default;
+};
+
 struct InstanceConfiguration
 {
     InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry, const std::filesystem::path &base);
     bool operator==(const InstanceConfiguration &other) const;
 
-    std::string           toolId;
-    std::string           version;
-    ToolKind              kind = ToolKind::Cpp;
-    ToolAvailability      availability;
-    Values                parameters;
+    std::string                                  toolId;
+    std::string                                  version;
+    ToolKind                                     kind = ToolKind::Cpp;
+    ToolAvailability                             availability;
+    std::filesystem::path                        resourceRoot;
+    Values                                       parameters;
+    std::map<PortId, BindingSignature>           initBindings;
+    std::map<PortId, BindingSignature>           trainBindings;
     std::map<std::string, std::filesystem::path> models;
-    std::uint64_t         initializationRevision = 0;
-    TypeMap               outputs;
+    std::uint64_t                                initializationRevision = 0;
+    TypeMap                                      outputs;
 };
 
 struct NodeRuntime
@@ -122,6 +132,8 @@ struct NodeRuntime
     std::optional<InstanceConfiguration>           configuration;
     bool                                           deferredCreate       = false;
     bool                                           initialized          = false;
+    Values                                         initializedParams;
+    std::map<std::string, std::filesystem::path>   initializedModels;
     std::uint64_t                                  publication          = 0;
     void                                           run(const std::shared_ptr<const RoundContext> &context);
     void configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next, bool retry);

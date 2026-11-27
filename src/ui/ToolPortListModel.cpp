@@ -252,6 +252,8 @@ bool ToolPortListModel::addPort(const QString &nameZh, const QVariantMap &type, 
     try
     {
         port.type = ValueJson::decodeTypeToken(QJsonObject::fromVariantMap(type));
+        if (stage_ == PortStage::Train && port.type.type == Type::Image)
+            throw ContractError("训练阶段不支持图像类型参数");
         port.defaultValue = defaultValue.isEmpty() ? portDefault(port) : parseEditorValue(defaultValue, port.type);
     }
     catch (const std::exception &error)

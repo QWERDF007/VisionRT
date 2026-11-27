@@ -599,6 +599,15 @@ void parameterEditorsContract()
         }
         return nullptr;
     };
+    require(!app.setParameterMode(testing::parameters::Images, false),
+            "image parameter must not switch from upstream to literal mode");
+    auto *imageRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Images));
+    require(imageRow != nullptr, "parameter panel did not render the image row");
+    auto *imageToggle = findItem(findItem, imageRow, "parameterActions");
+    require(imageToggle != nullptr && !imageToggle->isEnabled(),
+            "image parameter input-mode toggle button must be disabled");
+    require(findItem(findItem, imageRow, "parameterUpstream") != nullptr,
+            "image parameter must stay in upstream selector mode");
     require(app.setParameterMode(testing::parameters::Ratio, true), "parameter could not enter upstream mode");
     QTest::qWait(50);
     ratioRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Ratio));

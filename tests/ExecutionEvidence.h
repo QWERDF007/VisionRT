@@ -77,8 +77,10 @@ inline void printExecutionEvidence(const std::filesystem::path &path, const visi
             QJsonObject outputs;
             for (const auto &[port, value] : result.outputs)
                 outputs.insert(QString::number(port),
-                               visionrt::ValueJson::encode(value, node.signatures.outputs.at(port),
-                                                           visionrt::ValueJson::Purpose::Display));
+                               std::holds_alternative<visionrt::DataRef<visionrt::Image>>(value)
+                                   ? QJsonValue(QStringLiteral("非显示型数据"))
+                                   : visionrt::ValueJson::encode(value, node.signatures.outputs.at(port),
+                                                                 visionrt::ValueJson::Purpose::Display));
             nodes.append(QJsonObject{
                 {   "node",                      QString::number(node.id)},
                 {   "tool",           QString::fromStdString(node.toolId)},

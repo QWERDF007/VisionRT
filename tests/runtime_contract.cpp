@@ -127,6 +127,11 @@ void bind(NodeDefinition &n, PortId input, NodeId source)
     };
 }
 
+InputBinding literalBinding(PortValue value)
+{
+    return {BindingMode::Literal, std::move(value), std::nullopt};
+}
+
 RuntimeUpdate finish(RuntimeEngine &engine)
 {
     const auto deadline = std::chrono::steady_clock::now() + 10s;
@@ -295,7 +300,7 @@ void initializationSuppressionRetryAndReset()
     assert(engine.start(project, registry, RunMode::Once));
     auto reused = finish(engine);
     assert(initializations == 2 && executions == 2);
-    project.flows.front().nodes.front().initParams[0] = std::int64_t{2};
+    project.flows.front().nodes.front().initParams[0].literal = std::int64_t{2};
     assert(engine.start(project, registry, RunMode::Once));
     auto changed = finish(engine);
     assert(initializations == 3 && executions == 3 && releases == 2);
@@ -307,7 +312,7 @@ void initializationSuppressionRetryAndReset()
     auto reset = finish(engine);
     assert(reset.generation == generation + 1 && !snapshot(reset, 1));
     assert(reset.nodes.front().lifecycleDiagnostic->status.code == 9);
-    assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at(0)) == 2);
+    assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at(0).literal) == 2);
     assert(releases == 3);
 }
 
@@ -396,10 +401,10 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     registry.replaceDefinition(typed);
     auto receiver       = node(2, typed);
     receiver.initParams = {
-        {ReceiveInitPorts::SourceFlow,                  std::string("sender")},
-        {ReceiveInitPorts::SourceNode, std::string(std::to_string(sender.id))},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                     std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("sender"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string(std::to_string(sender.id)))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{5000})}
     };
     ProjectDefinition project;
     project.flows = {
@@ -433,10 +438,10 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     assert(sourceCalls == 1);
     auto relay       = node(4, typed);
     relay.initParams = {
-        {ReceiveInitPorts::SourceFlow,                  std::string("receiver")},
-        {ReceiveInitPorts::SourceNode, std::string(std::to_string(receiver.id))},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("receiver"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string(std::to_string(receiver.id)))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{5000})}
     };
     project.flows.push_back({"relay", "relay", true, {relay}});
     assert(engine.start(project, registry, RunMode::Once));
@@ -446,17 +451,17 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     assert(sourceCalls == 2);
     auto first       = node(10, typed);
     first.initParams = {
-        {ReceiveInitPorts::SourceFlow,                  std::string("b")},
-        {ReceiveInitPorts::SourceNode,                    std::string("11")},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("b"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string("11"))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{5000})}
     };
     auto secondNode       = node(11, typed);
     secondNode.initParams = {
-        {ReceiveInitPorts::SourceFlow,                  std::string("a")},
-        {ReceiveInitPorts::SourceNode,                    std::string("10")},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("a"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string("10"))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{5000})}
     };
     ProjectDefinition cyclic;
     cyclic.flows = {
@@ -962,10 +967,10 @@ void hostBindingReceiverContract()
     auto senderNode         = node(1, source);
     auto receiverNode       = node(2, *registry.find("test.custom.receiver"));
     receiverNode.initParams = {
-        {ReceiveInitPorts::SourceFlow,                 std::string("sender_flow")},
-        {ReceiveInitPorts::SourceNode, std::string(std::to_string(senderNode.id))},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                          std::int64_t{500}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("sender_flow"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string(std::to_string(senderNode.id)))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{500})}
     };
     ProjectDefinition project;
     project.flows = {
@@ -986,7 +991,7 @@ void hostBindingReceiverContract()
                               std::string("18446744073709551616")})
     {
         auto invalid                                            = project;
-        invalid.flows[1].nodes[0].initParams[ReceiveInitPorts::SourceNode] = value;
+        invalid.flows[1].nodes[0].initParams[ReceiveInitPorts::SourceNode].literal = value;
         RuntimeEngine rejected(2);
         assert(rejected.start(invalid, registry, RunMode::Once));
         const auto result = snapshot(finish(rejected), receiverNode.id);
@@ -1021,10 +1026,10 @@ void hostBindingReceiverContract()
     auto strSenderNode         = node(1, strSource);
     auto strReceiverNode       = node(2, *strRegistry.find("test.str.receiver"));
     strReceiverNode.initParams = {
-        {ReceiveInitPorts::SourceFlow,                std::string("flow_str_sender")},
-        {ReceiveInitPorts::SourceNode, std::string(std::to_string(strSenderNode.id))},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                             std::int64_t{500}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("flow_str_sender"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string(std::to_string(strSenderNode.id)))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{500})}
     };
     ProjectDefinition strProject;
     strProject.flows = {
@@ -1113,10 +1118,10 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         const auto sender = editor.addNode(sourceFlow, source, {});
         const auto receiver = editor.addNode("flow_1", *registry.find("ReceiveFlowResult"), {});
         assert(!engine.start(editor.project(), registry, RunMode::Once));
-        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceFlow, std::string(sourceFlow));
-        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceNode, std::string(std::to_string(sender)));
-        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourcePort, std::int64_t{2});
-        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::Timeout, std::int64_t{1000});
+        editor.setLiteral("flow_1", receiver, ReceiveInitPorts::SourceFlow, std::string(sourceFlow), PortStage::Init);
+        editor.setLiteral("flow_1", receiver, ReceiveInitPorts::SourceNode, std::string(std::to_string(sender)), PortStage::Init);
+        editor.setLiteral("flow_1", receiver, ReceiveInitPorts::SourcePort, std::int64_t{2}, PortStage::Init);
+        editor.setLiteral("flow_1", receiver, ReceiveInitPorts::Timeout, std::int64_t{1000}, PortStage::Init);
         ProjectStorage storage(registry);
         QTemporaryDir temporary;
         assert(temporary.isValid());
@@ -1186,10 +1191,10 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
     auto receiver = node(2, typed);
     receiver.signatures.outputs.emplace(ReceivePorts::Value, TypeSpec{Type::Int});
     receiver.initParams = {
-        {ReceiveInitPorts::SourceFlow,                  std::string("sender")},
-        {ReceiveInitPorts::SourceNode, std::string(std::to_string(sender.id))},
-        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
-        {ReceiveInitPorts::Timeout,                    std::int64_t{10000}}
+        {ReceiveInitPorts::SourceFlow, literalBinding(std::string("sender"))},
+        {ReceiveInitPorts::SourceNode, literalBinding(std::string(std::to_string(sender.id)))},
+        {ReceiveInitPorts::SourcePort, literalBinding(std::int64_t{2})},
+        {ReceiveInitPorts::Timeout,    literalBinding(std::int64_t{10000})}
     };
     ProjectDefinition project;
     project.flows = {
@@ -1373,7 +1378,7 @@ void declaredDefaultsAtExecution()
                 {
                     configured.signatures.initParams.emplace(0, TypeSpec{Type::Int});
                     if (explicitMissing)
-                        configured.initParams.emplace(0, Missing{});
+                        configured.initParams.emplace(0, literalBinding(Missing{}));
                 }
                 else if (!explicitMissing)
                     configured.inputs.erase(1);
@@ -1756,6 +1761,158 @@ void missingPluginFillsStatusWithoutExecution()
            && std::get<std::int64_t>(validSingle->outputs.at(2)) == 42);
 }
 
+void upstreamInitAndTrainBindingsReinitializeAndReuse()
+{
+    RuntimeEngine engine(2);
+    ToolRegistry  registry;
+    std::int64_t  producedFactor = 10;
+    std::string   producedModel  = "models/v1.zip";
+    std::vector<NodeId> order;
+    std::mutex          orderMutex;
+
+    auto producer = definition("test.stage_producer");
+    producer.outputs.push_back({3, "ModelPath", {Type::String}});
+    install(registry, producer,
+            [&](const Values &)
+            {
+                {
+                    std::lock_guard lock(orderMutex);
+                    order.push_back(1);
+                }
+                return toolResult({{2, producedFactor}, {3, producedModel}}, {});
+            });
+
+    int         initializations = 0;
+    int         releases        = 0;
+    int         executions      = 0;
+    std::int64_t activeFactor   = 0;
+    std::string  activeModel;
+
+    struct ConfigurableTool final : public IToolInstance
+    {
+        int                 &initializations;
+        int                 &releases;
+        int                 &executions;
+        std::int64_t        &activeFactor;
+        std::string         &activeModel;
+        std::vector<NodeId> &order;
+        std::mutex          &orderMutex;
+
+        ConfigurableTool(int &inits, int &rels, int &execs, std::int64_t &factor, std::string &model,
+                         std::vector<NodeId> &ord, std::mutex &mtx)
+            : initializations(inits)
+            , releases(rels)
+            , executions(execs)
+            , activeFactor(factor)
+            , activeModel(model)
+            , order(ord)
+            , orderMutex(mtx)
+        {
+        }
+
+        ToolStatus initialize(const ToolConfiguration &configuration) override
+        {
+            ++initializations;
+            activeFactor = std::get<std::int64_t>(configuration.parameters.at(0));
+            activeModel  = configuration.models.at("model").generic_string();
+            return {};
+        }
+
+        ToolResult execute(const Values &) override
+        {
+            {
+                std::lock_guard lock(orderMutex);
+                order.push_back(2);
+            }
+            ++executions;
+            return toolResult({{2, activeFactor}}, {});
+        }
+
+        ToolStatus release() override
+        {
+            ++releases;
+            return {};
+        }
+    };
+
+    auto consumer = definition("test.stage_consumer");
+    consumer.initParams.push_back({0, "Factor", {Type::Int}, std::int64_t{1}});
+    consumer.trainParams.push_back({0, "Model", {Type::String}, std::string{"models/default.zip"}});
+    PortDefinition modelOut{3, "ModelOutput", {Type::String}};
+    modelOut.producedBy = ProducedBy::Train;
+    consumer.outputs.push_back(std::move(modelOut));
+    TrainingSpec training;
+    TrainingArtifactSpec artifact;
+    artifact.id         = "model";
+    artifact.sourcePort = 3;
+    artifact.format     = "zip";
+    artifact.target     = PortRef{PortStage::Train, 0};
+    training.artifacts.push_back(std::move(artifact));
+    consumer.training = training;
+    registry.registerCpp(consumer,
+                         [&]()
+                         {
+                             return std::make_unique<ConfigurableTool>(
+                                 initializations, releases, executions, activeFactor, activeModel, order, orderMutex);
+                         });
+    registry.addDefinition(consumer);
+
+    auto p = node(1, producer);
+    auto c = node(2, consumer);
+    c.signatures.initParams.emplace(0, TypeSpec{Type::Int});
+    c.signatures.trainParams.emplace(0, TypeSpec{Type::String});
+    c.initParams[0]  = {BindingMode::Upstream, std::int64_t{1}, SourcePort{1, 2}};
+    c.trainParams[0] = {BindingMode::Upstream, std::string{"models/default.zip"}, SourcePort{1, 3}};
+
+    ProjectDefinition project;
+    // Deliberately list consumer before producer to verify DAG topological sorting covers init/train edges.
+    project.flows.front().nodes = {c, p};
+    engine.setResourceRoot(std::filesystem::current_path());
+
+    assert(engine.start(project, registry, RunMode::Once));
+    auto first = finish(engine);
+    assert(order == (std::vector<NodeId>{1, 2}));
+    assert(initializations == 1 && releases == 0 && executions == 1);
+    assert(std::get<std::int64_t>(snapshot(first, 2)->outputs.at(2)) == 10);
+    assert(activeModel.ends_with("models/v1.zip"));
+
+    // Identical upstream init/train values reuse the live tool instance without re-initializing.
+    order.clear();
+    assert(engine.start(project, registry, RunMode::Once));
+    auto second = finish(engine);
+    assert(order == (std::vector<NodeId>{1, 2}));
+    assert(initializations == 1 && releases == 0 && executions == 2);
+    assert(std::get<std::int64_t>(snapshot(second, 2)->outputs.at(2)) == 10);
+
+    // Changing upstream init value releases and re-initializes the instance.
+    producedFactor = 25;
+    assert(engine.start(project, registry, RunMode::Once));
+    auto third = finish(engine);
+    assert(initializations == 2 && releases == 1 && executions == 3);
+    assert(std::get<std::int64_t>(snapshot(third, 2)->outputs.at(2)) == 25);
+
+    // Changing upstream train model path also triggers re-initialization.
+    producedModel = "models/v2.zip";
+    assert(engine.start(project, registry, RunMode::Once));
+    auto fourth = finish(engine);
+    assert(initializations == 3 && releases == 2 && executions == 4);
+    assert(activeModel.ends_with("models/v2.zip"));
+    assert(std::get<std::int64_t>(snapshot(fourth, 2)->outputs.at(2)) == 25);
+
+    // Single-node upstream validity tracks init/train bindings just like ordinary inputs.
+    project.flows.front().nodes[1].executionRevision = 1;
+    const auto stale = engine.start(project, registry, RunMode::Node, 2);
+    assert(!stale && stale.message.find("参数已修改") != std::string::npos);
+    producedFactor = 30;
+    assert(engine.start(project, registry, RunMode::Node, 1));
+    finish(engine);
+    assert(engine.start(project, registry, RunMode::Node, 2));
+    auto single = finish(engine);
+    assert(initializations == 4 && releases == 3 && executions == 5);
+    assert(std::get<std::int64_t>(snapshot(single, 2)->outputs.at(2)) == 30);
+    std::cout << "Upstream init/train bindings drive DAG order, hot-path reuse and dynamic re-initialization\n";
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -1783,6 +1940,7 @@ try
     std::cout << "21\n"; authorContractErrorPassesThroughBusinessBoundary();
     std::cout << "22\n"; activityEventsFollowExecution();
     std::cout << "23\n"; missingPluginFillsStatusWithoutExecution();
+    std::cout << "24\n"; upstreamInitAndTrainBindingsReinitializeAndReuse();
     std::cout << "runtime contracts passed\n";
     return 0;
 }

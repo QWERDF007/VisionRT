@@ -128,6 +128,20 @@ try
         require(exceptional[0].toObject()["non_finite"] == "NaN" && exceptional[1].toDouble() == 2.123457,
                 "non-finite array elements were lost during numeric formatting");
     }
+    {
+        ToolDefinition imageOutputs;
+        imageOutputs.outputs = {{2, "图像", {Type::Image}}};
+        auto imageSnapshot = std::make_shared<NodeSnapshot>();
+        imageSnapshot->outputs.emplace(2, DataRef<Image>(Image{cv::Mat::ones(4, 6, CV_8UC3)}));
+        OutputModel imageModel;
+        imageModel.setResult(&imageOutputs, imageSnapshot, {});
+        require(imageModel.get(2)["preview"].toString() == QStringLiteral("非显示型数据"),
+                "image output preview must show non-displayable placeholder");
+        const auto captured = imageModel.capture(2);
+        require(captured && OutputModel::fullText(*captured).isEmpty()
+                    && OutputModel::estimatedTextBytes(*captured) == 0,
+                "image output must not produce copyable full text");
+    }
     arrayDisplay<std::uint8_t, 1>();
     arrayDisplay<std::int32_t, 1>();
     arrayDisplay<std::int64_t, 1>();

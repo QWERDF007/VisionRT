@@ -523,22 +523,7 @@ QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpo
                 return QJsonDocument::fromJson(QByteArray::fromStdString(writeValueJson(value, type))).object();
             }
             else
-            {
-                if (purpose != Purpose::Display)
-                    return QJsonDocument::fromJson(QByteArray::fromStdString(writeValueJson(value, type))).array();
-                QJsonArray images;
-                for (const auto &image : item.get())
-                    images.append(QJsonObject{
-                        {    "rows",       image.rows},
-                        {    "cols",       image.cols},
-                        {"channels", image.channels()}
-                    });
-                return QJsonObject{
-                    {  "type",                                "Image"},
-                    { "count", static_cast<qint64>(item.get().size())},
-                    {"images",                                 images}
-                };
-            }
+                return QJsonDocument::fromJson(QByteArray::fromStdString(writeValueJson(value, type))).array();
         },
         value);
 }

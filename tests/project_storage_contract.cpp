@@ -64,11 +64,12 @@ QJsonObject paramEntry(PortId port, const TypeSpec &type, const QJsonValue &valu
     };
 }
 
-QJsonObject connectionEntry(const QString &fromNode, PortId fromPort, const QString &toNode, PortId toPort)
+QJsonObject connectionEntry(const QString &fromNode, PortId fromPort, const QString &toNode, PortId toPort,
+                            const QString &toStage = QStringLiteral("inputs"))
 {
     return QJsonObject{
         {"from", QJsonObject{{"node", fromNode}, {"port", static_cast<int>(fromPort)}}},
-        {  "to", QJsonObject{{"node", toNode},   {"port", static_cast<int>(toPort)}}}
+        {  "to", QJsonObject{{"node", toNode}, {"stage", toStage}, {"port", static_cast<int>(toPort)}}}
     };
 }
 
@@ -92,7 +93,7 @@ QJsonObject savedProject(const QJsonArray &nodes, const QJsonArray &layout, cons
                          const QString &nextNode = "8", const QString &nextFlow = "2")
 {
     return {
-        {"format_version", 9},
+        {"format_version", 10},
         {       "project", QJsonObject{{"name", "缺失工具"},
                                        {"notes", ""},
                                        {"app_version", "0.2.0"},
@@ -151,7 +152,7 @@ void candidateAndRawPreservation(const QString &directory)
     const auto root = QJsonDocument::fromJson(getArchive(saved)).object();
     const auto flow = root.value("flows").toArray()[0].toObject();
     const auto raw  = flow.value("nodes").toArray()[0].toObject();
-    require(root.value("format_version").toInteger() == 9 && raw.value("id").isString(),
+    require(root.value("format_version").toInteger() == 10 && raw.value("id").isString(),
             "project version or identity encoding is wrong");
     require(raw.value("params").toObject().value("inputs").toArray()[0].toObject().value("value").toInteger()
                 == 9007199254740993LL,
@@ -188,8 +189,8 @@ void candidateAndRawPreservation(const QString &directory)
                 && loaded.project.flows[0].nodes[0].unresolved.value("id") == "7",
             "unknown node copy shared identity");
 
-    for (const auto &text : {QByteArray("[1,2]"), QByteArray("{\"format_version\":8}"),
-                             QByteArray("{\"format_version\":9,\"project\":[]}"), QByteArray("{\"flows\":[1,]}")})
+    for (const auto &text : {QByteArray("[1,2]"), QByteArray("{\"format_version\":9}"),
+                             QByteArray("{\"format_version\":10,\"project\":[]}"), QByteArray("{\"flows\":[1,]}")})
     {
         putArchive(source, text);
         failed = false;
@@ -219,7 +220,7 @@ void reconciliationAndIdentities(const QString &directory)
     putArchive(file, QJsonDocument(document).toJson());
     auto        recovered = storage.load(path(file));
     const auto &node      = recovered.project.flows[0].nodes[0];
-    require(node.unresolved.isEmpty() && std::get<std::string>(node.initParams.at(0)) == "保留中文",
+    require(node.unresolved.isEmpty() && std::get<std::string>(node.initParams.at(0).literal) == "保留中文",
             "definition did not recover");
     require(node.id == 7 && recovered.project.nextNodeId == 8 && recovered.project.nextFlowId == 2
                 && recovered.project.dirty && has(recovered.diagnostics, ProjectStorageCode::CounterRepaired),
@@ -454,7 +455,7 @@ void saveAsPaths(const QString &directory)
     node.inputs[3].literal  = std::string("");
     node.inputs[4].literal  = std::string("Z:/异盘/资源.png");
     node.inputs[6].literal  = std::string("动态/图像.png");
-    node.initParams[0]      = std::string("目录");
+    node.initParams[0].literal = std::string("目录");
     const auto oldDirectory = directory + "/旧位置";
     const auto newDirectory = directory + "/新位置";
     const auto absolutePath = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
@@ -475,7 +476,7 @@ void saveAsPaths(const QString &directory)
     const auto &saved = project.flows[0].nodes[0];
     require(std::get<std::string>(saved.inputs.at(1).literal) == "图像/不存在.png",
             "save-as rewrote a hidden upstream literal");
-    require(std::get<std::string>(saved.initParams.at(0)) == "目录", "save-as rewrote a directory parameter");
+    require(std::get<std::string>(saved.initParams.at(0).literal) == "目录", "save-as rewrote a directory parameter");
     require(std::get<std::string>(saved.inputs.at(6).literal) == "动态/图像.png", "save-as rewrote a path input");
     require(std::get<std::string>(saved.inputs.at(4).literal) == "Z:/异盘/资源.png",
             "cross-drive resource lost its absolute path");
@@ -853,6 +854,86 @@ void modelReferences(const QString &directory)
     require(models.at("model") == model.lexically_normal(),
             "the editable model path did not resolve against the resource root");
 }
+void stageBindingsPersistAndRoundTrip(const QString &directory)
+{
+    ToolDefinition tool;
+    tool.nameEn  = "test.stage_storage";
+    tool.nameZh  = "三阶段存储";
+    tool.version = "1.0.0";
+    tool.kind    = ToolKind::Cpp;
+    tool.initParams = {
+        {0, "初始化整数", {Type::Int}, std::int64_t{7}},
+        {1, "初始化未连", {Type::Int}, std::int64_t{8}},
+        {2, "初始化图像", {Type::Image}, DataRef<Image>(Image{})}
+    };
+    tool.trainParams = {
+        {0, "训练路径", {Type::String}, std::string("m.zip")}
+    };
+    tool.inputs = {
+        {1, "输入整数", {Type::Int}, std::int64_t{3}},
+        {2, "输入图像", {Type::Image}, DataRef<Image>(Image{})}
+    };
+    tool.outputs = {
+        {2, "输出整数", {Type::Int}},
+        {3, "输出路径", {Type::String}},
+        {4, "输出图像", {Type::Image}}
+    };
+
+    ToolRegistry registry;
+    registry.addDefinition(tool);
+    ProjectEditor editor;
+    const auto    src = editor.addNode("flow_1", *registry.find(tool.nameEn), {0, 0});
+    const auto    dst = editor.addNode("flow_1", *registry.find(tool.nameEn), {0, 1});
+    editor.bindFreeInput("flow_1", {src, 2}, {dst, 0, PortStage::Init});
+    editor.setMode("flow_1", dst, 1, BindingMode::Upstream, PortStage::Init);
+    editor.bindFreeInput("flow_1", {src, 4}, {dst, 2, PortStage::Init});
+    editor.bindFreeInput("flow_1", {src, 3}, {dst, 0, PortStage::Train});
+    editor.bindFreeInput("flow_1", {src, 2}, {dst, 1, PortStage::Inputs});
+
+    auto           project = editor.project();
+    const auto     file    = directory + "/stage-bindings.vrtapp";
+    ProjectStorage storage(registry);
+    storage.save(project, path(file));
+
+    const auto root = QJsonDocument::fromJson(getArchive(file)).object();
+    require(root.value("format_version").toInteger() == 10, "format_version must be 10");
+    const auto conns = root.value("flows").toArray()[0].toObject().value("connections").toArray();
+    require(conns.size() == 4, "all stage connections must be serialized");
+    bool sawInit = false, sawTrain = false, sawInputs = false;
+    for (const auto &entry : conns)
+    {
+        const auto stage = entry.toObject().value("to").toObject().value("stage").toString();
+        sawInit |= stage == "init";
+        sawTrain |= stage == "train";
+        sawInputs |= stage == "inputs";
+    }
+    require(sawInit && sawTrain && sawInputs, "connections must carry init, train and inputs stages");
+
+    const auto loaded = storage.load(path(file));
+    require(loaded.diagnostics.empty() && !loaded.project.dirty, "stage binding roundtrip must load cleanly");
+    const auto &restored = loaded.project.flows[0].nodes[1];
+    require(restored.initParams.at(0).mode == BindingMode::Upstream
+                && restored.initParams.at(0).source == SourcePort{src, 2},
+            "wired initParam did not roundtrip");
+    require(restored.initParams.at(1).mode == BindingMode::Upstream && !restored.initParams.at(1).source,
+            "unwired upstream initParam did not roundtrip");
+    require(restored.initParams.at(2).mode == BindingMode::Upstream
+                && restored.initParams.at(2).source == SourcePort{src, 4},
+            "wired init image did not roundtrip");
+    require(restored.trainParams.at(0).mode == BindingMode::Upstream
+                && restored.trainParams.at(0).source == SourcePort{src, 3},
+            "wired trainParam did not roundtrip");
+
+    // When an upstream image output changes type, reconcile cuts the wire while keeping Image in Upstream mode.
+    auto changedTool = tool;
+    changedTool.outputs[2].type = {Type::String};
+    ToolRegistry changedRegistry;
+    changedRegistry.addDefinition(changedTool);
+    const auto reconciled = ProjectStorage(changedRegistry).reconcile(loaded.project);
+    const auto &after     = reconciled.project.flows[0].nodes[1];
+    require(after.initParams.at(2).mode == BindingMode::Upstream && !after.initParams.at(2).source,
+            "disconnected Image parameter must remain in Upstream mode");
+}
 } // namespace
 
 int main()
@@ -872,7 +953,8 @@ int main()
         canonicalSequences(temporary.path());
         dormantLiteralSources(temporary.path());
         modelReferences(temporary.path());
-        std::cout << "project storage .vrtapp format 9 contract passed\n";
+        stageBindingsPersistAndRoundTrip(temporary.path());
+        std::cout << "project storage .vrtapp format 10 contract passed\n";
     }
     catch (const std::exception &error)
     {

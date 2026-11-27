@@ -416,9 +416,9 @@ const PortDefinition *AppController::Impl::parameter(PortId id, bool initializat
     return tool ? workbench::port(initialization ? tool->initParams : tool->inputs, id) : nullptr;
 }
 
-QString AppController::Impl::inputPortName(const NodeDefinition &node, PortId port) const
+QString AppController::Impl::inputPortName(const NodeDefinition &node, PortStage stage, PortId port) const
 {
-    const auto *definition = registry.find(node.toolId);
+    const auto                   *definition = registry.find(node.toolId);
     std::optional<ToolDefinition> contract;
     try
     {
@@ -428,8 +428,18 @@ QString AppController::Impl::inputPortName(const NodeDefinition &node, PortId po
     catch (const ContractError &)
     {
     }
-    const auto *portDef = contract ? workbench::port(contract->inputs, port) : nullptr;
-    return portDef ? workbench::q(portDef->nameZh) : workbench::q(portLabel(port));
+    const auto *portDef = contract
+                              ? workbench::port(stage == PortStage::Init   ? contract->initParams
+                                                : stage == PortStage::Train ? contract->trainParams
+                                                                            : contract->inputs,
+                                                port)
+                              : nullptr;
+    const auto  name    = portDef ? workbench::q(portDef->nameZh) : workbench::q(portLabel(port));
+    if (stage == PortStage::Init)
+        return QStringLiteral("初始化/") + name;
+    if (stage == PortStage::Train)
+        return QStringLiteral("训练/") + name;
+    return name;
 }
 
 bool AppController::Impl::editingAllowed() const
@@ -506,7 +516,9 @@ void AppController::Impl::publishWiresChanged()
     if (const auto *activeFlow = currentFlow())
         for (const auto &relation : portRelations(*activeFlow).active)
             signature += QString::number(relation.source.node) + u':' + QString::number(relation.source.port) + u'>'
-                       + QString::number(relation.target.node) + u':' + QString::number(relation.target.port) + u';';
+                       + QString::number(relation.target.node) + u':'
+                       + QString::number(static_cast<int>(relation.target.stage)) + u':'
+                       + QString::number(relation.target.port) + u';';
     if (signature == wireState)
         return;
     wireState = std::move(signature);
@@ -678,13 +690,17 @@ void AppController::Impl::poll()
             {
                 selectedChanged |= QString::number(item.node) == selected;
                 if (const auto *node = currentNode())
-                    parametersChanged |= std::any_of(node->inputs.begin(), node->inputs.end(),
-                                                     [&](const auto &input)
-                                                     {
-                                                         return input.second.mode == BindingMode::Upstream
-                                                             && input.second.source
-                                                             && input.second.source->node == item.node;
-                                                     });
+                    for (const auto stage : kParameterStages)
+                    {
+                        const auto &bindings = node->stageBindings(stage);
+                        parametersChanged |= std::any_of(bindings.begin(), bindings.end(),
+                                                         [&](const auto &input)
+                                                         {
+                                                             return input.second.mode == BindingMode::Upstream
+                                                                 && input.second.source
+                                                                 && input.second.source->node == item.node;
+                                                         });
+                    }
             }
         }
         for (const auto &event : update.diagnostics)
@@ -791,8 +807,13 @@ void AppController::Impl::start(RunMode mode)
             if (view == trainingViews.end() || !view->second.session.active()) continue;
             std::vector<LiteralWrite> paths;
             for (const auto &artifact : view->second.session.spec().artifacts)
+            {
+                const auto binding = node.trainParams.find(artifact.target.id);
+                if (binding != node.trainParams.end() && binding->second.mode == BindingMode::Upstream)
+                    continue;
                 if (const auto value = view->second.session.parameter(artifact.target.id))
                     paths.push_back({PortStage::Train, artifact.target.id, *value});
+            }
             if (!paths.empty()) editor.setLiteralWrites(sourceFlow.id, node.id, paths);
         }
     beginDrain([this, mode] { beginRun(mode); });
@@ -2160,9 +2181,10 @@ void AppController::setFlowSelected(const QString &id, bool selected)
 }
 
 
-bool AppController::setParameterMode(int port, bool upstream)
+bool AppController::setParameterMode(int port, bool upstream, int stage)
 {
-    const auto id = static_cast<PortId>(port);
+    const auto id          = static_cast<PortId>(port);
+    const auto targetStage = static_cast<PortStage>(stage);
     return impl_->command(
         [&]
         {
@@ -2171,7 +2193,7 @@ bool AppController::setParameterMode(int port, bool upstream)
                 throw ContractError("未选择节点");
             impl_->finishRoi();
             return impl_->editor.setMode(impl_->flow.toStdString(), node->id, id,
-                                         upstream ? BindingMode::Upstream : BindingMode::Literal);
+                                         upstream ? BindingMode::Upstream : BindingMode::Literal, targetStage);
         });
 }
 

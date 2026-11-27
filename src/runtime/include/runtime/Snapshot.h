@@ -32,6 +32,7 @@ struct InputUse
     NodeId        sourceNode        = 0;
     PortId        sourcePort        = 0;
     std::uint64_t sourcePublication = 0;
+    PortStage     stage             = PortStage::Inputs;
 };
 
 struct NodeSnapshot

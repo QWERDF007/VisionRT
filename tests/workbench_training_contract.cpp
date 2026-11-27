@@ -90,12 +90,50 @@ try
     require(QTest::qWaitForWindowExposed(window), "workbench window was not exposed");
     auto *panel = window->findChild<QQuickItem *>("parameterPanel");
     auto *viewport = window->findChild<ImageViewport *>("imageViewport");
-    require(panel && viewport, "parameter panel or image viewport is missing");
+    auto *resultsPanel = window->findChild<QQuickItem *>("resultsPanel");
+    auto *trainingMenu = window->findChild<QObject *>("trainingMenu");
+    require(panel && viewport && resultsPanel && trainingMenu, "parameter panel, results panel, or image viewport is missing");
+    require(QTest::qWaitFor([&] { return app.canAddTrainingImage(); }, 5000),
+            "aligned node should allow adding its processed image to training");
+    QTest::mouseClick(window, Qt::RightButton, {}, viewport->mapToScene(viewport->boundingRect().center()).toPoint());
+    QTest::qWait(120);
+    require(!trainingMenu->property("opened").toBool(),
+            "right-clicking the image display viewport must not open the add-to-training menu");
+    auto findThumbnailCard = [](auto &&self, QQuickItem *parent) -> QQuickItem *
+    {
+        for (auto *item : parent->childItems())
+        {
+            if (item->isVisible() && item->property("selected").isValid() && item->property("index").isValid())
+                return item;
+            if (auto *found = self(self, item))
+                return found;
+        }
+        return nullptr;
+    };
+    QQuickItem *thumbnailCard = nullptr;
+    require(QTest::qWaitFor([&] {
+        thumbnailCard = findThumbnailCard(findThumbnailCard, resultsPanel);
+        return thumbnailCard != nullptr;
+    }, 3000), "thumbnail list card is missing");
+    QTest::mouseClick(window, Qt::RightButton, {}, thumbnailCard->mapToScene(thumbnailCard->boundingRect().center()).toPoint());
+    require(QTest::qWaitFor([&] { return trainingMenu->property("opened").toBool(); }, 1000),
+            "right-clicking the thumbnail list did not open the add-to-training menu");
+    QMetaObject::invokeMethod(trainingMenu, "close", Qt::DirectConnection);
+    require(QTest::qWaitFor([&] { return !trainingMenu->property("visible").toBool(); }, 1000),
+            "training menu did not close");
     auto *trainingTab = button(panel, "训练");
     require(trainingTab != nullptr, "training parameter tab is missing");
     QTest::mouseClick(window, Qt::LeftButton, {}, trainingTab->mapToScene(trainingTab->boundingRect().center()).toPoint());
     require(panel->property("currentTab").toInt() == static_cast<int>(ParameterTab::Training) && !app.trainingMode(),
             "choosing training parameters changed the image mode");
+    QTest::qWait(50);
+    for (auto *item : panel->findChildren<QQuickItem *>())
+    {
+        const auto action = item->property("actionText").toString();
+        const auto secondary = item->property("secondaryActionText").toString();
+        require(action != QStringLiteral("编辑训练集") && secondary != QStringLiteral("添加记录"),
+                "training dataset row must not expose edit/add action buttons");
+    }
     QStringList groups;
     for (const auto &value : app.parameterGroups())
     {
@@ -115,7 +153,7 @@ try
     app.setEasyTouchEnabled(true);
     require(app.assistAvailable(), "smart point selection is unavailable in training mode");
     const auto before = app.project().flows.front().nodes[1].inputs.at(6).literal;
-    const auto &trainingSet = std::get<DataRef<TrainingSet>>(app.project().flows.front().nodes[1].trainParams.at(7)).get();
+    const auto &trainingSet = std::get<DataRef<TrainingSet>>(app.project().flows.front().nodes[1].trainParams.at(7).literal).get();
     const auto trainingBefore = trainingSet.records.begin()->second.fields.at(2);
     const auto inputRoiVisible = [&](const PortValue &expectedRoi)
     {
@@ -182,7 +220,7 @@ try
     require(std::get<CoordinateFrame2D>(outputs->capture(PortId{6})->value).count(0) == 1, "training publishes the reusable coordinate frame");
     require(std::get<Circle>(outputs->capture(PortId{4})->value).get().front().size() > 500, "training locates the real plate marks");
     const auto installRoot = std::filesystem::path(installation.directory().toStdWString());
-    const auto configuredModel = std::filesystem::u8path(std::get<std::string>(app.project().flows.front().nodes.at(1).trainParams.at(2)));
+    const auto configuredModel = std::filesystem::u8path(std::get<std::string>(app.project().flows.front().nodes.at(1).trainParams.at(2).literal));
     const auto modelPath = std::filesystem::weakly_canonical(configuredModel.is_absolute() ? configuredModel : installRoot / configuredModel);
     const auto relativeModel = modelPath.lexically_relative(std::filesystem::weakly_canonical(installRoot));
     require(!relativeModel.empty() && *relativeModel.begin() != "..", "training assets belong to the controller installation");

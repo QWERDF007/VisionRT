@@ -113,10 +113,10 @@ try
     editor.setAlias(sourceFlow, second, "同名来源");
     editor.setLiteral(sourceFlow, first, kSourceValueInput, std::int64_t{17});
     editor.setLiteral(sourceFlow, second, kSourceValueInput, std::int64_t{29});
-    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourceFlow, sourceFlow);
-    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourceNode, std::to_string(first));
-    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourcePort, std::int64_t{kSourceValueOutput});
-    editor.setInitParam("flow_1", target, ReceiveInitPorts::Timeout, std::int64_t{5000});
+    editor.setLiteral("flow_1", target, ReceiveInitPorts::SourceFlow, sourceFlow, PortStage::Init);
+    editor.setLiteral("flow_1", target, ReceiveInitPorts::SourceNode, std::to_string(first), PortStage::Init);
+    editor.setLiteral("flow_1", target, ReceiveInitPorts::SourcePort, std::int64_t{kSourceValueOutput}, PortStage::Init);
+    editor.setLiteral("flow_1", target, ReceiveInitPorts::Timeout, std::int64_t{5000}, PortStage::Init);
     ProjectStorage storage(registry);
     auto           project = editor.project();
     const auto     input   = root + "/宽 ID 工程.vrtapp";
@@ -230,7 +230,7 @@ try
     require(app.save(output), "wide-ID project save failed");
     const auto restored = storage.load(std::filesystem::path(output.toStdU16String()));
     require(restored.diagnostics.empty() && restored.project.flows[0].nodes[0].id == target
-                && std::get<std::string>(restored.project.flows[0].nodes[0].initParams.at(ReceiveInitPorts::SourceNode))
+                && std::get<std::string>(restored.project.flows[0].nodes[0].initParams.at(ReceiveInitPorts::SourceNode).literal)
                        == std::to_string(second),
             "saved receiver identity changed");
     app.requestOpen(output);
@@ -339,8 +339,8 @@ try
     const auto &renamedReceiver = renamed.flows[0].nodes[0];
     require(renamed.flows[1].id == sourceFlow && renamed.flows[1].name == "已改名的流程"
                 && renamed.flows[1].nodes[0].alias == "已改名的来源"
-                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceFlow)) == sourceFlow
-                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceNode)) == std::to_string(first)
+                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceFlow).literal) == sourceFlow
+                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceNode).literal) == std::to_string(first)
                 && renamedReceiver.signatures.outputs.at(ReceivePorts::Value).type == Type::Int,
             "rename/save changed stable receiver references or their resolved type");
     require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12,

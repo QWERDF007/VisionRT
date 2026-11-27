@@ -7,23 +7,25 @@ namespace visionrt {
 using workbench::nodeId;
 using workbench::q;
 
-QVariantMap AppController::portDeclarationContext(PortId port, bool output) const
+QVariantMap AppController::portDeclarationContext(PortId port, bool output, int stage) const
 {
     const auto *flow = impl_->currentFlow();
     const auto *node = impl_->currentNode();
     if (!flow || !node)
         return {};
+    const auto targetStage = output ? PortStage::Outputs : static_cast<PortStage>(stage);
     if (output)
     {
         if (!node->signatures.outputs.contains(port))
             return {};
     }
-    else if (!node->inputs.contains(port))
+    else if (targetStage == PortStage::Outputs || !node->stageBindings(targetStage).contains(port))
         return {};
     return QVariantMap{{"project", QString::number(impl_->projectEpoch)},
                        {"flow", impl_->flow},
                        {"node", QString::number(node->id)},
                        {"port", static_cast<uint>(port)},
+                       {"stage", static_cast<int>(targetStage)},
                        {"output", output},
                        {"kind", QStringLiteral("declaration")},
                        {"interaction", QString::number(impl_->roiSession.id())},
@@ -45,18 +47,20 @@ QVariantMap AppController::portResultContext(PortId port) const
                        {"flow", impl_->flow},
                        {"node", QString::number(node->id)},
                        {"port", static_cast<uint>(port)},
+                       {"stage", static_cast<int>(PortStage::Outputs)},
                        {"output", true},
                        {"kind", QStringLiteral("result")},
                        {"interaction", QString::number(impl_->roiSession.id())},
                        {"structure", QString::number(flow->structureRevision)},
                        {"revision", QString::number(node->executionRevision)},
-                       // A missing value is a real row without data; copy must be visibly disabled
-                       // instead of placing an empty string on the clipboard.
-                       {"available", !std::holds_alternative<Missing>(captured->value)},
+                       // Missing values and image outputs are not copyable text rows; copy must be visibly disabled.
+                       {"available",
+                        !std::holds_alternative<Missing>(captured->value)
+                            && !std::holds_alternative<DataRef<Image>>(captured->value)},
                        {"publication", QString::number(captured->publication)}};
 }
 
-QVariantMap AppController::portContext(PortId port, bool output) const
+QVariantMap AppController::portContext(PortId port, bool output, int stage) const
 {
     if (output)
     {
@@ -64,7 +68,7 @@ QVariantMap AppController::portContext(PortId port, bool output) const
         if (!result.isEmpty())
             return result;
     }
-    return portDeclarationContext(port, output);
+    return portDeclarationContext(port, output, stage);
 }
 
 bool AppController::portContextCurrent(const QVariantMap &context) const
@@ -82,8 +86,10 @@ bool AppController::portContextCurrent(const QVariantMap &context) const
     {
         return false;
     }
-    const auto port = static_cast<PortId>(context.value("port").toUInt());
+    const auto port   = static_cast<PortId>(context.value("port").toUInt());
     const bool output = context.value("output").toBool();
+    const auto stage  = context.contains("stage") ? static_cast<PortStage>(context.value("stage").toInt())
+                                                  : (output ? PortStage::Outputs : PortStage::Inputs);
     if (output)
     {
         if (!node->signatures.outputs.contains(port))
@@ -91,7 +97,7 @@ bool AppController::portContextCurrent(const QVariantMap &context) const
     }
     else
     {
-        if (!node->inputs.contains(port))
+        if (stage == PortStage::Outputs || !node->stageBindings(stage).contains(port))
             return false;
     }
     if (context.value("kind").toString() == QStringLiteral("result") || context.contains("publication"))
@@ -115,10 +121,12 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
     const auto *node = impl_->currentNode();
     if (!node)
         return result;
+    const auto stage = context.contains("stage") ? static_cast<PortStage>(context.value("stage").toInt())
+                                                 : PortStage::Inputs;
     try
     {
         for (const auto &source : impl_->editor.compatibleSources(
-                 impl_->flow.toStdString(), node->id, static_cast<PortId>(context.value("port").toUInt())))
+                 impl_->flow.toStdString(), node->id, static_cast<PortId>(context.value("port").toUInt()), stage))
         {
             const auto *parent = impl_->findNode(source.node);
             if (!parent)
@@ -146,17 +154,19 @@ bool AppController::bindInput(const QVariantMap &context, const QString &node, i
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
     const auto input  = static_cast<PortId>(context.value("port").toUInt());
+    const auto stage  = context.contains("stage") ? static_cast<PortStage>(context.value("stage").toInt())
+                                                  : PortStage::Inputs;
     const auto result = impl_->command(
         [&]
         {
             const auto *target = impl_->currentNode();
             if (!target)
                 throw ContractError("未选择节点");
-            auto binding   = target->inputs.at(input);
+            auto binding   = target->stageBindings(stage).at(input);
             binding.mode   = BindingMode::Upstream;
             binding.source = SourcePort{nodeId(node), static_cast<PortId>(output)};
             impl_->finishRoi();
-            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input, std::move(binding));
+            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input, std::move(binding), stage);
         });
     if (result)
         LogService::write(LogLevel::Info, LogSource::System,
@@ -170,6 +180,8 @@ bool AppController::unbindInput(const QVariantMap &context)
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
     const auto input  = static_cast<PortId>(context.value("port").toUInt());
+    const auto stage  = context.contains("stage") ? static_cast<PortStage>(context.value("stage").toInt())
+                                                  : PortStage::Inputs;
     const auto result = impl_->command(
         [&]
         {
@@ -177,7 +189,7 @@ bool AppController::unbindInput(const QVariantMap &context)
             if (!node)
                 throw ContractError("未选择节点");
             impl_->finishRoi();
-            return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input);
+            return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input, stage);
         });
     if (result)
         LogService::write(LogLevel::Info, LogSource::System,
@@ -212,14 +224,16 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
         const auto *target = impl_->findNode(candidate.node);
         if (!target)
             continue;
-        const auto typeFound = target->signatures.inputs.find(candidate.port);
-        if (typeFound == target->signatures.inputs.end())
+        const auto &stageTypes = target->signatures.stageTypes(candidate.stage);
+        const auto  typeFound  = stageTypes.find(candidate.port);
+        if (typeFound == stageTypes.end())
             continue;
         const auto &inputType = typeFound->second;
-        const auto  portName  = impl_->inputPortName(*target, candidate.port);
+        const auto  portName  = impl_->inputPortName(*target, candidate.stage, candidate.port);
 
         nodeInputsMap[candidate.node].push_back(QVariantMap{
             {    "port", static_cast<uint>(candidate.port)},
+            {   "stage",  static_cast<int>(candidate.stage)},
             {    "name",                          portName},
             {   "title",                          portName},
             {    "type",       displayTypeName(inputType)},
@@ -263,11 +277,12 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
     return result;
 }
 
-bool AppController::bindOutputTo(const QVariantMap &context, const QString &node, int input)
+bool AppController::bindOutputTo(const QVariantMap &context, const QString &node, int input, int stage)
 {
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto output = static_cast<PortId>(context.value("port").toUInt());
+    const auto output      = static_cast<PortId>(context.value("port").toUInt());
+    const auto targetStage = static_cast<PortStage>(stage);
     return impl_->command(
         [&]
         {
@@ -275,14 +290,15 @@ bool AppController::bindOutputTo(const QVariantMap &context, const QString &node
             if (!source)
                 throw ContractError("未选择节点");
             return impl_->editor.bindFreeInput(impl_->flow.toStdString(), {source->id, output},
-                                               {nodeId(node), static_cast<PortId>(input)});
+                                               {nodeId(node), static_cast<PortId>(input), targetStage});
         });
 }
 
-bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &node, int input)
+bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &node, int input, int stage)
 {
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return false;
+    const auto targetStage = static_cast<PortStage>(stage);
     return impl_->command(
         [&]
         {
@@ -292,13 +308,14 @@ bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &
                 throw ContractError("未选择节点");
             if (!target)
                 throw ContractError("找不到节点：" + node.toStdString());
-            const auto binding = target->inputs.find(static_cast<PortId>(input));
-            if (binding == target->inputs.end() || binding->second.mode != BindingMode::Upstream
+            const auto &bindings = target->stageBindings(targetStage);
+            const auto  binding  = bindings.find(static_cast<PortId>(input));
+            if (binding == bindings.end() || binding->second.mode != BindingMode::Upstream
                 || binding->second.source
                        != SourcePort{source->id, static_cast<PortId>(context.value("port").toUInt())})
                 throw ContractError("输入端口未连接到当前输出：" + node.toStdString() + "."
                                     + portLabel(static_cast<PortId>(input)));
-            return impl_->editor.unbind(impl_->flow.toStdString(), target->id, static_cast<PortId>(input));
+            return impl_->editor.unbind(impl_->flow.toStdString(), target->id, static_cast<PortId>(input), targetStage);
         });
 }
 
